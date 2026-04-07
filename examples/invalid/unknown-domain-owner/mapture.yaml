@@ -1,0 +1,11 @@
+version: 1
+
+catalog:
+  dir: ./architecture
+
+scan:
+  include:
+    - ./src
+
+languages:
+  php: true

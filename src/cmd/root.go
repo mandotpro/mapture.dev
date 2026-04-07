@@ -83,20 +83,7 @@ func newValidateCmd() *cobra.Command {
 				target = args[0]
 			}
 
-			configPath, err := config.Discover(target)
-			if err != nil {
-				return err
-			}
-			cfg, err := config.Load(configPath)
-			if err != nil {
-				return err
-			}
-
-			catalogDir, err := cfg.CatalogDir(configPath)
-			if err != nil {
-				return err
-			}
-			c, err := catalog.Load(catalogDir)
+			configPath, _, c, err := loadProject(target)
 			if err != nil {
 				return err
 			}
@@ -112,6 +99,30 @@ func newValidateCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func loadProject(target string) (string, *config.Config, *catalog.Catalog, error) {
+	configPath, err := config.Discover(target)
+	if err != nil {
+		return "", nil, nil, err
+	}
+
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		return "", nil, nil, err
+	}
+
+	catalogDir, err := cfg.CatalogDir(configPath)
+	if err != nil {
+		return "", nil, nil, err
+	}
+
+	c, err := catalog.Load(catalogDir)
+	if err != nil {
+		return "", nil, nil, err
+	}
+
+	return configPath, cfg, c, nil
 }
 
 func newScanCmd() *cobra.Command {

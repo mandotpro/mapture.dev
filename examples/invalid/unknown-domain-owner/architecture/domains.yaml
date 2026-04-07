@@ -1,0 +1,4 @@
+domains:
+  - id: orders
+    name: Orders
+    ownerTeams: [team-operations]

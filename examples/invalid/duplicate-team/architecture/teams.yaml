@@ -1,0 +1,6 @@
+teams:
+  - id: team-commerce
+    name: Commerce Team
+
+  - id: team-commerce
+    name: Duplicate Commerce Team

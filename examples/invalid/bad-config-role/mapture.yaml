@@ -1,0 +1,12 @@
+version: 1
+
+scan:
+  include:
+    - ./src
+
+languages:
+  go: true
+
+validation:
+  requireMetadataOn:
+    - random
