@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -110,6 +111,63 @@ func TestScanRejectsMalformedCommentFixtures(t *testing.T) {
 				t.Fatalf("expected %q in error, got %v", tc.wantErr, err)
 			}
 		})
+	}
+}
+
+func TestScanRejectsMissingIncludePath(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "architecture"), 0o755); err != nil {
+		t.Fatalf("Mkdir architecture: %v", err)
+	}
+	cfg := &config.Config{
+		Scan: config.Scan{
+			Include: []string{"./missing-src"},
+		},
+		Languages: config.Languages{
+			Go: true,
+		},
+	}
+
+	_, err := Scan(root, cfg)
+	if err == nil {
+		t.Fatal("expected error for missing include path")
+	}
+	if !strings.Contains(err.Error(), "scan.include path ./missing-src does not exist") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestScanReturnsEmptySliceForExistingTreeWithoutComments(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	srcDir := filepath.Join(root, "src")
+	if err := os.Mkdir(srcDir, 0o755); err != nil {
+		t.Fatalf("Mkdir src: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "main.go"), []byte("package main\n\nfunc main() {}\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile main.go: %v", err)
+	}
+	cfg := &config.Config{
+		Scan: config.Scan{
+			Include: []string{"./src"},
+		},
+		Languages: config.Languages{
+			Go: true,
+		},
+	}
+
+	blocks, err := Scan(root, cfg)
+	if err != nil {
+		t.Fatalf("Scan returned error: %v", err)
+	}
+	if blocks == nil {
+		t.Fatal("expected empty slice, got nil")
+	}
+	if len(blocks) != 0 {
+		t.Fatalf("expected 0 blocks, got %d", len(blocks))
 	}
 }
 

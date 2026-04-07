@@ -68,7 +68,7 @@ func Scan(root string, cfg *config.Config) ([]RawBlock, error) {
 
 	matcher := newExcludeMatcher(cfg.Scan.Exclude)
 	seen := make(map[string]struct{})
-	var blocks []RawBlock
+	blocks := make([]RawBlock, 0)
 
 	for _, include := range cfg.Scan.Include {
 		scanRoot := include
@@ -80,7 +80,7 @@ func Scan(root string, cfg *config.Config) ([]RawBlock, error) {
 		info, err := os.Stat(scanRoot)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
-				continue
+				return nil, fmt.Errorf("scan.include path %s does not exist", include)
 			}
 			return nil, fmt.Errorf("inspect include %s: %w", include, err)
 		}
