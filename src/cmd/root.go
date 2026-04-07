@@ -7,8 +7,11 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/angelmanchev/mapture/src/internal/bootstrap"
+	"github.com/angelmanchev/mapture/src/internal/catalog"
+	"github.com/angelmanchev/mapture/src/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -74,7 +77,40 @@ func newValidateCmd() *cobra.Command {
 		Use:   "validate [path]",
 		Short: "Validate config, catalogs, comments, and graph references",
 		Args:  cobra.MaximumNArgs(1),
-		RunE:  todo("validate"),
+		RunE: func(_ *cobra.Command, args []string) error {
+			target := "."
+			if len(args) > 0 {
+				target = args[0]
+			}
+
+			configPath, err := config.Discover(target)
+			if err != nil {
+				return err
+			}
+			cfg, err := config.Load(configPath)
+			if err != nil {
+				return err
+			}
+
+			catalogDir, err := cfg.CatalogDir(configPath)
+			if err != nil {
+				return err
+			}
+			c, err := catalog.Load(catalogDir)
+			if err != nil {
+				return err
+			}
+
+			fmt.Fprintf(
+				os.Stdout,
+				"mapture validate: config and catalog OK (config=%s teams=%d domains=%d events=%d)\n",
+				filepath.Clean(configPath),
+				len(c.Teams),
+				len(c.Domains),
+				len(c.Events),
+			)
+			return nil
+		},
 	}
 }
 
