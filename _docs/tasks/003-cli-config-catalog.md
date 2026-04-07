@@ -1,4 +1,4 @@
-# Task 001: CLI skeleton, Config, and Catalog Loader
+# Task 003: CLI skeleton, Config, and Catalog Loader
 
 ## Goal
 Establish the foundational command line structure for `mapture` and implement robust parsing for both the repository configuration (`mapture.yaml`) and the central architecture catalogs (`teams.yaml`, `domains.yaml`, `events.yaml`).

@@ -1,4 +1,4 @@
-# Task 002: Comment Scanner
+# Task 004: Comment Scanner
 
 ## Goal
 Implement a language-agnostic text scanner that walks directories, reads configured file extensions, and extracts `@arch.*` and `@event.*` tags from comment blocks, associating them with the exact file and line number.

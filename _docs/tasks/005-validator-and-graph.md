@@ -1,4 +1,4 @@
-# Task 003: Graph Model and Strict Validations
+# Task 005: Graph Model and Strict Validations
 
 ## Goal
 Transform the valid intermediate comment blocks into the normalized Graph Model, run all cross-referencing validation layers, and finalize output rendering for the `validate` command.
