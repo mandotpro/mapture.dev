@@ -50,7 +50,7 @@ v0.1 starts small (PRD §30 risk: "too much schema complexity too early"). When 
 - **Node IDs are `type:name`.** This is the stable identity across graph, exports, and AI bundles. Never strip the prefix.
 - **One binary, no runtime deps.** Frontend assets must be embedded via `embed` when the server/HTML exporter lands. PRD §9.
 - **Comments-first, not static-analysis-first.** Tree-sitter / AST parsing is explicitly a v0.4+ enhancement. PRD §22.
-- **v1 enums are closed** (PRD §16). Constants for node/edge types live in `internal/graph/graph.go`; other enums belong in the validator when it's created. Extending an enum requires updating both the code constant and the PRD section.
+- **v1 enums are closed** (PRD §16). Constants for node/edge types live in `src/internal/graph/graph.go`; other enums belong in the validator when it's created. Extending an enum requires updating both the code constant and the PRD section.
 - **Don't leap milestones.** Features have assigned versions in PRD §29 (v0.1 → v1.0). If a change belongs to a later milestone, defer it and note why.
 
 ## Naming note
