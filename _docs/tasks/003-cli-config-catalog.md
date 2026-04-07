@@ -15,20 +15,21 @@ Before we can scan code for architecture comments, the tool must be able to load
 - Subcommands should just output a `TODO: not implemented` message for now, except for wiring them up to print help.
 
 ### 2. Config Parser (`src/internal/config`)
-- Create standard structs representing the schema in `_docs/types/config-schema.md`.
-- Implement a discovery function that walks up from the current directory to find `mapture.yaml`.
-- Provide a strict YAML parsing step that halts on unknown keys or invalid schema types.
-- Apply default values (e.g., `catalog.dir` defaults to `./architecture`).
+- Utilize the `cuelang` validation wrapper developed in Task **001.1** to assert schema definitions.
+- Implement a location discovery loop that walks up the tree from the current working directory to find `mapture.yaml`.
+- Wire the CUE parser errors into human-readable outputs and halt execution.
+- Inject default configuration settings (e.g., `catalog.dir` -> `./architecture`) explicitly inside Go or within the `.cue` default values.
 
 ### 3. Catalog Loader (`src/internal/catalog`)
 - Create data models matching `_docs/types/catalog-schemas.md` for Team, Domain, and Event.
 - Load the files from the directory specified by `catalog.dir`.
-- Execute **Validation Layer 2 (Catalog internal consistency)**:
+- Unify files tightly via CUE to instantly execute schema layout assertions:
   - Check for uniqueness of all IDs.
-  - Verify `[a-z0-9-]+` formats for IDs.
-  - Check cross-references: Domain `ownerTeams` must exist in Teams.
-  - Check Event `ownerTeam` and `domain`.
-- Provide a strongly typed `Catalog` struct containing maps indexable by `id` for fast lookup during later stages.
+  - Verify regex forms for IDs.
+- Execute **Validation Layer 2 (Catalog cross-references)** structurally in Go or merged CUE:
+  - Domain `ownerTeams` must map to valid IDs inside `teams.yaml`.
+  - Event `ownerTeam` and `domain` must map to valid elements inside `teams.yaml` and `domains.yaml`.
+- Expose a parsed and type-safe `Catalog` cache representation.
 
 ## Definition of Done
 - `mapture validate examples/demo` successfully locates the config and loads the catalogs without errors.
