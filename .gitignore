@@ -1,0 +1,19 @@
+# Binaries
+/mapture
+/dist/
+/build/
+*.exe
+*.test
+*.out
+
+# Mapture-generated artifacts
+.mapture/
+
+# Local agent / tool settings (user-specific, not shared)
+.claude/settings.local.json
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp

@@ -1,0 +1,10 @@
+events:
+  - id: order.placed
+    name: Order Placed
+    domain: orders
+    ownerTeam: team-commerce
+    kind: domain
+    visibility: internal
+    status: active
+    version: 1
+    allowedTargetDomains: [billing, notifications]
