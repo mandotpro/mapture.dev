@@ -1,7 +1,7 @@
 // Package cmd wires up the Mapture CLI.
 //
 // Command surface mirrors PRD §21. v0.1 implementations are stubs that
-// print a TODO banner; real logic lands incrementally in internal/*.
+// print a TODO banner; real logic lands incrementally in src/internal/*.
 package cmd
 
 import (
@@ -41,7 +41,7 @@ func init() {
 
 // todo is a placeholder body used while v0.1 commands are scaffolded.
 // Each caller should be replaced by a real implementation in the
-// matching internal/* package.
+// matching src/internal/* package.
 func todo(name string) func(*cobra.Command, []string) error {
 	return func(_ *cobra.Command, args []string) error {
 		path := "."

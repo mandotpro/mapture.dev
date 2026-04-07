@@ -8,19 +8,19 @@ Before we can scan code for architecture comments, the tool must be able to load
 
 ## Requirements
 
-### 1. CLI Skeleton (`cmd/`)
+### 1. CLI Skeleton (`src/cmd/`)
 - Initialize a `cobra` command-line application (if not already present).
 - Define root command (`mapture`).
 - Scaffold subcommands as defined in PRD: `init`, `validate`, `scan`, `graph`, `serve`, `export-html`, `export-ai`.
 - Subcommands should just output a `TODO: not implemented` message for now, except for wiring them up to print help.
 
-### 2. Config Parser (`internal/config`)
+### 2. Config Parser (`src/internal/config`)
 - Create standard structs representing the schema in `_docs/types/config-schema.md`.
 - Implement a discovery function that walks up from the current directory to find `mapture.yaml`.
 - Provide a strict YAML parsing step that halts on unknown keys or invalid schema types.
 - Apply default values (e.g., `catalog.dir` defaults to `./architecture`).
 
-### 3. Catalog Loader (`internal/catalog`)
+### 3. Catalog Loader (`src/internal/catalog`)
 - Create data models matching `_docs/types/catalog-schemas.md` for Team, Domain, and Event.
 - Load the files from the directory specified by `catalog.dir`.
 - Execute **Validation Layer 2 (Catalog internal consistency)**:

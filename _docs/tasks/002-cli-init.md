@@ -9,7 +9,7 @@ When a user wants to adopt Mapture, they need a starting point. The `init` comma
 ## Requirements
 
 ### 1. `init` command interface
-- Implemented inside `src/cmd/` (or `cmd/`).
+- Implemented inside `src/cmd/`.
 - Accepts an optional `[path]` argument (defaults to `.`).
 - Safe execution: must check if any target files already exist and gracefully skip or merge, ensuring it never overwrites existing catalogs or configs.
 

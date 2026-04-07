@@ -8,7 +8,7 @@ Mapture treats code comments as the primary vehicle for declaring architecture m
 
 ## Requirements
 
-### 1. Directory Traversal (`internal/scanner`)
+### 1. Directory Traversal (`src/internal/scanner`)
 - Implement a walker that starts at configured `scan.include` paths.
 - Safely ignore paths matching `scan.exclude`.
 - Only process files with extensions enabled in `languages` (e.g. `.php`, `.go`, `.ts`).

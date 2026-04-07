@@ -1,6 +1,6 @@
 # Mapture Enums
 
-_Source of truth for all closed-value sets used across catalog schemas, comment tags, graph models, and validation. All enums are closed in v1 — adding a value requires updating both this file and the corresponding constant in `internal/graph/graph.go`. See PRD §16._
+_Source of truth for all closed-value sets used across catalog schemas, comment tags, graph models, and validation. All enums are closed in v1 — adding a value requires updating both this file and the corresponding constant in `src/internal/graph/graph.go`. See PRD §16._
 
 > **Version policy:** Values marked `v1` are stable. `experimental` values may change without notice. `deprecated` values are accepted but will produce warnings.
 

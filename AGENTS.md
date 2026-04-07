@@ -9,14 +9,14 @@ Mapture is an MIT-licensed, single-binary, repo-native architecture graph tool w
 ## Commands
 
 ```bash
-go mod tidy              # after editing go.mod / adding deps
-go build ./...           # compile everything
-go vet ./...             # static checks
-go run . --help          # smoke-test the CLI
-go run . validate examples/demo   # dogfood against the bundled example
+go mod tidy                  # after editing go.mod / adding deps
+go build ./src/...          # compile the application packages
+go vet ./src/...            # static checks
+go run src/main.go --help   # smoke-test the CLI
+go run src/main.go validate examples/demo   # dogfood against the bundled example
 
-go test ./...            # (no tests yet — scaffold stage)
-go test ./internal/catalog -run TestLoad   # single test, once tests exist
+go test ./src/...           # (no tests yet — scaffold stage)
+go test ./src/internal/catalog -run TestLoad   # single test, once tests exist
 ```
 
 The `examples/demo/` tree is the canonical fixture: the minimal end-to-end example from PRD §33 (catalog YAMLs + annotated PHP/Go/TS sources). Use it as the test fixture rather than inventing new ones.
@@ -25,23 +25,23 @@ The `examples/demo/` tree is the canonical fixture: the minimal end-to-end examp
 
 Three layers, all normalized through one graph model:
 
-1. **Catalog** (`internal/catalog`) — YAML files under `architecture/` (`teams.yaml`, `domains.yaml`, `events.yaml`) are the source of truth for teams, domains, and events. Comments reference catalog IDs; they do not redefine them. See PRD §13.
-2. **Scanner** (planned, `internal/scanner`) — walks include paths, parses flat `@arch.*` / `@event.*` tag comments, attaches each block to a nearby source location, and emits typed nodes/edges. Comments-only in v0.1 — no AST or Tree-sitter. See PRD §14, §22.
-3. **Graph** (`internal/graph`) — the normalized `Node`/`Edge`/`Graph` model is the shared payload between scanner output, validator input, and every exporter. Node identity is `type:name` (e.g. `service:checkout-service`) across the entire pipeline. See PRD §17.
+1. **Catalog** (`src/internal/catalog`) — YAML files under `architecture/` (`teams.yaml`, `domains.yaml`, `events.yaml`) are the source of truth for teams, domains, and events. Comments reference catalog IDs; they do not redefine them. See PRD §13.
+2. **Scanner** (planned, `src/internal/scanner`) — walks include paths, parses flat `@arch.*` / `@event.*` tag comments, attaches each block to a nearby source location, and emits typed nodes/edges. Comments-only in v0.1 — no AST or Tree-sitter. See PRD §14, §22.
+3. **Graph** (`src/internal/graph`) — the normalized `Node`/`Edge`/`Graph` model is the shared payload between scanner output, validator input, and every exporter. Node identity is `type:name` (e.g. `service:checkout-service`) across the entire pipeline. See PRD §17.
 
-`cmd/root.go` is wiring only: Cobra registers seven subcommands (`init`, `validate`, `scan`, `graph`, `serve`, `export-html`, `export-ai`) that currently dispatch to `todo()` stubs. Real logic lands in `internal/*` as features are built — grow `internal/*`, not `cmd/`.
+`src/cmd/root.go` is wiring only: Cobra registers seven subcommands (`init`, `validate`, `scan`, `graph`, `serve`, `export-html`, `export-ai`) that currently dispatch to `todo()` stubs. Real logic lands in `src/internal/*` as features are built — grow `src/internal/*`, not `src/cmd/`.
 
 ### Packages that do not exist yet (deliberately)
 
-v0.1 starts small (PRD §30 risk: "too much schema complexity too early"). When you need one of these, create the package under `internal/` and cite the PRD section in the doc comment. **Keep these exact names** — `cmd/root.go` and future docs assume them:
+v0.1 starts small (PRD §30 risk: "too much schema complexity too early"). When you need one of these, create the package under `src/internal/` and cite the PRD section in the doc comment. **Keep these exact names** — `src/cmd/root.go` and future docs assume them:
 
-- `internal/config` — loads `mapture.yaml`. PRD §12.
-- `internal/scanner` — comment parser + source attachment. PRD §14, §22.
-- `internal/validator` — six-layer validation (config → catalog → comment shape → catalog consistency → attachment → graph). PRD §15.
-- `internal/server` — local HTTP explorer UI. PRD §10, §18.
-- `internal/exporter/mermaid` — Mermaid flowchart. PRD §18.
-- `internal/exporter/html` — self-contained HTML report. PRD §10.
-- `internal/exporter/ai` — `.mapture/ai/` bundle. PRD §19.
+- `src/internal/config` — loads `mapture.yaml`. PRD §12.
+- `src/internal/scanner` — comment parser + source attachment. PRD §14, §22.
+- `src/internal/validator` — six-layer validation (config → catalog → comment shape → catalog consistency → attachment → graph). PRD §15.
+- `src/internal/server` — local HTTP explorer UI. PRD §10, §18.
+- `src/internal/exporter/mermaid` — Mermaid flowchart. PRD §18.
+- `src/internal/exporter/html` — self-contained HTML report. PRD §10.
+- `src/internal/exporter/ai` — `.mapture/ai/` bundle. PRD §19.
 
 ### Design invariants
 
@@ -55,14 +55,14 @@ v0.1 starts small (PRD §30 risk: "too much schema complexity too early"). When 
 
 ## Naming note
 
-The PRD body uses the working name **ArchMap**, but the repo, the PRD title, and the intended site (`mapture.dev`) all use **Mapture**. Scaffolding commits to `mapture` as the binary and module name. Rename blast radius if this turns out wrong: `go.mod` module path, `main.go` import, CLI `Use` in `cmd/root.go`, the `.mapture/` artifact directory, and this file. Confirm with the user before renaming.
+The PRD body uses the working name **ArchMap**, but the repo, the PRD title, and the intended site (`mapture.dev`) all use **Mapture**. Scaffolding commits to `mapture` as the binary and module name. Rename blast radius if this turns out wrong: `go.mod` module path, `src/main.go` import, CLI `Use` in `src/cmd/root.go`, the `.mapture/` artifact directory, and this file. Confirm with the user before renaming.
 
 ## Project rules
 
 Rules and conventions the team has adopted as the project grows. Managed by the `agent-docs` skill — invoke it when adding or updating a rule here so AGENTS.md stays organized and tool-specific symlinks stay correct.
 
 - **Cite PRD sections in doc comments** when implementing a feature (`// See PRD §15 layer 3.`). Keeps intent traceable back to the spec.
-- **`cmd/` is wiring only.** Subcommand files should parse flags and delegate to `internal/*`. Business logic in `cmd/` is a code smell.
+- **`src/cmd/` is wiring only.** Subcommand files should parse flags and delegate to `src/internal/*`. Business logic in `src/cmd/` is a code smell.
 - **Public OSS project.** Every user-facing string, error message, and README section is read by strangers. Write accordingly.
 
 <!-- agent-docs:rules:end -->

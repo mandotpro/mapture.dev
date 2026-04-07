@@ -4,15 +4,15 @@
 Transform the valid intermediate comment blocks into the normalized Graph Model, run all cross-referencing validation layers, and finalize output rendering for the `validate` command.
 
 ## Context
-Once comments are scanned successfully (Layer 3), we need to ensure the assertions in those comments agree with the catalog and each other. This task ties the scanner outputs to the catalog inputs, converting everything to a standard `internal/graph` structure, fulfilling PRD §15 (Layers 4-6) and §17.
+Once comments are scanned successfully (Layer 3), we need to ensure the assertions in those comments agree with the catalog and each other. This task ties the scanner outputs to the catalog inputs, converting everything to a standard `src/internal/graph` structure, fulfilling PRD §15 (Layers 4-6) and §17.
 
 ## Requirements
 
-### 1. Internal Graph Model (`internal/graph`)
+### 1. Internal Graph Model (`src/internal/graph`)
 - Implement representations matching `_docs/types/graph-model.md` for `Node`, `Edge`, and `Graph`.
 - Expose an interface to add Nodes and Edges incrementally.
 
-### 2. Validation Layer 4 (Catalog cross-references) (`internal/validator`)
+### 2. Validation Layer 4 (Catalog cross-references) (`src/internal/validator`)
 - Match the scanned blocks against the loaded `Catalog`.
 - Throw errors/warnings according to rules defined:
   - `@arch.domain` and `@arch.owner` exist in actual catalogs.
