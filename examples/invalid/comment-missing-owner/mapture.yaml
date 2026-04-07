@@ -1,0 +1,29 @@
+version: 1
+
+catalog:
+  dir: ./architecture
+
+scan:
+  include:
+    - ./src
+  exclude:
+    - ./vendor
+    - ./node_modules
+    - ./dist
+    - ./build
+
+languages:
+  php: true
+  go: true
+  typescript: true
+
+comments:
+  style: tags
+
+validation:
+  failOnUnknownDomain: true
+  failOnUnknownTeam: true
+  failOnUnknownEvent: true
+  failOnUnknownNode: true
+  warnOnOrphanedNodes: false
+  warnOnDeprecatedEvents: true

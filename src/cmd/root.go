@@ -5,6 +5,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"github.com/angelmanchev/mapture/src/internal/bootstrap"
 	"github.com/angelmanchev/mapture/src/internal/catalog"
 	"github.com/angelmanchev/mapture/src/internal/config"
+	"github.com/angelmanchev/mapture/src/internal/scanner"
 	"github.com/spf13/cobra"
 )
 
@@ -134,7 +136,26 @@ func newScanCmd() *cobra.Command {
 		Use:   "scan [path]",
 		Short: "Parse comments and emit normalized graph JSON",
 		Args:  cobra.MaximumNArgs(1),
-		RunE:  todo("scan"),
+		RunE: func(_ *cobra.Command, args []string) error {
+			target := "."
+			if len(args) > 0 {
+				target = args[0]
+			}
+
+			configPath, cfg, _, err := loadProject(target)
+			if err != nil {
+				return err
+			}
+
+			blocks, err := scanner.Scan(filepath.Dir(configPath), cfg)
+			if err != nil {
+				return err
+			}
+
+			encoder := json.NewEncoder(os.Stdout)
+			encoder.SetIndent("", "  ")
+			return encoder.Encode(blocks)
+		},
 	}
 }
 

@@ -1,0 +1,10 @@
+events:
+  - id: order.placed
+    name: Order Placed
+    domain: billing
+    ownerTeam: team-commerce
+    kind: domain
+    visibility: internal
+    status: active
+    version: 1
+    description: Event consumed by billing.

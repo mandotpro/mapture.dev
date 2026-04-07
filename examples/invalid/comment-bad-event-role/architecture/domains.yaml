@@ -1,0 +1,5 @@
+domains:
+  - id: billing
+    name: Billing
+    ownerTeams: [team-commerce]
+    description: Payment capture and settlement.
