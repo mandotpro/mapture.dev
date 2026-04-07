@@ -4,7 +4,7 @@
 Transform the valid intermediate comment blocks into the normalized Graph Model, run all cross-referencing validation layers, and finalize output rendering for the `validate` command.
 
 ## Context
-Once comments are scanned successfully (Layer 3), we need to ensure the assertions in those comments agree with the catalog and each other. This task ties the scanner outputs to the catalog inputs, converting everything to a standard `src/internal/graph` structure, fulfilling PRD §15 (Layers 4-6) and §17.
+Once comments are scanned successfully (Layer 3), we need to ensure the assertions in those comments agree with the catalog and each other. This task ties the scanner outputs to the catalog inputs, converting everything to a standard `src/internal/graph` structure and covering validation layers 4-6.
 
 ## Requirements
 

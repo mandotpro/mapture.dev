@@ -1,6 +1,6 @@
 # Mapture Config Schema
 
-_Complete field specification for `mapture.yaml` — the per-repo configuration file that controls how Mapture scans, validates, and exports a repository. See PRD §12._
+_Complete field specification for `mapture.yaml` — the per-repo configuration file that controls how Mapture scans, validates, and exports a repository._
 
 > **Config discovery:** The `mapture` binary walks up from the current directory to find `mapture.yaml`. If not found, all commands except `init` will fail with a descriptive error.
 
@@ -150,4 +150,4 @@ Running `mapture init .` produces a starter `mapture.yaml` with sensible default
 
 | Version | Change |
 |---------|--------|
-| v0.1    | Initial config schema. `failOnUnknownNode` and `warnOn*` fields added beyond the PRD baseline. |
+| v0.1    | Initial config schema. `failOnUnknownNode` and `warnOn*` fields added beyond the original baseline. |

@@ -4,14 +4,14 @@
 Establish the foundational command line structure for `mapture` and implement robust parsing for both the repository configuration (`mapture.yaml`) and the central architecture catalogs (`teams.yaml`, `domains.yaml`, `events.yaml`).
 
 ## Context
-Before we can scan code for architecture comments, the tool must be able to load its configuration to know *where* to look, and it must load the canonical catalogs to know *what* exists. This fulfills PRD §12 and §13, and Validation Layers 1 & 2 from `validation-layers.md`.
+Before we can scan code for architecture comments, the tool must be able to load its configuration to know *where* to look, and it must load the canonical catalogs to know *what* exists. This covers validation layers 1 and 2 from `validation-layers.md`.
 
 ## Requirements
 
 ### 1. CLI Skeleton (`src/cmd/`)
 - Initialize a `cobra` command-line application (if not already present).
 - Define root command (`mapture`).
-- Scaffold subcommands as defined in PRD: `init`, `validate`, `scan`, `graph`, `serve`, `export-html`, `export-ai`.
+- Scaffold subcommands: `init`, `validate`, `scan`, `graph`, `serve`, `export-html`, `export-ai`.
 - Subcommands should just output a `TODO: not implemented` message for now, except for wiring them up to print help.
 
 ### 2. Config Parser (`src/internal/config`)

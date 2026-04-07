@@ -1,13 +1,12 @@
 // Package graph defines the normalized architecture graph model that
 // the scanner produces and that exporters consume.
 //
-// See PRD §17 for the canonical JSON shape. NodeType and EdgeType are
-// intentionally open string types (not enums) so contributors can add
-// new kinds without touching core plumbing — validation enforces the
-// v1 allowed set in the validator package.
+// NodeType and EdgeType are intentionally open string types so
+// contributors can add new kinds without touching core plumbing.
+// Validation enforces the allowed set in the validator package.
 package graph
 
-// NodeType values supported in v1. See PRD §16.
+// NodeType values supported in v1.
 const (
 	NodeService  = "service"
 	NodeAPI      = "api"
@@ -15,7 +14,7 @@ const (
 	NodeEvent    = "event"
 )
 
-// EdgeType values supported in v1. See PRD §17.
+// EdgeType values supported in v1.
 const (
 	EdgeCalls      = "calls"
 	EdgeDependsOn  = "depends_on"

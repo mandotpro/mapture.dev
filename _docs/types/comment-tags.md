@@ -1,6 +1,6 @@
 # Mapture Comment Tag Reference
 
-_Complete specification for `@arch.*` and `@event.*` structured comment tags. These are the primary metadata layer that the scanner parses from source files. See PRD §14._
+_Complete specification for `@arch.*` and `@event.*` structured comment tags. These are the primary metadata layer that the scanner parses from source files._
 
 > **Format principle:** Tags are flat `@key value` pairs on separate lines inside a block or line comment. They must never contain embedded JSON, YAML, or structured data. Keep comments readable for humans in pull requests.
 

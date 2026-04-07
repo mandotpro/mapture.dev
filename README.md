@@ -32,7 +32,7 @@ A minimal end-to-end example lives in [`examples/demo/`](./examples/demo/).
 
 Comments are language-agnostic, portable across PHP / Go / TypeScript,
 close to the code, and reviewable in pull requests. Mapture parses them
-into data and validates them against the catalog. See PRD §8.
+into data and validates them against the catalog.
 
 ## Roadmap
 
@@ -43,7 +43,7 @@ into data and validates them against the catalog. See PRD §8.
 - **v0.5** — event / workflow views
 - **v1.0** — stable formats, docs, polish
 
-Full breakdown in PRD §29.
+Full breakdown lives in the product spec under [`_docs/mapture-dev-prd-v1.md`](./_docs/mapture-dev-prd-v1.md).
 
 ## License
 

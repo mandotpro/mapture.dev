@@ -1,13 +1,14 @@
 // Package cmd wires up the Mapture CLI.
 //
-// Command surface mirrors PRD §21. v0.1 implementations are stubs that
-// print a TODO banner; real logic lands incrementally in src/internal/*.
+// Command surface matches the planned CLI. v0.1 implementations are
+// stubs that print a TODO banner; real logic lands in src/internal/*.
 package cmd
 
 import (
 	"fmt"
 	"os"
 
+	"github.com/angelmanchev/mapture/src/internal/bootstrap"
 	"github.com/spf13/cobra"
 )
 
@@ -15,10 +16,10 @@ import (
 var version = "0.0.0-dev"
 
 var rootCmd = &cobra.Command{
-	Use:     "mapture",
-	Short:   "Repo-native architecture graph tool",
-	Long:    "Mapture turns catalog YAML and structured code comments into validated architecture graphs, diagrams, and AI-ready bundles.",
-	Version: version,
+	Use:          "mapture",
+	Short:        "Repo-native architecture graph tool",
+	Long:         "Mapture turns catalog YAML and structured code comments into validated architecture graphs, diagrams, and AI-ready bundles.",
+	Version:      version,
 	SilenceUsage: true,
 }
 
@@ -58,7 +59,13 @@ func newInitCmd() *cobra.Command {
 		Use:   "init [path]",
 		Short: "Bootstrap mapture.yaml and architecture/ catalog files",
 		Args:  cobra.MaximumNArgs(1),
-		RunE:  todo("init"),
+		RunE: func(_ *cobra.Command, args []string) error {
+			path := "."
+			if len(args) > 0 {
+				path = args[0]
+			}
+			return bootstrap.Run(path, os.Stdin, os.Stdout, os.Stderr)
+		},
 	}
 }
 

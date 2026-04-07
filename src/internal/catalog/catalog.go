@@ -1,9 +1,8 @@
 // Package catalog defines the canonical catalog model (teams, domains,
 // events) and loads it from a repo-local directory of YAML files.
 //
-// See PRD §13 for the authoritative schema. The types here are the
-// in-memory projection of those YAML files and are the single source of
-// truth consumed by scanner, validator, and exporter packages.
+// These types are the in-memory projection of the catalog files and the
+// single source of truth consumed by scanner, validator, and exporter packages.
 package catalog
 
 import (
@@ -22,7 +21,7 @@ type Catalog struct {
 	Events  []Event  `yaml:"-"`
 }
 
-// Team mirrors an entry in teams.yaml. See PRD §13.1.
+// Team mirrors an entry in teams.yaml.
 type Team struct {
 	ID      string   `yaml:"id"`
 	Name    string   `yaml:"name"`
@@ -32,7 +31,7 @@ type Team struct {
 	Tags    []string `yaml:"tags,omitempty"`
 }
 
-// Domain mirrors an entry in domains.yaml. See PRD §13.2.
+// Domain mirrors an entry in domains.yaml.
 type Domain struct {
 	ID                     string   `yaml:"id"`
 	Name                   string   `yaml:"name"`
@@ -43,7 +42,7 @@ type Domain struct {
 	Tags                   []string `yaml:"tags,omitempty"`
 }
 
-// Event mirrors an entry in events.yaml. See PRD §13.3.
+// Event mirrors an entry in events.yaml.
 type Event struct {
 	ID                   string   `yaml:"id"`
 	Name                 string   `yaml:"name"`

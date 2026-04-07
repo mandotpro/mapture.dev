@@ -1,6 +1,6 @@
 # Mapture Catalog Schemas
 
-_Field-level specifications for the three v1 catalog YAML files: `teams.yaml`, `domains.yaml`, `events.yaml`. These files live under the `catalog.dir` path defined in `mapture.yaml` (default: `./architecture/`). See PRD §13._
+_Field-level specifications for the three v1 catalog YAML files: `teams.yaml`, `domains.yaml`, `events.yaml`. These files live under the `catalog.dir` path defined in `mapture.yaml` (default: `./architecture/`)._
 
 ---
 

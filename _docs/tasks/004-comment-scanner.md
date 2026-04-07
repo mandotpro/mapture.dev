@@ -4,7 +4,7 @@
 Implement a language-agnostic text scanner that walks directories, reads configured file extensions, and extracts `@arch.*` and `@event.*` tags from comment blocks, associating them with the exact file and line number.
 
 ## Context
-Mapture treats code comments as the primary vehicle for declaring architecture metadata. Before we can build a graph or validate cross-references, we need the raw metadata payloads from the codebase. This fulfills PRD §14 and Layer 3 from `validation-layers.md`.
+Mapture treats code comments as the primary vehicle for declaring architecture metadata. Before we can build a graph or validate cross-references, we need the raw metadata payloads from the codebase. This covers layer 3 from `validation-layers.md`.
 
 ## Requirements
 
