@@ -52,7 +52,9 @@ func todo(name string) func(*cobra.Command, []string) error {
 		if len(args) > 0 {
 			path = args[0]
 		}
-		fmt.Fprintf(os.Stderr, "mapture %s: not implemented yet (target=%s)\n", name, path)
+		if _, err := fmt.Fprintf(os.Stderr, "mapture %s: not implemented yet (target=%s)\n", name, path); err != nil {
+			return err
+		}
 		return nil
 	}
 }
@@ -88,14 +90,16 @@ func newValidateCmd() *cobra.Command {
 				return err
 			}
 
-			fmt.Fprintf(
+			if _, err := fmt.Fprintf(
 				os.Stdout,
 				"mapture validate: config and catalog OK (config=%s teams=%d domains=%d events=%d)\n",
 				filepath.Clean(configPath),
 				len(c.Teams),
 				len(c.Domains),
 				len(c.Events),
-			)
+			); err != nil {
+				return err
+			}
 			return nil
 		},
 	}

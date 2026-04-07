@@ -61,8 +61,7 @@ func Run(target string, stdin, stdout, stderr *os.File) error {
 		return err
 	}
 
-	printSummary(stdout, root, result)
-	return nil
+	return printSummary(stdout, root, result)
 }
 
 type languageOption struct {
@@ -309,7 +308,9 @@ func promptConfig(root string, state detectedState, stdio survey.AskOpt, stdout 
 	if err != nil {
 		return initConfig{}, err
 	}
-	printDetectedLanguages(stdout, includes, detectedLangs)
+	if err := printDetectedLanguages(stdout, includes, detectedLangs); err != nil {
+		return initConfig{}, fmt.Errorf("report detected languages: %w", err)
+	}
 
 	defaultExcludes := strings.Join(state.DefaultExcludes, ", ")
 	excludePrompt := "Exclude directories or globs (comma-separated)"
@@ -344,7 +345,7 @@ func promptConfig(root string, state detectedState, stdio survey.AskOpt, stdout 
 			Message: "Confirm which languages Mapture should scan:",
 			Options: languageOptions,
 			Default: languageDefaults,
-			Description: func(value string, index int) string {
+			Description: func(value string, _ int) string {
 				for _, option := range supportedLanguages {
 					if option.Label == value && detectedLangs[option.Key] {
 						return "Detected in the target tree"
@@ -447,7 +448,7 @@ func pathListRequired(value any) error {
 	return nil
 }
 
-func printDetectedLanguages(stdout io.Writer, includes []string, detected map[string]bool) {
+func printDetectedLanguages(stdout io.Writer, includes []string, detected map[string]bool) error {
 	found := make([]string, 0, len(supportedLanguages))
 	for _, option := range supportedLanguages {
 		if detected[option.Key] {
@@ -456,11 +457,12 @@ func printDetectedLanguages(stdout io.Writer, includes []string, detected map[st
 	}
 
 	if len(found) == 0 {
-		fmt.Fprintf(stdout, "\nNo supported languages detected in %s. You can still enable them manually in the next step.\n\n", strings.Join(includes, ", "))
-		return
+		_, err := fmt.Fprintf(stdout, "\nNo supported languages detected in %s. You can still enable them manually in the next step.\n\n", strings.Join(includes, ", "))
+		return err
 	}
 
-	fmt.Fprintf(stdout, "\nDetected languages in %s: %s\n\n", strings.Join(includes, ", "), strings.Join(found, ", "))
+	_, err := fmt.Fprintf(stdout, "\nDetected languages in %s: %s\n\n", strings.Join(includes, ", "), strings.Join(found, ", "))
+	return err
 }
 
 func normalizePath(path string) string {
@@ -522,7 +524,7 @@ func writeScaffold(root string, config initConfig, skipExisting bool) (writeResu
 	return result, nil
 }
 
-func writeFile(path string, content string, skipExisting bool) error {
+func writeFile(path string, content string, skipExisting bool) (err error) {
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
 	if err != nil {
 		if errors.Is(err, os.ErrExist) && skipExisting {
@@ -533,7 +535,11 @@ func writeFile(path string, content string, skipExisting bool) error {
 		}
 		return fmt.Errorf("create %s: %w", path, err)
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("close %s: %w", path, closeErr)
+		}
+	}()
 
 	if _, err := file.WriteString(content); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
@@ -563,23 +569,23 @@ func renderConfig(config initConfig) string {
 	b.WriteString("\n")
 	b.WriteString("languages:\n")
 	for _, option := range supportedLanguages {
-		b.WriteString(fmt.Sprintf("  %s: %t\n", option.Key, config.LanguageEnabled[option.Key]))
+		_, _ = fmt.Fprintf(&b, "  %s: %t\n", option.Key, config.LanguageEnabled[option.Key])
 	}
 	b.WriteString("\n")
 	b.WriteString("comments:\n")
 	b.WriteString("  # v0.1 supports flat @key value tags only.\n")
 	b.WriteString("  style: tags\n\n")
 	b.WriteString("validation:\n")
-	b.WriteString(fmt.Sprintf("  failOnUnknownDomain: %t\n", config.FailOnUnknownDomain))
-	b.WriteString(fmt.Sprintf("  failOnUnknownTeam: %t\n", config.FailOnUnknownTeam))
-	b.WriteString(fmt.Sprintf("  failOnUnknownEvent: %t\n", config.FailOnUnknownEvent))
-	b.WriteString(fmt.Sprintf("  failOnUnknownNode: %t\n", config.FailOnUnknownNode))
+	_, _ = fmt.Fprintf(&b, "  failOnUnknownDomain: %t\n", config.FailOnUnknownDomain)
+	_, _ = fmt.Fprintf(&b, "  failOnUnknownTeam: %t\n", config.FailOnUnknownTeam)
+	_, _ = fmt.Fprintf(&b, "  failOnUnknownEvent: %t\n", config.FailOnUnknownEvent)
+	_, _ = fmt.Fprintf(&b, "  failOnUnknownNode: %t\n", config.FailOnUnknownNode)
 	b.WriteString("  # Uncomment roles below if every usage must carry event metadata.\n")
 	b.WriteString("  # requireMetadataOn:\n")
 	b.WriteString("  #   - trigger\n")
 	b.WriteString("  #   - listener\n")
-	b.WriteString(fmt.Sprintf("  warnOnOrphanedNodes: %t\n", config.WarnOnOrphanedNodes))
-	b.WriteString(fmt.Sprintf("  warnOnDeprecatedEvents: %t\n", config.WarnOnDeprecatedEvents))
+	_, _ = fmt.Fprintf(&b, "  warnOnOrphanedNodes: %t\n", config.WarnOnOrphanedNodes)
+	_, _ = fmt.Fprintf(&b, "  warnOnDeprecatedEvents: %t\n", config.WarnOnDeprecatedEvents)
 
 	return b.String()
 }
@@ -624,18 +630,29 @@ func renderEventsCatalog() string {
 `
 }
 
-func printSummary(stdout io.Writer, root string, result writeResult) {
-	fmt.Fprintf(stdout, "\nInitialized Mapture scaffold in %s\n", root)
+func printSummary(stdout io.Writer, root string, result writeResult) error {
+	if _, err := fmt.Fprintf(stdout, "\nInitialized Mapture scaffold in %s\n", root); err != nil {
+		return err
+	}
 	if len(result.Created) > 0 {
-		fmt.Fprintln(stdout, "Created:")
+		if _, err := fmt.Fprintln(stdout, "Created:"); err != nil {
+			return err
+		}
 		for _, path := range result.Created {
-			fmt.Fprintf(stdout, "  - %s\n", path)
+			if _, err := fmt.Fprintf(stdout, "  - %s\n", path); err != nil {
+				return err
+			}
 		}
 	}
 	if len(result.Skipped) > 0 {
-		fmt.Fprintln(stdout, "Skipped existing:")
+		if _, err := fmt.Fprintln(stdout, "Skipped existing:"); err != nil {
+			return err
+		}
 		for _, path := range result.Skipped {
-			fmt.Fprintf(stdout, "  - %s\n", path)
+			if _, err := fmt.Fprintf(stdout, "  - %s\n", path); err != nil {
+				return err
+			}
 		}
 	}
+	return nil
 }

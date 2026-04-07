@@ -8,6 +8,7 @@ GOTESTSUM_BIN="$(ensure_gotestsum)"
 REPORTS_DIR="$(reports_dir)"
 
 if [[ "${1:-}" == "--install-only" ]]; then
+  ensure_golangci_lint >/dev/null
   echo "Installed Go dev tools into $(tools_bin_dir)"
   exit 0
 fi

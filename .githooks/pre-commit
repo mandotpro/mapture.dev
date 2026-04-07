@@ -3,4 +3,5 @@ set -euo pipefail
 
 ROOT_DIR="$(git rev-parse --show-toplevel)"
 
-"$ROOT_DIR/scripts/test.sh"
+"$ROOT_DIR/scripts/check-fmt.sh"
+"$ROOT_DIR/scripts/lint-go.sh"

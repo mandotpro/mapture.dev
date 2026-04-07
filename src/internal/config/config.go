@@ -1,3 +1,4 @@
+// Package config loads and validates repository-level Mapture configuration.
 package config
 
 import (
@@ -21,15 +22,18 @@ type Config struct {
 	Validation Validation `json:"validation"`
 }
 
+// Catalog configures where catalog YAML files live.
 type Catalog struct {
 	Dir string `json:"dir"`
 }
 
+// Scan configures which repository paths should be scanned or skipped.
 type Scan struct {
 	Include []string `json:"include"`
 	Exclude []string `json:"exclude"`
 }
 
+// Languages controls which source languages Mapture should inspect.
 type Languages struct {
 	PHP        bool `json:"php"`
 	Go         bool `json:"go"`
@@ -37,10 +41,12 @@ type Languages struct {
 	JavaScript bool `json:"javascript"`
 }
 
+// Comments defines the supported comment parsing style.
 type Comments struct {
 	Style string `json:"style"`
 }
 
+// Validation configures strictness for catalog and graph checks.
 type Validation struct {
 	FailOnUnknownDomain    bool     `json:"failOnUnknownDomain"`
 	FailOnUnknownTeam      bool     `json:"failOnUnknownTeam"`

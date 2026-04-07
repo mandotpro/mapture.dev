@@ -16,15 +16,19 @@ go run src/main.go --help   # smoke-test the CLI
 go run src/main.go validate examples/demo   # validate config + catalog against the bundled example
 
 ./scripts/test-go.sh        # run Go tests via gotestsum with AI-friendly output
+./scripts/lint-go.sh        # run golangci-lint against src/
+./scripts/check-fmt.sh      # enforce gofmt on src/ and fail if files were changed
 go test ./src/internal/catalog -run TestLoad   # single test, once tests exist
 
 make help                   # discover the repo's day-to-day commands
 make test                   # run the full verification suite
+make lint                   # run the Go lint suite
 make validate-demo          # validate the canonical demo fixture
 
 ./scripts/build.sh          # build build/mapture for local development
 ./scripts/test.sh           # run tests, vet, and CLI smoke checks
 ./scripts/test-go.sh --install-only   # install gotestsum into testing/tools/bin
+./scripts/init-hooks.sh     # configure the repo-managed git hooks once per clone
 ./scripts/go.sh init        # build into testing/ and run the playground wrapper
 ```
 
@@ -75,6 +79,8 @@ Rules and conventions the team has adopted as the project grows. Managed by the 
 - **Comments must earn their keep.** Add comments only when they explain behavior, tradeoffs, or non-obvious intent that helps humans and agents maintain the code. Do not add traceability comments that only point at spec sections.
 - **`src/cmd/` is wiring only.** Subcommand files should parse flags and delegate to `src/internal/*`. Business logic in `src/cmd/` is a code smell.
 - **Top-level `scripts/` is for repo operations.** Build, release, and CI helper scripts belong there, not in `src/`.
+- **Pre-commit must stay fast and structural.** It should auto-run formatting checks plus linting, but leave the full example-backed test gauntlet to pre-push and CI.
+- **Pre-push and CI must exercise `examples/`.** Broken fixtures under `examples/invalid/` are part of the guardrail suite and should fail predictably.
 - **Public OSS project.** Every user-facing string, error message, and README section is read by strangers. Write accordingly.
 
 <!-- agent-docs:rules:end -->

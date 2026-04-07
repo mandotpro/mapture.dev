@@ -1,3 +1,4 @@
+// Package schema embeds the CUE definitions used to validate YAML inputs.
 package schema
 
 import (
@@ -16,8 +17,10 @@ import (
 //go:embed *.cue
 var schemaFS embed.FS
 
+// Definition names an embedded top-level CUE definition.
 type Definition string
 
+// Embedded schema entrypoints used by the YAML decoders.
 const (
 	ConfigDefinition  Definition = "Config"
 	TeamsDefinition   Definition = "TeamsFile"

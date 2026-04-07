@@ -16,12 +16,12 @@ const (
 
 // EdgeType values supported in v1.
 const (
-	EdgeCalls      = "calls"
-	EdgeDependsOn  = "depends_on"
-	EdgeStoresIn   = "stores_in"
-	EdgeReadsFrom  = "reads_from"
-	EdgeEmits      = "emits"
-	EdgeConsumes   = "consumes"
+	EdgeCalls     = "calls"
+	EdgeDependsOn = "depends_on"
+	EdgeStoresIn  = "stores_in"
+	EdgeReadsFrom = "reads_from"
+	EdgeEmits     = "emits"
+	EdgeConsumes  = "consumes"
 )
 
 // Node is a single architecture entity. ID is the stable "type:name"

@@ -7,12 +7,16 @@ on:
       - main
 
 jobs:
-  test:
+  checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - name: Install dev tools
+        run: ./scripts/test-go.sh --install-only
+      - name: Run lint
+        run: ./scripts/lint-go.sh
       - name: Run test suite
         run: ./scripts/test.sh

@@ -1,4 +1,4 @@
-.PHONY: help build test test-go vet cli-help validate-demo validate-ecommerce install-dev-tools install-git-hooks playground-init run-demo run-playground fmt
+.PHONY: help build test test-go lint vet cli-help validate-demo validate-ecommerce install-dev-tools install-git-hooks init-hooks playground-init run-demo run-playground fmt
 
 help: ## Show available development commands
 	@awk 'BEGIN {FS = ": ## "}; /^[a-zA-Z0-9_.-]+: ## / {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -11,6 +11,9 @@ test-go: ## Run Go tests through gotestsum
 
 test: ## Run the full local verification suite
 	@./scripts/test.sh
+
+lint: ## Run golangci-lint against src/
+	@./scripts/lint-go.sh
 
 vet: ## Run go vet against src/
 	@go vet ./src/...
@@ -32,6 +35,9 @@ install-dev-tools: ## Install local Go dev tools into testing/tools/bin
 
 install-git-hooks: ## Configure git to use the repo-managed hooks
 	@./scripts/install-git-hooks.sh
+
+init-hooks: ## Configure git to use the repo-managed hooks
+	@./scripts/init-hooks.sh
 
 playground-init: ## Run init against the gitignored testing playground
 	@./scripts/go.sh init
