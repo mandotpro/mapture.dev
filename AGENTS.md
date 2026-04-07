@@ -15,11 +15,16 @@ go vet ./src/...            # static checks
 go run src/main.go --help   # smoke-test the CLI
 go run src/main.go validate examples/demo   # validate config + catalog against the bundled example
 
-go test ./src/...           # (no tests yet — scaffold stage)
+./scripts/test-go.sh        # run Go tests via gotestsum with AI-friendly output
 go test ./src/internal/catalog -run TestLoad   # single test, once tests exist
+
+make help                   # discover the repo's day-to-day commands
+make test                   # run the full verification suite
+make validate-demo          # validate the canonical demo fixture
 
 ./scripts/build.sh          # build build/mapture for local development
 ./scripts/test.sh           # run tests, vet, and CLI smoke checks
+./scripts/test-go.sh --install-only   # install gotestsum into testing/tools/bin
 ./scripts/go.sh init        # build into testing/ and run the playground wrapper
 ```
 

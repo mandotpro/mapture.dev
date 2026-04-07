@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+
+ROOT_DIR="$(root_dir)"
 
 cd "$ROOT_DIR"
 
-go test ./src/...
+./scripts/test-go.sh
 go vet ./src/...
 go run src/main.go --help >/dev/null
 go run src/main.go validate examples/demo >/dev/null

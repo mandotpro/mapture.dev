@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TESTING_DIR="$ROOT_DIR/testing"
-PLAYGROUND_DIR="$TESTING_DIR/playground"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+
+ROOT_DIR="$(root_dir)"
+TESTING_DIR="$(testing_dir)"
+PLAYGROUND_DIR="$(playground_dir)"
 BIN_DIR="$TESTING_DIR/bin"
 BIN="$BIN_DIR/mapture"
 DEMO_DIR="$ROOT_DIR/examples/demo"
 
 mkdir -p "$PLAYGROUND_DIR" "$BIN_DIR"
 
-go build -o "$BIN" "$ROOT_DIR/src"
+build_binary "$BIN"
 
 if [[ $# -eq 0 ]]; then
   cat <<EOF
