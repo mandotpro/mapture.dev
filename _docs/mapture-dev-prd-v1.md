@@ -10,7 +10,7 @@
 
 ## 1. Product summary
 
-ArchMap is a repo-native architecture graph tool for distributed systems.
+Mapture is a repo-native architecture graph tool for distributed systems.
 
 It lets teams define a small central catalog of architecture entities, annotate code with lightweight structured comments, validate those annotations against the catalog, and turn the result into:
 
@@ -120,7 +120,7 @@ Tagline candidates:
 
 ## 7. Core product concept
 
-ArchMap combines three layers:
+Mapture combines three layers:
 
 ### A. Central catalog
 A small set of repo-local files declaring canonical architecture facts:
@@ -139,7 +139,7 @@ Simple structured comments placed near relevant code:
 - ownership/domain declarations
 
 ### C. Derived graph
-ArchMap scans comments, validates them against the catalog, and builds:
+Mapture scans comments, validates them against the catalog, and builds:
 - normalized graph JSON
 - HTML explorer
 - Mermaid export
@@ -204,19 +204,19 @@ Comments are for humans to write. The scanner turns them into data. The catalog 
 ### CLI
 Examples:
 ```bash
-archmap init .
-archmap validate .
-archmap scan .
-archmap graph .
-archmap serve .
-archmap export-html . -o architecture-report.html
-archmap export-ai .
+mapture init .
+mapture validate .
+mapture scan .
+mapture graph .
+mapture serve .
+mapture export-html . -o architecture-report.html
+mapture export-ai .
 ```
 
 ### Local web UI
 Served by the binary:
 ```bash
-archmap serve .
+mapture serve .
 ```
 
 Capabilities:
@@ -228,7 +228,7 @@ Capabilities:
 
 ### Static HTML export
 ```bash
-archmap export-html . -o architecture-report.html
+mapture export-html . -o architecture-report.html
 ```
 
 Self-contained HTML for:
@@ -239,7 +239,7 @@ Self-contained HTML for:
 
 ### AI export
 ```bash
-archmap export-ai .
+mapture export-ai .
 ```
 
 Outputs:
@@ -252,12 +252,12 @@ Outputs:
 
 ## 11. Repository integration model
 
-ArchMap runs against a folder or repo root.
+Mapture runs against a folder or repo root.
 
 ### Recommended repo structure
 ```text
 repo/
-  archmap.yaml
+  mapture.yaml
   architecture/
     teams.yaml
     domains.yaml
@@ -270,9 +270,9 @@ repo/
 
 ### Example usage
 ```bash
-archmap validate .
-archmap serve .
-archmap export-html . -o architecture.html
+mapture validate .
+mapture serve .
+mapture export-html . -o architecture.html
 ```
 
 ### Company usage model
@@ -285,7 +285,7 @@ archmap export-html . -o architecture.html
 
 ## 12. Configuration model
 
-### Repo config: `archmap.yaml`
+### Repo config: `mapture.yaml`
 Purpose:
 - locate catalogs
 - define include/exclude paths
@@ -748,7 +748,7 @@ Initial recommendation:
 
 ## 19. AI-first architecture
 
-ArchMap should be AI-first from the start.
+Mapture should be AI-first from the start.
 
 ### Meaning of AI-first here
 The collected architecture data should be easy to:
@@ -760,10 +760,10 @@ The collected architecture data should be easy to:
 - explain ownership and flows
 
 ### AI outputs
-`archmap export-ai .` should generate:
+`mapture export-ai .` should generate:
 
 ```text
-.archmap/ai/
+.mapture/ai/
   graph.json
   entities/
     service-checkout-service.md
@@ -808,7 +808,7 @@ Examples:
 - Find undocumented or orphaned nodes
 
 ### Future MCP direction
-Later, ArchMap can expose:
+Later, Mapture can expose:
 - resources: graph, domains, teams, events, services
 - tools: find neighbors, trace paths, blast radius, missing metadata
 - prompts: built-in architecture analysis prompts
@@ -835,19 +835,19 @@ This dual-mode design is core to the product.
 ## 21. Initial commands
 
 ### Required commands
-- `archmap init [path]`
-- `archmap validate [path]`
-- `archmap scan [path]`
-- `archmap graph [path]`
-- `archmap serve [path]`
-- `archmap export-html [path] -o <file>`
-- `archmap export-ai [path]`
+- `mapture init [path]`
+- `mapture validate [path]`
+- `mapture scan [path]`
+- `mapture graph [path]`
+- `mapture serve [path]`
+- `mapture export-html [path] -o <file>`
+- `mapture export-ai [path]`
 
 ### Command goals
 
 #### `init`
 Bootstrap:
-- `archmap.yaml`
+- `mapture.yaml`
 - `architecture/teams.yaml`
 - `architecture/domains.yaml`
 - `architecture/events.yaml`
@@ -963,7 +963,7 @@ MIT
 - single binary
 
 ### Differentiation
-ArchMap is not:
+Mapture is not:
 - only a static analysis engine
 - only a diagramming DSL
 - only an IDE plugin
@@ -981,7 +981,7 @@ It is:
 ## 26. Project naming
 
 Working name:
-- ArchMap
+- Mapture
 
 Other candidates discussed:
 - ArchGraph
@@ -990,13 +990,13 @@ Other candidates discussed:
 - SystemGraph
 
 Preferred current choice:
-- **ArchMap**
+- **Mapture**
 
 Suggested site:
-- `archmap.dev`
+- `mapture.dev`
 
 Suggested repo:
-- `archmap`
+- `mapture`
 
 ---
 
@@ -1155,7 +1155,7 @@ Add:
 1. Finalize repository name and branding.
 2. Define exact v0.1 comment grammar.
 3. Define exact graph JSON schema.
-4. Define `archmap.yaml` schema.
+4. Define `mapture.yaml` schema.
 5. Create sample demo repo with PHP + Go + TS.
 6. Implement:
    - catalog loader
@@ -1270,4 +1270,4 @@ flowchart LR
 
 ## 34. One-sentence product definition
 
-ArchMap is an MIT-licensed, single-binary, repo-native architecture graph tool that turns lightweight code comments and YAML catalogs into validated dependency maps, interactive diagrams, and AI-ready architecture context.
+Mapture is an MIT-licensed, single-binary, repo-native architecture graph tool that turns lightweight code comments and YAML catalogs into validated dependency maps, interactive diagrams, and AI-ready architecture context.
