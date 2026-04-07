@@ -13,7 +13,6 @@
 # Local agent / tool settings (user-specific, not shared)
 .agents/
 .claude/settings.local.json
-examples/ecommerce
 
 # Editor / OS
 .DS_Store
