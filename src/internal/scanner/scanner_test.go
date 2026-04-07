@@ -41,6 +41,31 @@ func TestScanDemoFixture(t *testing.T) {
 	}
 }
 
+func TestScanPreservesPHPFQCNProducerValues(t *testing.T) {
+	t.Parallel()
+
+	root, cfg := loadFixtureConfig(t, "../../../examples/demo")
+
+	blocks, err := Scan(root, cfg)
+	if err != nil {
+		t.Fatalf("Scan returned error: %v", err)
+	}
+
+	for _, block := range blocks {
+		if block.Kind != "event" || !strings.HasSuffix(block.File, "src/php/CheckoutService.php") {
+			continue
+		}
+		got := block.Fields["producer"]
+		want := `App\Orders\CheckoutService::placeOrder`
+		if got != want {
+			t.Fatalf("expected PHP producer %q, got %q", want, got)
+		}
+		return
+	}
+
+	t.Fatal("expected PHP event block in demo fixture")
+}
+
 func TestScanEcommerceFixtureCoversRolesLanguagesAndRelations(t *testing.T) {
 	t.Parallel()
 
@@ -80,6 +105,25 @@ func TestScanEcommerceFixtureCoversRolesLanguagesAndRelations(t *testing.T) {
 	for _, ext := range []string{".go", ".php", ".ts"} {
 		if _, ok := extensions[ext]; !ok {
 			t.Fatalf("expected extension %q in ecommerce fixture, got %#v", ext, extensions)
+		}
+	}
+
+	wantPHPProducers := map[string]struct{}{
+		`App\Orders\CheckoutService::placeOrder`:  {},
+		`App\Orders\CheckoutService::cancelOrder`: {},
+	}
+	foundPHPProducers := make(map[string]struct{})
+	for _, block := range blocks {
+		if block.Kind != "event" || !strings.HasSuffix(block.File, "src/php/orders/CheckoutService.php") {
+			continue
+		}
+		if producer := block.Fields["producer"]; producer != "" {
+			foundPHPProducers[producer] = struct{}{}
+		}
+	}
+	for producer := range wantPHPProducers {
+		if _, ok := foundPHPProducers[producer]; !ok {
+			t.Fatalf("expected PHP producer %q in ecommerce fixture, got %#v", producer, foundPHPProducers)
 		}
 	}
 }

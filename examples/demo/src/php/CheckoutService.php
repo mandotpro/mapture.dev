@@ -17,7 +17,7 @@ final class CheckoutService
          * @event.id order.placed
          * @event.role trigger
          * @event.domain orders
-         * @event.producer checkout.place_order
+         * @event.producer App\Orders\CheckoutService::placeOrder
          * @event.phase post-commit
          */
         // $bus->dispatch(new OrderPlaced($orderId));

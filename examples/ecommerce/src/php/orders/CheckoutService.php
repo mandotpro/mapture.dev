@@ -23,7 +23,7 @@ final class CheckoutService
          * @event.role trigger
          * @event.domain orders
          * @event.owner team-commerce
-         * @event.producer checkout.placeOrder
+         * @event.producer App\Orders\CheckoutService::placeOrder
          * @event.phase post-commit
          * @event.notes Fired after the order row is committed so billing and inventory see a stable order id.
          */
@@ -36,7 +36,7 @@ final class CheckoutService
          * @event.role trigger
          * @event.domain orders
          * @event.owner team-commerce
-         * @event.producer checkout.cancelOrder
+         * @event.producer App\Orders\CheckoutService::cancelOrder
          * @event.phase post-commit
          * @event.notes Used to release any reserved stock and stop notification work.
          */
