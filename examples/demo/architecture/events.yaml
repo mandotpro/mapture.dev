@@ -7,4 +7,3 @@ events:
     visibility: internal
     status: active
     version: 1
-    allowedTargetDomains: [billing, notifications]

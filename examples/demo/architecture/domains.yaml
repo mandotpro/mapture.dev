@@ -2,7 +2,6 @@ domains:
   - id: orders
     name: Orders
     ownerTeams: [team-commerce]
-    allowedOutboundDomains: [billing, notifications]
 
   - id: billing
     name: Billing
