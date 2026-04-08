@@ -1,10 +1,10 @@
-# Task 011: React Flow Frontend Implementation (Graph Explorer)
+# Task 011: Svelte Flow Frontend Implementation (Graph Explorer)
 
 ## Goal
-Implement the initial React Flow frontend for Mapture. The goal is a pleasant architecture explorer—not a generic node editor—that successfully loads and visually explores normalized graph model data produced by the Go backend.
+Implement the initial Svelte Flow frontend for Mapture. The goal is a pleasant architecture explorer—not a generic node editor—that successfully loads and visually explores normalized graph model data produced by the Go backend.
 
 ## Context
-Mapture is a Go-based architecture mapping tool. The backend already has APIs implemented and produces mapping output files. Your job is to build the React Flow UI by reading the existing backend/API contracts and wiring the frontend to real data instead of inventing a new backend shape.
+Mapture is a Go-based architecture mapping tool. The backend already has APIs implemented and produces mapping output files. Your job is to build the Svelte Flow UI by reading the existing backend/API contracts and wiring the frontend to real data instead of inventing a new backend shape.
 
 ## Requirements
 
@@ -17,16 +17,16 @@ Inspect the existing codebase and identify:
 
 ### 2. Backend Constraint
 Do not redesign the backend unless absolutely necessary.
-- Prefer adapting the React Flow frontend to the existing API/output shape.
+- Prefer adapting the Svelte Flow frontend to the existing API/output shape.
 - Only propose backend changes if there is a clear blocker, and keep them minimal.
 - Reuse current graph/mapping models whenever possible.
 
-### 3. Build an Interactive React Flow UI
-Build a first usable interactive UI using React Flow focusing on exploring architecture.
+### 3. Build an Interactive Svelte Flow UI
+Build a first usable interactive UI using Svelte Flow focusing on exploring architecture.
 
 **Primary UI goals:**
 - Load graph data from existing APIs or mapping output files.
-- Display nodes and edges in React Flow.
+- Display nodes and edges in Svelte Flow.
 - Support basic node types such as `service`, `api`, `database`, and `event` (if they exist).
 - Show labels clearly.
 - Support zoom/pan/fit view.
@@ -43,10 +43,10 @@ Build a first usable interactive UI using React Flow focusing on exploring archi
 - Do not hardcode fake graph data except possibly as a temporary fallback during development.
 - Keep the graph model renderer-agnostic where possible.
 - Introduce a clear adapter layer:
-  `backend/output format -> frontend normalized graph model -> React Flow nodes/edges`
+  `backend/output format -> frontend normalized graph model -> Svelte Flow nodes/edges`
 
 **Implementation Details:**
-- Use React Flow for rendering.
+- Use Svelte Flow for rendering.
 - Build reusable custom node renderers only where they add clear value.
 - Keep styling clean and minimal.
 - Prefer simple layout first; if there is no backend layout info, implement a basic automatic layout strategy.
@@ -59,13 +59,13 @@ Build a first usable interactive UI using React Flow focusing on exploring archi
    - which output files/schemas exist
    - how the frontend consumes them
    - any gaps or blockers found
-2. **A working React Flow-based UI** integrated into the existing app.
+2. **A working Svelte Flow-based UI** integrated into the existing app.
 3. **A normalized frontend graph adapter module**, for example:
    - `loadGraphFromApi(...)`
    - `loadGraphFromFile(...)`
    - `normalizeGraph(...)`
-   - `toReactFlowNodes(...)`
-   - `toReactFlowEdges(...)`
+   - `toSvelteFlowNodes(...)`
+   - `toSvelteFlowEdges(...)`
 4. **Basic UI features:** graph canvas, filters, search, node details panel, loading and error states.
 5. **A short implementation note** covering:
    - assumptions made
@@ -87,7 +87,7 @@ Build a first usable interactive UI using React Flow focusing on exploring archi
 ## Execution Plan
 - First inspect backend APIs and output files.
 - Then define the frontend adapter.
-- Then implement the React Flow UI.
+- Then implement the Svelte Flow UI.
 - Then wire filters/search/details.
 - Then document findings and any follow-up tasks.
 
