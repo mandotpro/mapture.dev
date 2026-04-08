@@ -26,13 +26,19 @@ make help                   # discover the repo's day-to-day commands
 make test                   # run the full verification suite
 make lint                   # run the Go lint suite
 make web                    # rebuild the frontend bundle under web/dist/
+make testing-help           # show the testing-first wrapper commands and fixture paths
+make testing-build          # build the current source into testing/bin/mapture
+make testing-ecommerce-web  # run the web UI for the polyglot fixture from testing/
+make testing-demo-scan      # write testing/outputs/demo.scan.json
 make validate-demo          # validate the canonical demo fixture
 
 ./scripts/build.sh          # build build/mapture for local development
 ./scripts/test.sh           # run tests, vet, and CLI smoke checks
 ./scripts/test-go.sh --install-only   # install gotestsum into testing/tools/bin
 ./scripts/init-hooks.sh     # configure the repo-managed git hooks once per clone
+./scripts/go.sh help        # show the testing wrapper, fixtures, and output paths
 ./scripts/go.sh init        # build into testing/ and run the playground wrapper
+./scripts/go.sh web ecommerce  # open the web UI against examples/ecommerce
 ```
 
 The `examples/demo/` tree is the canonical fixture: the minimal end-to-end example with catalog YAMLs and annotated PHP/Go/TS sources. Use it as the test fixture rather than inventing new ones.
@@ -86,6 +92,7 @@ Rules and conventions the team has adopted as the project grows. Managed by the 
 - **Comments must earn their keep.** Add comments only when they explain behavior, tradeoffs, or non-obvious intent that helps humans and agents maintain the code. Do not add traceability comments that only point at spec sections.
 - **`src/cmd/` is wiring only.** Subcommand files should parse flags and delegate to `src/internal/*`. Business logic in `src/cmd/` is a code smell.
 - **Top-level `scripts/` is for repo operations.** Build, release, and CI helper scripts belong there, not in `src/`.
+- **Testing flows must be one command away.** Prefer `make testing-*` and `./scripts/go.sh <feature> <fixture>` wrappers over telling contributors to remember raw `go run` paths, ports, or output files.
 - **Pre-commit must stay fast and structural.** It should auto-run formatting checks plus linting, but leave the full example-backed test gauntlet to pre-push and CI.
 - **Pre-push and CI must exercise `examples/`.** Broken fixtures under `examples/invalid/` are part of the guardrail suite and should fail predictably.
 - **Public OSS project.** Every user-facing string, error message, and README section is read by strangers. Write accordingly.
