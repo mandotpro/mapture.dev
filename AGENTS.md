@@ -15,6 +15,7 @@ go vet ./src/...            # static checks
 go run src/main.go --help   # smoke-test the CLI
 go run src/main.go validate examples/demo   # validate config, scan comments, and build the graph for the bundled example
 go run src/main.go scan examples/ecommerce  # extract raw comment blocks from the polyglot fixture
+go run src/main.go graph examples/demo      # render Mermaid from the built graph
 
 ./scripts/test-go.sh        # run Go tests via gotestsum with AI-friendly output
 ./scripts/lint-go.sh        # run golangci-lint against src/
@@ -44,9 +45,10 @@ Three layers, all normalized through one graph model:
 3. **Scanner** (`src/internal/scanner`) — walks include paths, parses flat `@arch.*` / `@event.*` tag comments from Go, PHP, TS, and JS comment forms, and emits raw blocks with file/line attachment. Comments-only in v0.1 — no AST or Tree-sitter.
 4. **Validator** (`src/internal/validator`) — enforces catalog cross-references, builds the normalized graph, and emits diagnostics for layers 4-6.
 5. **UI** (`src/internal/ui`) — owns shared CLI presentation rules so commands report stages, warnings, errors, and summaries consistently in TTY and plain-text environments.
-6. **Graph** (`src/internal/graph`) — the normalized `Node`/`Edge`/`Graph` model is the shared payload between scanner output, validator input, and every exporter. Node identity is `type:name` (e.g. `service:checkout-service`) across the entire pipeline.
+6. **Exporter** (`src/internal/exporter/mermaid`) — renders the normalized graph as deterministic Mermaid flowcharts with optional domain/team/type filters.
+7. **Graph** (`src/internal/graph`) — the normalized `Node`/`Edge`/`Graph` model is the shared payload between scanner output, validator input, and every exporter. Node identity is `type:name` (e.g. `service:checkout-service`) across the entire pipeline.
 
-`src/cmd/root.go` is wiring only: Cobra registers seven subcommands (`init`, `validate`, `scan`, `graph`, `serve`, `export-html`, `export-ai`). `init`, `validate`, and `scan` delegate into `src/internal/*`; the remaining commands are still stubs.
+`src/cmd/root.go` is wiring only: Cobra registers seven subcommands (`init`, `validate`, `scan`, `graph`, `serve`, `export-html`, `export-ai`). `init`, `validate`, `scan`, `graph`, and `serve` delegate into `src/internal/*`; the remaining export commands are still stubs.
 
 ### Packages that do not exist yet (deliberately)
 
@@ -56,7 +58,6 @@ v0.1 starts small to avoid pulling in too much schema complexity too early. When
 - `src/internal/schema` — embeds CUE definitions for config and catalog validation.
 - `src/internal/ui` — shared CLI reporting and output styling.
 - `src/internal/server` — local HTTP explorer UI.
-- `src/internal/exporter/mermaid` — Mermaid flowchart.
 - `src/internal/exporter/html` — self-contained HTML report.
 - `src/internal/exporter/ai` — `.mapture/ai/` bundle.
 
