@@ -7,6 +7,7 @@ import (
 
 	"github.com/mandotpro/mapture.dev/src/internal/catalog"
 	"github.com/mandotpro/mapture.dev/src/internal/config"
+	"github.com/mandotpro/mapture.dev/src/internal/graph"
 	"github.com/mandotpro/mapture.dev/src/internal/scanner"
 )
 
@@ -24,6 +25,33 @@ func TestBuildDemoFixture(t *testing.T) {
 	}
 	if len(result.Graph.Edges) != 4 {
 		t.Fatalf("expected 4 graph edges, got %d", len(result.Graph.Edges))
+	}
+}
+
+func TestBuildUsesProducerToEventToConsumerFlow(t *testing.T) {
+	t.Parallel()
+
+	_, cfg, cat, blocks := loadFixture(t, "../../../examples/demo")
+
+	result, err := Build(cfg, cat, blocks)
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+
+	if !hasEdge(result.Graph, graph.Edge{
+		From: "service:checkout-service",
+		To:   "event:order.placed",
+		Type: graph.EdgeEmits,
+	}) {
+		t.Fatalf("expected emit edge from service to event, got %#v", result.Graph.Edges)
+	}
+
+	if !hasEdge(result.Graph, graph.Edge{
+		From: "event:order.placed",
+		To:   "api:payment-api",
+		Type: graph.EdgeConsumes,
+	}) {
+		t.Fatalf("expected consume edge from event to consumer, got %#v", result.Graph.Edges)
 	}
 }
 
@@ -226,4 +254,13 @@ func minimalCatalog() *catalog.Catalog {
 		DomainsByID: map[string]catalog.Domain{domain.ID: domain},
 		EventsByID:  map[string]catalog.Event{event.ID: event},
 	}
+}
+
+func hasEdge(g graph.Graph, want graph.Edge) bool {
+	for _, edge := range g.Edges {
+		if edge == want {
+			return true
+		}
+	}
+	return false
 }

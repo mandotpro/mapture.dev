@@ -143,7 +143,7 @@ func Build(cfg *config.Config, cat *catalog.Catalog, blocks []scanner.RawBlock) 
 		case "event":
 			validateEventBlock(result, cfg, cat, block)
 
-			edgeType, ok := eventEdgeType(block.Fields["role"])
+			relation, ok := eventRelation(block.Fields["role"])
 			if !ok {
 				continue
 			}
@@ -154,10 +154,16 @@ func Build(cfg *config.Config, cat *catalog.Catalog, blocks []scanner.RawBlock) 
 				continue
 			}
 
+			from := source.ID
+			to := eventNodeID(block.Fields["id"])
+			if relation.FromEvent {
+				from, to = to, from
+			}
+
 			builder.AddEdge(graph.Edge{
-				From: source.ID,
-				To:   eventNodeID(block.Fields["id"]),
-				Type: edgeType,
+				From: from,
+				To:   to,
+				Type: relation.EdgeType,
 			})
 		}
 	}
@@ -259,14 +265,19 @@ func validateEventBlock(result *Result, cfg *config.Config, cat *catalog.Catalog
 	}
 }
 
-func eventEdgeType(role string) (string, bool) {
+type eventRelationSpec struct {
+	EdgeType  string
+	FromEvent bool
+}
+
+func eventRelation(role string) (eventRelationSpec, bool) {
 	switch role {
 	case "trigger", "bridge-out", "publisher":
-		return graph.EdgeEmits, true
+		return eventRelationSpec{EdgeType: graph.EdgeEmits, FromEvent: false}, true
 	case "listener", "bridge-in", "subscriber":
-		return graph.EdgeConsumes, true
+		return eventRelationSpec{EdgeType: graph.EdgeConsumes, FromEvent: true}, true
 	default:
-		return "", false
+		return eventRelationSpec{}, false
 	}
 }
 

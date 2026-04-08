@@ -144,12 +144,12 @@ export function toSvelteFlowEdges(
       source: edge.from,
       target: edge.to,
       type: 'smoothstep',
-      label: edge.type,
+      label: edgeLabel(edge.type),
       markerEnd: {
         type: MarkerType.ArrowClosed,
         color: edgeColor(edge.type),
       },
-      style: `stroke:${edgeColor(edge.type)};stroke-width:1.5;opacity:0.72;`,
+      style: edgeStyle(edge.type),
       labelStyle: 'font-size:11px;font-weight:600;color:#4f5b66;background:rgba(255,252,246,0.94);border:1px solid rgba(23,32,39,0.08);border-radius:999px;padding:3px 8px;box-shadow:0 8px 20px rgba(58,39,14,0.08);',
     }));
 }
@@ -316,4 +316,16 @@ function resolveNodeColors(ui: UIConfig | undefined): Required<NonNullable<UICon
 
 function edgeColor(edgeType: string): string {
   return EDGE_COLORS[edgeType] ?? '#53657a';
+}
+
+function edgeLabel(edgeType: string): string {
+  if (edgeType === 'consumes') {
+    return 'consumed by';
+  }
+  return edgeType;
+}
+
+function edgeStyle(edgeType: string): string {
+  const dash = edgeType === 'consumes' ? 'stroke-dasharray:7 5;' : '';
+  return `stroke:${edgeColor(edgeType)};stroke-width:1.5;opacity:0.72;${dash}`;
 }

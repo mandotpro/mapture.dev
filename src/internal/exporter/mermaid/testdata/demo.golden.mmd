@@ -8,7 +8,7 @@ flowchart LR
     n_service_checkout_service[Checkout Service]
   end
 
-  n_api_payment_api -->|consumes| n_event_order_placed
+  n_event_order_placed -->|consumed by| n_api_payment_api
   n_service_checkout_service -->|calls| n_api_payment_api
   n_service_checkout_service -->|stores_in| n_database_orders_db
   n_service_checkout_service -->|emits| n_event_order_placed
