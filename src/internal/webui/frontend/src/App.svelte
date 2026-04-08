@@ -16,6 +16,8 @@
   import {
     applyPreset,
     domainName,
+    edgeColor,
+    edgeLabel,
     findNode,
     nodeColor,
     normalizeGraph,
@@ -45,6 +47,9 @@
     kind: 'preset' | 'query' | 'owners' | 'domains' | 'nodeTypes' | 'relationTypes';
     value: string;
     label: string;
+    category: string;
+    icon: string;
+    tone: string;
   };
 
   const GITHUB_URL = 'https://github.com/mandotpro/mapture.dev';
@@ -88,6 +93,7 @@
     { id: 'producer-consumer', label: 'Producer to consumer flow' },
     { id: 'api-dependencies', label: 'APIs and dependencies' },
   ];
+  const railKinds = ['search', 'presets', 'owners', 'domains', 'nodeTypes', 'layout'] as const;
 
   let model = $state.raw<GraphModel>(emptyModel);
   let flowNodes = $state.raw<Node[]>([]);
@@ -125,6 +131,13 @@
   const visibleOwnerCounts = $derived(countBy(visibleNodesForFilters(model, filters), (node) => node.owner));
   const visibleDomainCounts = $derived(countBy(visibleNodesForFilters(model, filters), (node) => node.domain));
   const relationCounts = $derived(countRelationTypes(model, filters));
+  const filterCounts = $derived({
+    query: filters.query ? 1 : 0,
+    presets: (activePreset ? 1 : 0) + filters.relationTypes.length,
+    owners: filters.owners.length,
+    domains: filters.domains.length,
+    nodeTypes: filters.nodeTypes.length,
+  });
   const reservedCanvasInsets = $derived({
     top: Math.ceil(toolbarSize.height + 72),
     left: Math.ceil(toolbarSize.width + 72),
@@ -488,6 +501,9 @@
         kind: 'preset',
         value: activePreset,
         label: presetLabel(activePreset),
+        category: 'flow',
+        icon: iconForKind('preset', activePreset),
+        tone: accentForKind(currentModel, 'preset', activePreset),
       });
     }
     if (currentFilters.query) {
@@ -495,6 +511,9 @@
         kind: 'query',
         value: currentFilters.query,
         label: `Search: ${currentFilters.query}`,
+        category: 'search',
+        icon: iconForKind('query'),
+        tone: accentForKind(currentModel, 'query'),
       });
     }
     for (const owner of currentFilters.owners) {
@@ -502,6 +521,9 @@
         kind: 'owners',
         value: owner,
         label: teamName(currentModel, owner),
+        category: 'team',
+        icon: iconForKind('owners'),
+        tone: accentForKind(currentModel, 'owners'),
       });
     }
     for (const domain of currentFilters.domains) {
@@ -509,20 +531,29 @@
         kind: 'domains',
         value: domain,
         label: domainName(currentModel, domain),
+        category: 'domain',
+        icon: iconForKind('domains'),
+        tone: accentForKind(currentModel, 'domains'),
       });
     }
     for (const nodeType of currentFilters.nodeTypes) {
       badges.push({
         kind: 'nodeTypes',
         value: nodeType,
-        label: nodeType,
+        label: capitalize(nodeType),
+        category: 'type',
+        icon: iconForKind('nodeTypes', nodeType),
+        tone: accentForKind(currentModel, 'nodeTypes', nodeType),
       });
     }
     for (const relationType of currentFilters.relationTypes) {
       badges.push({
         kind: 'relationTypes',
         value: relationType,
-        label: relationType,
+        label: edgeLabel(relationType),
+        category: 'relation',
+        icon: iconForKind('relationTypes', relationType),
+        tone: accentForKind(currentModel, 'relationTypes', relationType),
       });
     }
     return badges;
@@ -539,6 +570,101 @@
       return 'Producer to consumer flow';
     }
     return 'APIs and dependencies';
+  }
+
+  function railButtonLabel(kind: Exclude<PopoverKind, null>): string {
+    const labels: Record<Exclude<PopoverKind, null>, string> = {
+      search: 'Search',
+      presets: 'Flows',
+      owners: 'Teams',
+      domains: 'Domains',
+      nodeTypes: 'Types',
+      layout: 'Layout',
+    };
+    return labels[kind];
+  }
+
+  function iconForKind(
+    kind: ActiveFilterBadge['kind'] | Exclude<PopoverKind, null>,
+    value?: string,
+  ): string {
+    if (kind === 'query' || kind === 'search') {
+      return 'Q';
+    }
+    if (kind === 'preset' || kind === 'presets') {
+      return 'F';
+    }
+    if (kind === 'owners') {
+      return 'T';
+    }
+    if (kind === 'domains') {
+      return 'D';
+    }
+    if (kind === 'layout') {
+      return 'L';
+    }
+    if (kind === 'relationTypes') {
+      const relationIcons: Record<string, string> = {
+        calls: 'C',
+        depends_on: 'DP',
+        stores_in: 'DB',
+        reads_from: 'RD',
+        emits: 'EM',
+        consumes: 'CN',
+      };
+      return relationIcons[value ?? ''] ?? 'R';
+    }
+    const nodeTypeIcons: Record<string, string> = {
+      service: 'S',
+      api: 'A',
+      database: 'DB',
+      event: 'E',
+    };
+    return nodeTypeIcons[value ?? ''] ?? 'N';
+  }
+
+  function accentForKind(
+    currentModel: GraphModel,
+    kind: ActiveFilterBadge['kind'] | Exclude<PopoverKind, null>,
+    value?: string,
+  ): string {
+    if (kind === 'query' || kind === 'search' || kind === 'layout') {
+      return '#667076';
+    }
+    if (kind === 'owners') {
+      return '#0d7661';
+    }
+    if (kind === 'domains') {
+      return '#1664d9';
+    }
+    if (kind === 'preset' || kind === 'presets') {
+      const presetAccents: Record<string, string> = {
+        'service-map': currentModel.ui.nodeColors.service,
+        'event-map': currentModel.ui.nodeColors.event,
+        'producer-consumer': edgeColor('consumes'),
+        'api-dependencies': currentModel.ui.nodeColors.api,
+      };
+      return presetAccents[value ?? ''] ?? '#8a5b14';
+    }
+    if (kind === 'relationTypes') {
+      return edgeColor(value ?? '');
+    }
+    return nodeColor(currentModel, value ?? 'service');
+  }
+
+  function chipStyle(
+    currentModel: GraphModel,
+    kind: ActiveFilterBadge['kind'] | Exclude<PopoverKind, null>,
+    value?: string,
+  ): string {
+    return `--chip-accent:${accentForKind(currentModel, kind, value)};`;
+  }
+
+  function capitalize(value: string): string {
+    if (!value) {
+      return value;
+    }
+    return `${value[0].toUpperCase()}${value.slice(1)}`;
   }
 
   function countRelationTypes(currentModel: GraphModel, currentFilters: Filters): Record<string, number> {
@@ -767,48 +893,39 @@
       <Panel position="top-left" class="canvas-toolbar-shell">
         <div class="canvas-toolbar" data-interactive-root bind:this={toolbarElement}>
           <div class="canvas-rail">
-            <button
-              type="button"
-              class={['rail-pill', activePopover === 'search' ? 'active' : ''].join(' ')}
-              onclick={() => togglePopover('search')}
-            >
-              Search
-            </button>
-            <button
-              type="button"
-              class={['rail-pill', activePopover === 'presets' ? 'active' : '', activePreset ? 'has-value' : ''].join(' ')}
-              onclick={() => togglePopover('presets')}
-            >
-              Flows
-            </button>
-            <button
-              type="button"
-              class={['rail-pill', activePopover === 'owners' ? 'active' : ''].join(' ')}
-              onclick={() => togglePopover('owners')}
-            >
-              Teams
-            </button>
-            <button
-              type="button"
-              class={['rail-pill', activePopover === 'domains' ? 'active' : ''].join(' ')}
-              onclick={() => togglePopover('domains')}
-            >
-              Domains
-            </button>
-            <button
-              type="button"
-              class={['rail-pill', activePopover === 'nodeTypes' ? 'active' : ''].join(' ')}
-              onclick={() => togglePopover('nodeTypes')}
-            >
-              Types
-            </button>
-            <button
-              type="button"
-              class={['rail-pill', activePopover === 'layout' ? 'active' : ''].join(' ')}
-              onclick={() => togglePopover('layout')}
-            >
-              Layout
-            </button>
+            {#each railKinds as kind}
+              <button
+                type="button"
+                class={[
+                  'rail-pill',
+                  `rail-pill--${kind}`,
+                  activePopover === kind ? 'active' : '',
+                  (
+                    (kind === 'search' && filterCounts.query > 0) ||
+                    (kind === 'presets' && filterCounts.presets > 0) ||
+                    (kind === 'owners' && filterCounts.owners > 0) ||
+                    (kind === 'domains' && filterCounts.domains > 0) ||
+                    (kind === 'nodeTypes' && filterCounts.nodeTypes > 0)
+                  ) ? 'has-value' : '',
+                ].join(' ')}
+                style={chipStyle(model, kind)}
+                onclick={() => togglePopover(kind)}
+              >
+                <span class="chip-icon" aria-hidden="true">{iconForKind(kind)}</span>
+                <span>{railButtonLabel(kind)}</span>
+                {#if kind === 'search' && filterCounts.query > 0}
+                  <small class="pill-count">{filterCounts.query}</small>
+                {:else if kind === 'presets' && filterCounts.presets > 0}
+                  <small class="pill-count">{filterCounts.presets}</small>
+                {:else if kind === 'owners' && filterCounts.owners > 0}
+                  <small class="pill-count">{filterCounts.owners}</small>
+                {:else if kind === 'domains' && filterCounts.domains > 0}
+                  <small class="pill-count">{filterCounts.domains}</small>
+                {:else if kind === 'nodeTypes' && filterCounts.nodeTypes > 0}
+                  <small class="pill-count">{filterCounts.nodeTypes}</small>
+                {/if}
+              </button>
+            {/each}
           </div>
 
           {#if activePopover === 'search'}
@@ -829,9 +946,12 @@
                 {#each presetOptions as preset}
                   <button
                     type="button"
-                    class={['filter-chip', activePreset === preset.id ? 'active' : ''].join(' ')}
+                    class={['filter-chip', 'filter-chip--preset', activePreset === preset.id ? 'active' : ''].join(' ')}
+                    style={chipStyle(model, 'preset', preset.id)}
                     onclick={() => setPreset(preset.id)}
                   >
+                    <span class="chip-icon" aria-hidden="true">{iconForKind('preset', preset.id)}</span>
+                    <span class="chip-kicker">flow</span>
                     <span>{preset.label}</span>
                   </button>
                 {/each}
@@ -846,10 +966,13 @@
                   {#each model.edgeTypes as relationType}
                     <button
                       type="button"
-                      class={['filter-chip', filters.relationTypes.includes(relationType) ? 'active' : ''].join(' ')}
+                      class={['filter-chip', 'filter-chip--relation', filters.relationTypes.includes(relationType) ? 'active' : ''].join(' ')}
+                      style={chipStyle(model, 'relationTypes', relationType)}
                       onclick={() => toggleFilter('relationTypes', relationType)}
                     >
-                      <span>{relationType}</span>
+                      <span class="chip-icon" aria-hidden="true">{iconForKind('relationTypes', relationType)}</span>
+                      <span class="chip-kicker">relation</span>
+                      <span>{edgeLabel(relationType)}</span>
                       <small>{relationCounts[relationType] ?? 0}</small>
                     </button>
                   {/each}
@@ -868,9 +991,12 @@
                 {#each model.owners as owner}
                   <button
                     type="button"
-                    class={['filter-chip', filters.owners.includes(owner) ? 'active' : ''].join(' ')}
+                    class={['filter-chip', 'filter-chip--owner', filters.owners.includes(owner) ? 'active' : ''].join(' ')}
+                    style={chipStyle(model, 'owners')}
                     onclick={() => toggleFilter('owners', owner)}
                   >
+                    <span class="chip-icon" aria-hidden="true">{iconForKind('owners')}</span>
+                    <span class="chip-kicker">team</span>
                     <span>{teamName(model, owner)}</span>
                     <small>{visibleOwnerCounts[owner] ?? 0}</small>
                   </button>
@@ -889,9 +1015,12 @@
                 {#each model.domains as domain}
                   <button
                     type="button"
-                    class={['filter-chip', filters.domains.includes(domain) ? 'active' : ''].join(' ')}
+                    class={['filter-chip', 'filter-chip--domain', filters.domains.includes(domain) ? 'active' : ''].join(' ')}
+                    style={chipStyle(model, 'domains')}
                     onclick={() => toggleFilter('domains', domain)}
                   >
+                    <span class="chip-icon" aria-hidden="true">{iconForKind('domains')}</span>
+                    <span class="chip-kicker">domain</span>
                     <span>{domainName(model, domain)}</span>
                     <small>{visibleDomainCounts[domain] ?? 0}</small>
                   </button>
@@ -910,11 +1039,13 @@
                 {#each model.nodeTypes as nodeType}
                   <button
                     type="button"
-                    class={['filter-chip', 'kind-chip', filters.nodeTypes.includes(nodeType) ? 'active' : ''].join(' ')}
-                    style={`--pill-color:${nodeColor(model, nodeType)};`}
+                    class={['filter-chip', 'filter-chip--node-type', 'kind-chip', filters.nodeTypes.includes(nodeType) ? 'active' : ''].join(' ')}
+                    style={`${chipStyle(model, 'nodeTypes', nodeType)}--pill-color:${nodeColor(model, nodeType)};`}
                     onclick={() => toggleFilter('nodeTypes', nodeType)}
                   >
-                    <span>{nodeType}</span>
+                    <span class="chip-icon" aria-hidden="true">{iconForKind('nodeTypes', nodeType)}</span>
+                    <span class="chip-kicker">type</span>
+                    <span>{capitalize(nodeType)}</span>
                     <small>{visibleTypeCounts[nodeType] ?? 0}</small>
                   </button>
                 {/each}
@@ -931,23 +1062,32 @@
               <div class="chip-list">
                 <button
                   type="button"
-                  class={['filter-chip', layoutMode === 'freeform' ? 'active' : ''].join(' ')}
+                  class={['filter-chip', 'filter-chip--layout', layoutMode === 'freeform' ? 'active' : ''].join(' ')}
+                  style={chipStyle(model, 'layout')}
                   onclick={() => setLayoutMode('freeform')}
                 >
+                  <span class="chip-icon" aria-hidden="true">{iconForKind('layout')}</span>
+                  <span class="chip-kicker">layout</span>
                   <span>Freeform</span>
                 </button>
                 <button
                   type="button"
-                  class={['filter-chip', layoutMode === 'clustered' ? 'active' : ''].join(' ')}
+                  class={['filter-chip', 'filter-chip--layout', layoutMode === 'clustered' ? 'active' : ''].join(' ')}
+                  style={chipStyle(model, 'layout')}
                   onclick={() => setLayoutMode('clustered')}
                 >
+                  <span class="chip-icon" aria-hidden="true">{iconForKind('layout')}</span>
+                  <span class="chip-kicker">layout</span>
                   <span>Clustered</span>
                 </button>
                 <button
                   type="button"
-                  class={['filter-chip', layoutMode === 'elk-horizontal' ? 'active' : ''].join(' ')}
+                  class={['filter-chip', 'filter-chip--layout', layoutMode === 'elk-horizontal' ? 'active' : ''].join(' ')}
+                  style={chipStyle(model, 'layout')}
                   onclick={() => setLayoutMode('elk-horizontal')}
                 >
+                  <span class="chip-icon" aria-hidden="true">{iconForKind('layout')}</span>
+                  <span class="chip-kicker">layout</span>
                   <span>ELK Horizontal</span>
                 </button>
               </div>
@@ -957,9 +1097,18 @@
           {#if activeFilterBadges.length > 0}
             <div class="active-strip">
               {#each activeFilterBadges as badge}
-                <button type="button" class="active-badge" onclick={() => removeBadge(badge)}>
-                  <span>{badge.label}</span>
-                  <small>x</small>
+                <button
+                  type="button"
+                  class={['active-badge', `active-badge--${badge.kind}`].join(' ')}
+                  style={`--chip-accent:${badge.tone};`}
+                  onclick={() => removeBadge(badge)}
+                >
+                  <span class="active-badge__meta">
+                    <span class="chip-icon" aria-hidden="true">{badge.icon}</span>
+                    <span class="chip-kicker">{badge.category}</span>
+                  </span>
+                  <span class="active-badge__label">{badge.label}</span>
+                  <small aria-hidden="true">x</small>
                 </button>
               {/each}
               <button type="button" class="active-reset" onclick={resetFilters}>Reset filters</button>

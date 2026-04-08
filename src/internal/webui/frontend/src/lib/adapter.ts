@@ -314,11 +314,11 @@ function resolveNodeColors(ui: UIConfig | undefined): Required<NonNullable<UICon
   };
 }
 
-function edgeColor(edgeType: string): string {
+export function edgeColor(edgeType: string): string {
   return EDGE_COLORS[edgeType] ?? '#53657a';
 }
 
-function edgeLabel(edgeType: string): string {
+export function edgeLabel(edgeType: string): string {
   const labels: Record<string, string> = {
     calls: 'calls',
     depends_on: 'depends on',

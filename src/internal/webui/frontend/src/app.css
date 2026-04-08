@@ -185,19 +185,21 @@ input {
 }
 
 .rail-pill {
+  --chip-accent: rgba(13, 118, 97, 0.48);
   min-height: 1.95rem;
   padding: 0.35rem 0.68rem;
   box-shadow: none;
+  color: var(--ink);
 }
 
 .rail-pill.active {
-  background: rgba(13, 118, 97, 0.12);
-  color: var(--accent-strong);
-  border-color: rgba(13, 118, 97, 0.28);
+  background: color-mix(in srgb, var(--chip-accent) 14%, rgba(255, 252, 246, 0.92));
+  color: color-mix(in srgb, var(--chip-accent) 78%, var(--ink));
+  border-color: color-mix(in srgb, var(--chip-accent) 34%, rgba(255, 255, 255, 0.54));
 }
 
 .rail-pill.has-value {
-  color: var(--accent-strong);
+  color: color-mix(in srgb, var(--chip-accent) 82%, var(--ink));
 }
 
 .toolbar-popover {
@@ -255,6 +257,7 @@ input {
 }
 
 .filter-chip {
+  --chip-accent: rgba(13, 118, 97, 0.5);
   display: inline-flex;
   align-items: center;
   gap: 0.42rem;
@@ -263,16 +266,56 @@ input {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.5);
   color: var(--ink);
+  border: 1px solid rgba(23, 32, 39, 0.06);
 }
 
 .filter-chip.active {
-  background: rgba(13, 118, 97, 0.14);
-  border-color: rgba(13, 118, 97, 0.32);
-  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--chip-accent) 14%, rgba(255, 252, 246, 0.92));
+  border-color: color-mix(in srgb, var(--chip-accent) 34%, rgba(255, 255, 255, 0.56));
+  color: color-mix(in srgb, var(--chip-accent) 82%, var(--ink));
 }
 
 .filter-chip.kind-chip.active {
   color: var(--pill-color);
+}
+
+.chip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.28rem;
+  height: 1.28rem;
+  padding: 0 0.2rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--chip-accent) 14%, rgba(255, 255, 255, 0.84));
+  color: color-mix(in srgb, var(--chip-accent) 86%, var(--ink));
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  flex: 0 0 auto;
+}
+
+.chip-kicker {
+  color: var(--muted);
+  font-size: 0.63rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.pill-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.18rem;
+  height: 1.18rem;
+  padding: 0 0.24rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--chip-accent) 18%, rgba(255, 255, 255, 0.86));
+  color: color-mix(in srgb, var(--chip-accent) 82%, var(--ink));
+  font-size: 0.66rem;
+  font-weight: 700;
 }
 
 .filter-chip small,
@@ -301,11 +344,31 @@ input {
 }
 
 .active-badge {
-  background: rgba(255, 250, 242, 0.7);
+  --chip-accent: rgba(13, 118, 97, 0.5);
+  gap: 0.48rem;
+  background: color-mix(in srgb, var(--chip-accent) 12%, rgba(255, 250, 242, 0.84));
+  border-color: color-mix(in srgb, var(--chip-accent) 26%, rgba(255, 255, 255, 0.56));
+  color: var(--ink);
 }
 
 .active-reset {
   color: var(--accent-strong);
+}
+
+.active-badge__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  min-width: 0;
+}
+
+.active-badge__label {
+  color: color-mix(in srgb, var(--chip-accent) 76%, var(--ink));
+}
+
+.rail-pill .chip-kicker,
+.active-badge .chip-kicker {
+  color: color-mix(in srgb, var(--chip-accent) 64%, var(--muted));
 }
 
 .node-popup {

@@ -2,7 +2,7 @@
 id: 026
 title: Add semantic filter visuals and improve active-filter traceability
 milestone: v0.3.0
-status: todo
+status: done
 prd: §10, §18, §29
 depends_on: [014, 020, 021]
 ---
@@ -45,4 +45,3 @@ semantics they represent.
 - Multiple active filters are still easy to scan
 - Filter visuals feel consistent with the node/edge semantics of the
   explorer rather than as generic UI chips
-
