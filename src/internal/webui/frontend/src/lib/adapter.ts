@@ -72,7 +72,12 @@ export function normalizeGraph(
     projectId: payload.meta.projectId,
     sourceLabel: payload.meta.sourceLabel,
     mode: payload.meta.mode,
-    summary: payload.validation.summary,
+    summary: payload.validation.summary ?? {
+      errors: diagnostics.filter((diagnostic) => diagnostic.severity === 'error').length,
+      warnings: diagnostics.filter((diagnostic) => diagnostic.severity === 'warning').length,
+      nodes: nodes.length,
+      edges: edges.length,
+    },
   };
 }
 

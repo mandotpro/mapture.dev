@@ -24,6 +24,7 @@
     toSvelteFlowNodes,
     visibleStats,
   } from './lib/adapter';
+  import { resolvePositions } from './lib/layout';
   import FlowNode from './lib/FlowNode.svelte';
   import type { Filters, GraphModel, WindowWithPayload } from './lib/types';
 
@@ -307,13 +308,11 @@
   }
 
   function handleNodeDragStop({ nodes }: { nodes: Node[] }): void {
-    const next = { ...savedPositions };
-    for (const node of nodes) {
-      next[node.id] = {
-        x: node.position.x,
-        y: node.position.y,
-      };
-    }
+    const locked = new Set(nodes.map((node) => node.id));
+    const next = {
+      ...savedPositions,
+      ...resolvePositions(flowNodes, layoutMode, locked),
+    };
     savedPositions = next;
     persistSavedPositions(storageKey, next);
   }
