@@ -90,7 +90,7 @@ func Render(g *graph.Graph, opts Options) (string, error) {
 		b.WriteString("\n")
 	}
 	for _, edge := range selectedEdges {
-		_, _ = fmt.Fprintf(&b, "  %s -->|%s| %s\n", aliases[edge.From], edgeLabel(edge.Type), aliases[edge.To])
+		_, _ = fmt.Fprintf(&b, "  %s -->|%s| %s\n", aliases[edge.From], graph.EdgeDisplayLabel(edge.Type), aliases[edge.To])
 	}
 
 	return b.String(), nil
@@ -190,11 +190,4 @@ func nodeShape(node graph.Node) string {
 
 func mermaidLabel(value string) string {
 	return strings.ReplaceAll(value, "\"", "\\\"")
-}
-
-func edgeLabel(edgeType string) string {
-	if edgeType == graph.EdgeConsumes {
-		return "consumed by"
-	}
-	return edgeType
 }

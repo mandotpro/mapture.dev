@@ -10,5 +10,5 @@ flowchart LR
 
   n_event_order_placed -->|consumed by| n_api_payment_api
   n_service_checkout_service -->|calls| n_api_payment_api
-  n_service_checkout_service -->|stores_in| n_database_orders_db
+  n_service_checkout_service -->|stores in| n_database_orders_db
   n_service_checkout_service -->|emits| n_event_order_placed

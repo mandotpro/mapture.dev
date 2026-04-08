@@ -319,13 +319,25 @@ function edgeColor(edgeType: string): string {
 }
 
 function edgeLabel(edgeType: string): string {
-  if (edgeType === 'consumes') {
-    return 'consumed by';
-  }
-  return edgeType;
+  const labels: Record<string, string> = {
+    calls: 'calls',
+    depends_on: 'depends on',
+    stores_in: 'stores in',
+    reads_from: 'reads from',
+    emits: 'emits',
+    consumes: 'consumed by',
+  };
+  return labels[edgeType] ?? edgeType;
 }
 
 function edgeStyle(edgeType: string): string {
-  const dash = edgeType === 'consumes' ? 'stroke-dasharray:7 5;' : '';
-  return `stroke:${edgeColor(edgeType)};stroke-width:1.5;opacity:0.72;${dash}`;
+  const styles: Record<string, string> = {
+    calls: '',
+    depends_on: 'stroke-dasharray:9 5;',
+    stores_in: '',
+    reads_from: 'stroke-dasharray:4 4;',
+    emits: '',
+    consumes: 'stroke-dasharray:7 5;',
+  };
+  return `stroke:${edgeColor(edgeType)};stroke-width:1.5;opacity:0.72;${styles[edgeType] ?? ''}`;
 }

@@ -15,6 +15,14 @@ const (
 )
 
 // EdgeType values supported in v1.
+//
+// Direction semantics:
+//   - calls: source calls target
+//   - depends_on: source depends on target
+//   - stores_in: source stores state in target
+//   - reads_from: source reads from target
+//   - emits: source emits event target
+//   - consumes: event source is consumed by target
 const (
 	EdgeCalls     = "calls"
 	EdgeDependsOn = "depends_on"
