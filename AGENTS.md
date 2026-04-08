@@ -43,7 +43,8 @@ Three layers, all normalized through one graph model:
 2. **Catalog** (`src/internal/catalog`) — YAML files under `architecture/` (`teams.yaml`, `domains.yaml`, `events.yaml`) are the source of truth for teams, domains, and events. Comments reference catalog IDs; they do not redefine them.
 3. **Scanner** (`src/internal/scanner`) — walks include paths, parses flat `@arch.*` / `@event.*` tag comments from Go, PHP, TS, and JS comment forms, and emits raw blocks with file/line attachment. Comments-only in v0.1 — no AST or Tree-sitter.
 4. **Validator** (`src/internal/validator`) — enforces catalog cross-references, builds the normalized graph, and emits diagnostics for layers 4-6.
-5. **Graph** (`src/internal/graph`) — the normalized `Node`/`Edge`/`Graph` model is the shared payload between scanner output, validator input, and every exporter. Node identity is `type:name` (e.g. `service:checkout-service`) across the entire pipeline.
+5. **UI** (`src/internal/ui`) — owns shared CLI presentation rules so commands report stages, warnings, errors, and summaries consistently in TTY and plain-text environments.
+6. **Graph** (`src/internal/graph`) — the normalized `Node`/`Edge`/`Graph` model is the shared payload between scanner output, validator input, and every exporter. Node identity is `type:name` (e.g. `service:checkout-service`) across the entire pipeline.
 
 `src/cmd/root.go` is wiring only: Cobra registers seven subcommands (`init`, `validate`, `scan`, `graph`, `serve`, `export-html`, `export-ai`). `init`, `validate`, and `scan` delegate into `src/internal/*`; the remaining commands are still stubs.
 
@@ -53,6 +54,7 @@ v0.1 starts small to avoid pulling in too much schema complexity too early. When
 
 - `src/internal/config` — loads `mapture.yaml`.
 - `src/internal/schema` — embeds CUE definitions for config and catalog validation.
+- `src/internal/ui` — shared CLI reporting and output styling.
 - `src/internal/server` — local HTTP explorer UI.
 - `src/internal/exporter/mermaid` — Mermaid flowchart.
 - `src/internal/exporter/html` — self-contained HTML report.
@@ -63,6 +65,7 @@ v0.1 starts small to avoid pulling in too much schema complexity too early. When
 - **Catalog is the source of truth.** The validator rejects unknown team / domain / event IDs referenced from comments. Don't add code paths that silently tolerate unknown IDs.
 - **Event usage blocks are not event definitions.** `@event.domain` on listeners, bridges, publishers, and subscribers describes the usage site; only definition blocks should be forced to match the catalog event domain/owner.
 - **Comments are flat `@key value` tags, not JSON.** Do not introduce structured JSON/YAML inside comments.
+- **CLI output must go through `src/internal/ui`.** Keep stage headers, warnings, errors, summaries, and path formatting centralized instead of scattering `fmt.Printf` formatting across commands.
 - **Node IDs are `type:name`.** This is the stable identity across graph, exports, and AI bundles. Never strip the prefix.
 - **One binary, no runtime deps.** Frontend assets must be embedded via `embed` when the server/HTML exporter lands.
 - **Comments-first, not static-analysis-first.** Tree-sitter / AST parsing is explicitly a later enhancement.

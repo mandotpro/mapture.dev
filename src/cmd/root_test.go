@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -116,5 +117,62 @@ func TestValidateProjectSuccess(t *testing.T) {
 	}
 	if len(result.Graph.Nodes) == 0 || len(result.Graph.Edges) == 0 {
 		t.Fatalf("expected non-empty graph, got %#v", result.Graph)
+	}
+}
+
+func TestRunValidateOutputsRichSummary(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	err := runValidate("../../examples/demo", &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("runValidate returned error: %v", err)
+	}
+
+	output := stdout.String()
+	for _, want := range []string{
+		"Resolving project",
+		"Loading config",
+		"Loading catalogs",
+		"Scanning sources",
+		"Building graph",
+		"Validation Succeeded:",
+		"Validation complete",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("expected %q in output, got %q", want, output)
+		}
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+}
+
+func TestRunValidateOutputsDiagnosticsOnFailure(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	err := runValidate("../../examples/invalid/comment-unknown-node-target", &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected runValidate error")
+	}
+
+	errorOutput := stderr.String()
+	if errorOutput != "" {
+		t.Fatalf("expected empty stderr, got %q", errorOutput)
+	}
+	errorOutput = stdout.String()
+	for _, want := range []string{
+		"Errors",
+		"unknown_node_target",
+		"Validation Failed:",
+	} {
+		if !strings.Contains(errorOutput, want) {
+			t.Fatalf("expected %q in stderr, got %q", want, errorOutput)
+		}
 	}
 }

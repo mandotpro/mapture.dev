@@ -7,6 +7,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -19,6 +20,7 @@ import (
 	"github.com/angelmanchev/mapture/src/internal/config"
 	"github.com/angelmanchev/mapture/src/internal/scanner"
 	"github.com/angelmanchev/mapture/src/internal/server"
+	"github.com/angelmanchev/mapture/src/internal/ui"
 	"github.com/angelmanchev/mapture/src/internal/validator"
 	"github.com/spf13/cobra"
 )
@@ -26,12 +28,18 @@ import (
 // version is overridden at build time via -ldflags.
 var version = "0.0.0-dev"
 
+var (
+	commandStdout io.Writer = os.Stdout
+	commandStderr io.Writer = os.Stderr
+)
+
 var rootCmd = &cobra.Command{
-	Use:          "mapture",
-	Short:        "Repo-native architecture graph tool",
-	Long:         "Mapture turns catalog YAML and structured code comments into validated architecture graphs, diagrams, and AI-ready bundles.",
-	Version:      version,
-	SilenceUsage: true,
+	Use:           "mapture",
+	Short:         "Repo-native architecture graph tool",
+	Long:          "Mapture turns catalog YAML and structured code comments into validated architecture graphs, diagrams, and AI-ready bundles.",
+	Version:       version,
+	SilenceErrors: true,
+	SilenceUsage:  true,
 }
 
 // Execute runs the root command.
@@ -92,33 +100,80 @@ func newValidateCmd() *cobra.Command {
 			if len(args) > 0 {
 				target = args[0]
 			}
-
-			configPath, cfg, c, err := loadProject(target)
-			if err != nil {
-				return err
-			}
-			blocks, result, err := validateProject(filepath.Dir(configPath), cfg, c)
-			if err != nil {
-				return err
-			}
-
-			if _, err := fmt.Fprintf(
-				os.Stdout,
-				"mapture validate: OK (config=%s teams=%d domains=%d events=%d blocks=%d nodes=%d edges=%d warnings=%d)\n",
-				filepath.Clean(configPath),
-				len(c.Teams),
-				len(c.Domains),
-				len(c.Events),
-				len(blocks),
-				len(result.Graph.Nodes),
-				len(result.Graph.Edges),
-				countWarnings(result.Diagnostics),
-			); err != nil {
-				return err
-			}
-			return nil
+			return runValidate(target, commandStdout, commandStderr)
 		},
 	}
+}
+
+func runValidate(target string, stdout, stderr io.Writer) error {
+	reporter := ui.NewReporter(stdout, stderr)
+
+	if err := reporter.Stage("Resolving project", target); err != nil {
+		return err
+	}
+	configPath, err := config.Discover(target)
+	if err != nil {
+		return err
+	}
+	if err := reporter.Success("Loaded config path", filepath.Clean(configPath)); err != nil {
+		return err
+	}
+
+	if err := reporter.Stage("Loading config", filepath.Clean(configPath)); err != nil {
+		return err
+	}
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		return err
+	}
+	if err := reporter.Success("Config ready", fmt.Sprintf("include=%d exclude=%d", len(cfg.Scan.Include), len(cfg.Scan.Exclude))); err != nil {
+		return err
+	}
+
+	catalogDir, err := cfg.CatalogDir(configPath)
+	if err != nil {
+		return err
+	}
+	if err := reporter.Stage("Loading catalogs", filepath.Clean(catalogDir)); err != nil {
+		return err
+	}
+	c, err := catalog.Load(catalogDir)
+	if err != nil {
+		return err
+	}
+	if err := reporter.Success("Catalogs loaded", fmt.Sprintf("teams=%d domains=%d events=%d", len(c.Teams), len(c.Domains), len(c.Events))); err != nil {
+		return err
+	}
+
+	projectRoot := filepath.Dir(configPath)
+	if err := reporter.Stage("Scanning sources", filepath.Clean(projectRoot)); err != nil {
+		return err
+	}
+	blocks, err := scanner.Scan(projectRoot, cfg)
+	if err != nil {
+		return err
+	}
+	if err := reporter.Success("Source scan complete", fmt.Sprintf("blocks=%d", len(blocks))); err != nil {
+		return err
+	}
+
+	if err := reporter.Stage("Building graph", "layers 4-6"); err != nil {
+		return err
+	}
+	result, err := validator.Build(cfg, c, blocks)
+	if result != nil {
+		if diagErr := reporter.Diagnostics(result.Diagnostics); diagErr != nil {
+			return diagErr
+		}
+		if summaryErr := reporter.Summary(err == nil, countErrors(result.Diagnostics), countWarnings(result.Diagnostics), len(blocks), len(result.Graph.Nodes), len(result.Graph.Edges)); summaryErr != nil {
+			return summaryErr
+		}
+	}
+	if err != nil {
+		return err
+	}
+
+	return reporter.Success("Validation complete", fmt.Sprintf("config=%s", filepath.Clean(configPath)))
 }
 
 func validateProject(root string, cfg *config.Config, c *catalog.Catalog) ([]scanner.RawBlock, *validator.Result, error) {
@@ -163,6 +218,16 @@ func countWarnings(diagnostics []validator.Diagnostic) int {
 	count := 0
 	for _, diagnostic := range diagnostics {
 		if diagnostic.Severity == "warning" {
+			count++
+		}
+	}
+	return count
+}
+
+func countErrors(diagnostics []validator.Diagnostic) int {
+	count := 0
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Severity == "error" {
 			count++
 		}
 	}
