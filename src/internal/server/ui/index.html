@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mapture Explorer</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 1.5rem; max-width: 1100px; margin-inline: auto; }
+    header { display: flex; align-items: baseline; gap: 1rem; border-bottom: 1px solid #8883; padding-bottom: .75rem; margin-bottom: 1rem; }
+    header h1 { margin: 0; font-size: 1.2rem; }
+    #status { font-size: .85rem; color: #888; }
+    #filter { width: 100%; padding: .5rem; font-size: 1rem; box-sizing: border-box; margin-bottom: 1rem; }
+    details { border: 1px solid #8883; border-radius: 6px; padding: .5rem .75rem; margin-bottom: .5rem; }
+    details[open] { background: #8881; }
+    summary { cursor: pointer; font-weight: 600; }
+    .meta { color: #888; font-weight: 400; margin-left: .5rem; font-size: .85rem; }
+    .edge { font-size: .85rem; margin: .15rem 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .badge { display: inline-block; padding: 0 .4rem; border-radius: 4px; background: #8883; font-size: .75rem; margin-right: .25rem; }
+    .section { margin-top: 1.5rem; }
+    .diag { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem; }
+    .diag.error { color: #c33; }
+    .diag.warning { color: #c80; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Mapture Explorer</h1>
+    <span id="status">loading…</span>
+  </header>
+  <input id="filter" placeholder="Filter nodes by id, name, domain, or owner…" />
+  <div id="nodes"></div>
+  <div class="section"><h2>Diagnostics</h2><div id="diagnostics">none</div></div>
+
+  <script>
+    const state = { graph: { nodes: [], edges: [] }, diagnostics: [], filter: "" };
+    const els = {
+      status: document.getElementById("status"),
+      nodes: document.getElementById("nodes"),
+      diagnostics: document.getElementById("diagnostics"),
+      filter: document.getElementById("filter"),
+    };
+
+    function edgesFor(id) {
+      return state.graph.edges.filter(e => e.from === id || e.to === id);
+    }
+
+    function renderNodes() {
+      const q = state.filter.trim().toLowerCase();
+      const matches = state.graph.nodes.filter(n => {
+        if (!q) return true;
+        return [n.id, n.name, n.domain, n.owner].some(v => (v || "").toLowerCase().includes(q));
+      });
+      els.nodes.innerHTML = matches.map(n => {
+        const edges = edgesFor(n.id).map(e =>
+          `<div class="edge">${e.from === n.id ? "→" : "←"} ${escape(e.type)} ${escape(e.from === n.id ? e.to : e.from)}</div>`
+        ).join("");
+        return `<details>
+          <summary>
+            <span class="badge">${escape(n.type)}</span>${escape(n.name || n.id)}
+            <span class="meta">${escape(n.id)} · ${escape(n.domain || "-")} · ${escape(n.owner || "-")}</span>
+          </summary>
+          ${n.summary ? `<p>${escape(n.summary)}</p>` : ""}
+          ${n.file ? `<p class="meta">${escape(n.file)}${n.line ? ":" + n.line : ""}</p>` : ""}
+          ${edges || "<p class=\"meta\">no edges</p>"}
+        </details>`;
+      }).join("") || "<p>no matching nodes</p>";
+    }
+
+    function renderDiagnostics() {
+      if (!state.diagnostics.length) { els.diagnostics.textContent = "none"; return; }
+      els.diagnostics.innerHTML = state.diagnostics.map(d =>
+        `<div class="diag ${escape(d.severity)}">[${escape(d.severity)}] layer ${d.layer} ${escape(d.code)}${d.file ? " " + escape(d.file) + (d.line ? ":" + d.line : "") : ""}: ${escape(d.message)}</div>`
+      ).join("");
+    }
+
+    function escape(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c])); }
+
+    async function refresh() {
+      try {
+        const [graphRes, validateRes] = await Promise.all([
+          fetch("/api/graph"),
+          fetch("/api/validate"),
+        ]);
+        state.graph = await graphRes.json();
+        const validate = await validateRes.json();
+        state.diagnostics = validate.diagnostics || [];
+        els.status.textContent = `${state.graph.nodes.length} nodes · ${state.graph.edges.length} edges · updated ${new Date().toLocaleTimeString()}`;
+        renderNodes();
+        renderDiagnostics();
+      } catch (err) {
+        els.status.textContent = "error: " + err;
+      }
+    }
+
+    els.filter.addEventListener("input", e => { state.filter = e.target.value; renderNodes(); });
+
+    refresh();
+
+    if (typeof EventSource !== "undefined") {
+      const es = new EventSource("/api/events");
+      es.addEventListener("graph", () => refresh());
+      es.onerror = () => { els.status.textContent += " (sse disconnected)"; };
+    }
+  </script>
+</body>
+</html>

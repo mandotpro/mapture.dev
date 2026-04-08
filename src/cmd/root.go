@@ -8,12 +8,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
+	"os/signal"
 	"path/filepath"
+	"runtime"
+	"syscall"
 
 	"github.com/angelmanchev/mapture/src/internal/bootstrap"
 	"github.com/angelmanchev/mapture/src/internal/catalog"
 	"github.com/angelmanchev/mapture/src/internal/config"
 	"github.com/angelmanchev/mapture/src/internal/scanner"
+	"github.com/angelmanchev/mapture/src/internal/server"
 	"github.com/angelmanchev/mapture/src/internal/validator"
 	"github.com/spf13/cobra"
 )
@@ -202,12 +207,70 @@ func newGraphCmd() *cobra.Command {
 }
 
 func newServeCmd() *cobra.Command {
-	return &cobra.Command{
+	c := &cobra.Command{
 		Use:   "serve [path]",
 		Short: "Start the local interactive explorer UI",
 		Args:  cobra.MaximumNArgs(1),
-		RunE:  todo("serve"),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			target := "."
+			if len(args) > 0 {
+				target = args[0]
+			}
+
+			addr, err := cmd.Flags().GetString("addr")
+			if err != nil {
+				return err
+			}
+			noWatch, err := cmd.Flags().GetBool("no-watch")
+			if err != nil {
+				return err
+			}
+			open, err := cmd.Flags().GetBool("open")
+			if err != nil {
+				return err
+			}
+
+			configPath, err := config.Discover(target)
+			if err != nil {
+				return err
+			}
+
+			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+
+			opts := server.Options{
+				ConfigPath: configPath,
+				Addr:       addr,
+				Watch:      !noWatch,
+				OnReady: func(url string) {
+					_, _ = fmt.Fprintf(os.Stdout, "mapture serve: listening on %s (config=%s)\n", url, configPath)
+					if open {
+						if err := openBrowser(url); err != nil {
+							_, _ = fmt.Fprintf(os.Stderr, "mapture serve: could not open browser: %v\n", err)
+						}
+					}
+				},
+			}
+			return server.Serve(ctx, opts)
+		},
 	}
+	c.Flags().String("addr", server.DefaultAddr, "listen address")
+	c.Flags().Bool("no-watch", false, "disable filesystem watching and live reload")
+	c.Flags().Bool("open", false, "open the explorer in the default browser on start")
+	return c
+}
+
+func openBrowser(url string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", url)
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	default:
+		cmd = exec.Command("xdg-open", url)
+	}
+	return cmd.Start()
 }
 
 func newExportHTMLCmd() *cobra.Command {

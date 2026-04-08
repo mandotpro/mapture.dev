@@ -2,7 +2,7 @@
 id: 012
 title: Local explorer server (`mapture serve`)
 milestone: v0.3.0
-status: todo
+status: done
 prd: §10, §18, §29 v0.3.0
 depends_on: [001, 003]
 ---
