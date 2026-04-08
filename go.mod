@@ -6,6 +6,7 @@ require (
 	cuelang.org/go v0.16.0
 	github.com/AlecAivazis/survey/v2 v2.3.7
 	github.com/charmbracelet/lipgloss v1.1.0
+	github.com/evanw/esbuild v0.28.0
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/term v0.40.0

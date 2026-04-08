@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mapture Explorer</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>Mapture Explorer</h1>
+    <input id="search" type="search" placeholder="Filter by id, name, domain, or owner…" />
+    <button id="isolate" type="button" title="Hide nodes more than one hop from the selection">Isolate neighborhood</button>
+    <button id="reset" type="button" title="Clear filters and show the full graph">Reset</button>
+    <span id="status">loading…</span>
+  </header>
+  <main class="workspace">
+    <aside class="sidebar" id="legend-panel">
+      <section>
+        <h2>Node types</h2>
+        <ul id="node-legend"></ul>
+      </section>
+      <section>
+        <h2>Edge types</h2>
+        <ul id="edge-legend"></ul>
+      </section>
+    </aside>
+    <section id="cy" class="graph"></section>
+    <aside class="sidebar" id="details-panel">
+      <section id="details">
+        <h2>Details</h2>
+        <p class="muted">Click a node to inspect it.</p>
+      </section>
+      <section>
+        <h2>Diagnostics</h2>
+        <div id="diagnostics" class="muted">none</div>
+      </section>
+    </aside>
+  </main>
+  <script src="cytoscape.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

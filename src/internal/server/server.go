@@ -8,7 +8,6 @@ package server
 
 import (
 	"context"
-	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,10 +24,8 @@ import (
 	"github.com/mandotpro/mapture.dev/src/internal/config"
 	"github.com/mandotpro/mapture.dev/src/internal/scanner"
 	"github.com/mandotpro/mapture.dev/src/internal/validator"
+	webui "github.com/mandotpro/mapture.dev/web"
 )
-
-//go:embed ui/*
-var uiFS embed.FS
 
 // DefaultAddr is the address used when the caller does not override it.
 const DefaultAddr = "127.0.0.1:8765"
@@ -133,13 +130,9 @@ type explorer struct {
 }
 
 func newServer(configPath string) (*explorer, error) {
-	sub, err := fs.Sub(uiFS, "ui")
-	if err != nil {
-		return nil, fmt.Errorf("embed ui: %w", err)
-	}
 	return &explorer{
 		configPath:  configPath,
-		uiHandler:   http.FileServer(http.FS(sub)),
+		uiHandler:   http.FileServer(http.FS(webui.FS())),
 		broadcaster: newBroadcaster(),
 	}, nil
 }
