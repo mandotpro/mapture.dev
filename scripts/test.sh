@@ -36,6 +36,12 @@ expect_failure examples/invalid/duplicate-team
 expect_failure examples/invalid/unknown-domain-owner
 expect_failure examples/invalid/invalid-event-status
 expect_failure examples/invalid/missing-teams-file
+expect_failure examples/invalid/comment-unknown-domain-ref
+expect_failure examples/invalid/comment-event-domain-mismatch
+expect_failure examples/invalid/comment-unknown-node-target
+expect_failure examples/invalid/comment-missing-owner
+expect_failure examples/invalid/comment-bad-event-role
+expect_failure examples/invalid/comment-unknown-key
 expect_scan_failure examples/invalid/comment-missing-owner
 expect_scan_failure examples/invalid/comment-bad-event-role
 expect_scan_failure examples/invalid/comment-unknown-key

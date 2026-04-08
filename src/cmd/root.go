@@ -14,6 +14,7 @@ import (
 	"github.com/angelmanchev/mapture/src/internal/catalog"
 	"github.com/angelmanchev/mapture/src/internal/config"
 	"github.com/angelmanchev/mapture/src/internal/scanner"
+	"github.com/angelmanchev/mapture/src/internal/validator"
 	"github.com/spf13/cobra"
 )
 
@@ -87,24 +88,46 @@ func newValidateCmd() *cobra.Command {
 				target = args[0]
 			}
 
-			configPath, _, c, err := loadProject(target)
+			configPath, cfg, c, err := loadProject(target)
+			if err != nil {
+				return err
+			}
+			blocks, result, err := validateProject(filepath.Dir(configPath), cfg, c)
 			if err != nil {
 				return err
 			}
 
 			if _, err := fmt.Fprintf(
 				os.Stdout,
-				"mapture validate: config and catalog OK (config=%s teams=%d domains=%d events=%d)\n",
+				"mapture validate: OK (config=%s teams=%d domains=%d events=%d blocks=%d nodes=%d edges=%d warnings=%d)\n",
 				filepath.Clean(configPath),
 				len(c.Teams),
 				len(c.Domains),
 				len(c.Events),
+				len(blocks),
+				len(result.Graph.Nodes),
+				len(result.Graph.Edges),
+				countWarnings(result.Diagnostics),
 			); err != nil {
 				return err
 			}
 			return nil
 		},
 	}
+}
+
+func validateProject(root string, cfg *config.Config, c *catalog.Catalog) ([]scanner.RawBlock, *validator.Result, error) {
+	blocks, err := scanner.Scan(root, cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	result, err := validator.Build(cfg, c, blocks)
+	if err != nil {
+		return blocks, result, err
+	}
+
+	return blocks, result, nil
 }
 
 func loadProject(target string) (string, *config.Config, *catalog.Catalog, error) {
@@ -129,6 +152,16 @@ func loadProject(target string) (string, *config.Config, *catalog.Catalog, error
 	}
 
 	return configPath, cfg, c, nil
+}
+
+func countWarnings(diagnostics []validator.Diagnostic) int {
+	count := 0
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Severity == "warning" {
+			count++
+		}
+	}
+	return count
 }
 
 func newScanCmd() *cobra.Command {
