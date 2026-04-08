@@ -11,7 +11,7 @@ help: ## Show available development commands
 build: ## Build the local mapture binary into build/
 	@./scripts/build.sh
 
-web: ## Rebuild the frontend bundle under web/dist/
+web: ## Rebuild the frontend bundle under src/internal/webui/dist/
 	@go run ./scripts/build-web
 
 test-go: ## Run Go tests through gotestsum

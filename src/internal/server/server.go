@@ -24,7 +24,7 @@ import (
 	"github.com/mandotpro/mapture.dev/src/internal/config"
 	"github.com/mandotpro/mapture.dev/src/internal/scanner"
 	"github.com/mandotpro/mapture.dev/src/internal/validator"
-	webui "github.com/mandotpro/mapture.dev/web"
+	"github.com/mandotpro/mapture.dev/src/internal/webui"
 )
 
 // DefaultAddr is the address used when the caller does not override it.

@@ -1,4 +1,4 @@
-// Package webui exposes the embedded Svelte Flow static distribution directory built by SvelteKit to Go servers and exporters.
+// Package webui exposes the embedded frontend bundle used by the server.
 package webui
 
 import (
@@ -9,7 +9,7 @@ import (
 //go:embed dist
 var distFS embed.FS
 
-// FS returns the isolated embedded file system scoped exactly to the static web/dist output.
+// FS returns the embedded distribution directory.
 func FS() fs.FS {
 	sub, err := fs.Sub(distFS, "dist")
 	if err != nil {
@@ -18,7 +18,7 @@ func FS() fs.FS {
 	return sub
 }
 
-// ReadFile provides a shortcut to read raw bytes from bound static UI web assets safely.
+// ReadFile reads a single file from the embedded bundle.
 func ReadFile(name string) ([]byte, error) {
 	return fs.ReadFile(FS(), name)
 }

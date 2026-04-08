@@ -20,7 +20,7 @@ A major requirement for architecture tools is providing an artifact that teams c
 - Update the command flags interface so `-o` correctly targets a directory (e.g., `-o output/web`).
 - The exporter should:
   1. Parse the architecture payload via the standard internal graph generators.
-  2. Unpack the embedded UI static assets from the bound `/web/dist/` Go Virtual File System onto the local disk target at `output/web/`.
+  2. Unpack the embedded UI static assets from the embedded `src/internal/webui/dist/` Go file system onto the local disk target at `output/web/`.
   3. Emit the final `data.json` mapping output directly inside that `output/web/` folder for the isolated SPA to consume entirely self-contained.
 
 ## Definition of Done

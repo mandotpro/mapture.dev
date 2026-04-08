@@ -6,15 +6,11 @@ import (
 	"testing"
 )
 
-// TestDistBundleHasExpectedFiles guarantees that contributors running
-// `go test ./...` without a prior `make web` see a clear failure rather
-// than a silent runtime 404 in the server or HTML exporter.
 func TestDistBundleHasExpectedFiles(t *testing.T) {
 	want := []string{
 		"index.html",
 		"app.js",
 		"styles.css",
-		"cytoscape.min.js",
 	}
 	for _, name := range want {
 		if _, err := ReadFile(name); err != nil {
@@ -29,7 +25,7 @@ func TestIndexHTMLReferencesBundle(t *testing.T) {
 		t.Fatalf("read index.html: %v", err)
 	}
 	body := string(data)
-	for _, needle := range []string{"app.js", "styles.css", "cytoscape.min.js", "Mapture Explorer"} {
+	for _, needle := range []string{"app.js", "styles.css", "Mapture Explorer"} {
 		if !strings.Contains(body, needle) {
 			t.Errorf("index.html missing reference to %q", needle)
 		}
@@ -42,12 +38,15 @@ func TestAppJSContainsExpectedAPI(t *testing.T) {
 		t.Fatalf("read app.js: %v", err)
 	}
 	body := string(data)
-	// The minified bundle should still mention the runtime-visible hooks
-	// that the exporter-injected payload path and live server path rely
-	// on.
-	for _, needle := range []string{"renderPayload", "/api/graph", "/api/events", "__MAPTURE_DATA__"} {
+	for _, needle := range []string{
+		"/api/graph",
+		"/api/validate",
+		"/api/catalog",
+		"/api/events",
+		"__MAPTURE_DATA__",
+	} {
 		if !strings.Contains(body, needle) {
-			t.Errorf("app.js missing reference to %q — bundle likely stale or broken", needle)
+			t.Errorf("app.js missing reference to %q", needle)
 		}
 	}
 }
@@ -66,7 +65,7 @@ func TestFSWalkable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("walk fs: %v", err)
 	}
-	if count < 4 {
-		t.Errorf("expected at least 4 files in bundle, got %d", count)
+	if count < 3 {
+		t.Errorf("expected at least 3 files in bundle, got %d", count)
 	}
 }
