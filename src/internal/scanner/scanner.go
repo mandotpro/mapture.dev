@@ -12,8 +12,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/angelmanchev/mapture/src/internal/config"
-	"github.com/angelmanchev/mapture/src/internal/graph"
+	"github.com/mandotpro/mapture.dev/src/internal/config"
+	"github.com/mandotpro/mapture.dev/src/internal/graph"
 )
 
 var (

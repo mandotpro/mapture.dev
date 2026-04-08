@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/angelmanchev/mapture/src/internal/config"
+	"github.com/mandotpro/mapture.dev/src/internal/config"
 )
 
 func TestScanDemoFixture(t *testing.T) {

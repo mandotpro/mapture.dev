@@ -7,10 +7,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/angelmanchev/mapture/src/internal/catalog"
-	"github.com/angelmanchev/mapture/src/internal/config"
-	"github.com/angelmanchev/mapture/src/internal/graph"
-	"github.com/angelmanchev/mapture/src/internal/scanner"
+	"github.com/mandotpro/mapture.dev/src/internal/catalog"
+	"github.com/mandotpro/mapture.dev/src/internal/config"
+	"github.com/mandotpro/mapture.dev/src/internal/graph"
+	"github.com/mandotpro/mapture.dev/src/internal/scanner"
 )
 
 const (

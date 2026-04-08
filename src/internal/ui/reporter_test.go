@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/angelmanchev/mapture/src/internal/validator"
+	"github.com/mandotpro/mapture.dev/src/internal/validator"
 )
 
 func TestReporterDiagnosticsPlainText(t *testing.T) {

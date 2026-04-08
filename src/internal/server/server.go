@@ -19,12 +19,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/angelmanchev/mapture/src/internal/catalog"
-	"github.com/angelmanchev/mapture/src/internal/config"
-	"github.com/angelmanchev/mapture/src/internal/scanner"
-	"github.com/angelmanchev/mapture/src/internal/validator"
-	webui "github.com/angelmanchev/mapture/web"
 	"github.com/fsnotify/fsnotify"
+	"github.com/mandotpro/mapture.dev/src/internal/catalog"
+	"github.com/mandotpro/mapture.dev/src/internal/config"
+	"github.com/mandotpro/mapture.dev/src/internal/scanner"
+	"github.com/mandotpro/mapture.dev/src/internal/validator"
+	webui "github.com/mandotpro/mapture.dev/web"
 )
 
 // DefaultAddr is the address used when the caller does not override it.

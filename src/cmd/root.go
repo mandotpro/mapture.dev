@@ -15,13 +15,14 @@ import (
 	"runtime"
 	"syscall"
 
-	"github.com/angelmanchev/mapture/src/internal/bootstrap"
-	"github.com/angelmanchev/mapture/src/internal/catalog"
-	"github.com/angelmanchev/mapture/src/internal/config"
-	"github.com/angelmanchev/mapture/src/internal/scanner"
-	"github.com/angelmanchev/mapture/src/internal/server"
-	"github.com/angelmanchev/mapture/src/internal/ui"
-	"github.com/angelmanchev/mapture/src/internal/validator"
+	"github.com/mandotpro/mapture.dev/src/internal/bootstrap"
+	"github.com/mandotpro/mapture.dev/src/internal/catalog"
+	"github.com/mandotpro/mapture.dev/src/internal/config"
+	exportermermaid "github.com/mandotpro/mapture.dev/src/internal/exporter/mermaid"
+	"github.com/mandotpro/mapture.dev/src/internal/scanner"
+	"github.com/mandotpro/mapture.dev/src/internal/server"
+	"github.com/mandotpro/mapture.dev/src/internal/ui"
+	"github.com/mandotpro/mapture.dev/src/internal/validator"
 	"github.com/spf13/cobra"
 )
 
@@ -263,12 +264,65 @@ func newScanCmd() *cobra.Command {
 }
 
 func newGraphCmd() *cobra.Command {
-	return &cobra.Command{
+	c := &cobra.Command{
 		Use:   "graph [path]",
 		Short: "Produce graph-oriented exports (JSON, Mermaid)",
 		Args:  cobra.MaximumNArgs(1),
-		RunE:  todo("graph"),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			target := "."
+			if len(args) > 0 {
+				target = args[0]
+			}
+
+			configPath, cfg, c, err := loadProject(target)
+			if err != nil {
+				return err
+			}
+			blocks, result, err := validateProject(filepath.Dir(configPath), cfg, c)
+			_ = blocks
+			if err != nil {
+				return err
+			}
+
+			domains, err := cmd.Flags().GetStringSlice("domain")
+			if err != nil {
+				return err
+			}
+			teams, err := cmd.Flags().GetStringSlice("team")
+			if err != nil {
+				return err
+			}
+			nodeTypes, err := cmd.Flags().GetStringSlice("type")
+			if err != nil {
+				return err
+			}
+			outputPath, err := cmd.Flags().GetString("output")
+			if err != nil {
+				return err
+			}
+
+			rendered, err := exportermermaid.Render(&result.Graph, exportermermaid.Options{
+				Domains:   domains,
+				Teams:     teams,
+				NodeTypes: nodeTypes,
+			})
+			if err != nil {
+				return err
+			}
+
+			if outputPath == "" {
+				_, err = io.WriteString(commandStdout, rendered)
+				return err
+			}
+
+			return os.WriteFile(outputPath, []byte(rendered), 0o644)
+		},
 	}
+	c.Flags().StringP("output", "o", "", "write Mermaid output to file")
+	c.Flags().StringSlice("domain", nil, "include only nodes in the given domain ids")
+	c.Flags().StringSlice("team", nil, "include only nodes owned by the given team ids")
+	c.Flags().StringSlice("type", nil, "include only nodes of the given node types")
+	return c
 }
 
 func newServeCmd() *cobra.Command {

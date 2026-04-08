@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/angelmanchev/mapture/src/internal/catalog"
-	"github.com/angelmanchev/mapture/src/internal/config"
-	"github.com/angelmanchev/mapture/src/internal/scanner"
+	"github.com/mandotpro/mapture.dev/src/internal/catalog"
+	"github.com/mandotpro/mapture.dev/src/internal/config"
+	"github.com/mandotpro/mapture.dev/src/internal/scanner"
 )
 
 func TestBuildDemoFixture(t *testing.T) {

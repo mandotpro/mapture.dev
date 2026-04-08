@@ -2,11 +2,12 @@ package cmd
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/angelmanchev/mapture/src/internal/config"
+	"github.com/mandotpro/mapture.dev/src/internal/config"
 )
 
 func TestLoadProjectSuccess(t *testing.T) {
@@ -173,6 +174,50 @@ func TestRunValidateOutputsDiagnosticsOnFailure(t *testing.T) {
 	} {
 		if !strings.Contains(errorOutput, want) {
 			t.Fatalf("expected %q in stderr, got %q", want, errorOutput)
+		}
+	}
+}
+
+func TestGraphCommandWritesMermaidToStdout(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	commandStdout = &stdout
+	t.Cleanup(func() { commandStdout = os.Stdout })
+
+	cmd := newGraphCmd()
+	cmd.SetArgs([]string{"../../examples/demo"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	output := stdout.String()
+	for _, want := range []string{"flowchart LR", "Checkout Service", "|calls|", "Order Placed"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("expected %q in output, got %q", want, output)
+		}
+	}
+}
+
+func TestGraphCommandWritesMermaidFile(t *testing.T) {
+	t.Parallel()
+
+	outputPath := filepath.Join(t.TempDir(), "ecommerce.mmd")
+
+	cmd := newGraphCmd()
+	cmd.SetArgs([]string{"../../examples/ecommerce", "-o", outputPath, "--domain", "billing"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("ReadFile returned error: %v", err)
+	}
+	output := string(data)
+	for _, want := range []string{"flowchart LR", "Billing", "Payment Service"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("expected %q in file output, got %q", want, output)
 		}
 	}
 }

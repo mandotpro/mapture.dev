@@ -5,7 +5,7 @@ package main
 import (
 	"os"
 
-	"github.com/angelmanchev/mapture/src/cmd"
+	"github.com/mandotpro/mapture.dev/src/cmd"
 )
 
 func main() {

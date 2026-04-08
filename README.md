@@ -28,6 +28,12 @@ mapture export-ai .
 
 A minimal end-to-end example lives in [`examples/demo/`](./examples/demo/).
 
+## Install
+
+```bash
+go install github.com/mandotpro/mapture.dev@latest
+```
+
 ## Why comments-first
 
 Comments are language-agnostic, portable across PHP / Go / TypeScript,

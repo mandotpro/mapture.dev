@@ -1,4 +1,4 @@
-module github.com/angelmanchev/mapture
+module github.com/mandotpro/mapture.dev
 
 go 1.25.0
 

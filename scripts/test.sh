@@ -14,6 +14,12 @@ go run src/main.go validate examples/demo >/dev/null
 go run src/main.go validate examples/ecommerce >/dev/null
 go run src/main.go scan examples/demo >/dev/null
 go run src/main.go scan examples/ecommerce >/dev/null
+go run src/main.go graph examples/demo >/dev/null
+
+graph_output="$(mktemp)"
+trap 'rm -f "$graph_output"' EXIT
+go run src/main.go graph examples/ecommerce --domain billing -o "$graph_output"
+test -s "$graph_output"
 
 expect_failure() {
   local path="$1"
