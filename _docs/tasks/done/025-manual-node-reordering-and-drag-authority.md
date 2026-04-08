@@ -2,7 +2,7 @@
 id: 025
 title: Make manual node dragging authoritative and support real reordering
 milestone: v0.3.0
-status: todo
+status: done
 prd: §10, §18, §29
 depends_on: [014, 021]
 ---
@@ -47,4 +47,3 @@ the core "workspace" feeling of the explorer.
 - Collision handling nudges neighbors before it overrides the dragged
   node’s intent
 - `Reset layout` is the explicit escape hatch to discard manual ordering
-

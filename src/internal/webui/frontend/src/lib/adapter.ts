@@ -88,7 +88,7 @@ export async function toSvelteFlowNodes(
   filters: Filters,
   selectedNodeId: string | null,
   layoutMode: LayoutMode,
-  savedPositions: Record<string, { x: number; y: number }>,
+  manualPositions: Record<string, { x: number; y: number }>,
   reservedInsets: { top: number; left: number },
 ): Promise<Node[]> {
   const visibleNodes = visibleNodesForFilters(model, filters);
@@ -118,7 +118,7 @@ export async function toSvelteFlowNodes(
   const edges = toSvelteFlowEdges(model, filters, allowed);
   const laidOut = await layoutGraph(nodes, edges, {
     mode: layoutMode,
-    savedPositions,
+    manualPositions,
     reservedInsets,
   });
   return laidOut.nodes;

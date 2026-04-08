@@ -36,7 +36,11 @@
     x: number;
     y: number;
   } | null;
-  type SavedPositions = Record<string, { x: number; y: number }>;
+  type ManualPositions = Record<string, { x: number; y: number }>;
+  type PersistedLayoutState = {
+    version: 1;
+    manualPositions: ManualPositions;
+  };
   type ActiveFilterBadge = {
     kind: 'preset' | 'query' | 'owners' | 'domains' | 'nodeTypes' | 'relationTypes';
     value: string;
@@ -98,7 +102,7 @@
   let activePreset = $state<FilterPreset | null>(null);
   let toolbarElement = $state<HTMLElement | null>(null);
   let toolbarSize = $state.raw({ width: 420, height: 52 });
-  let savedPositions = $state.raw<SavedPositions>({});
+  let manualPositions = $state.raw<ManualPositions>({});
   let lastStorageKey = '';
   let refreshVersion = 0;
   let filters = $state.raw<Filters>({
@@ -134,14 +138,14 @@
 
     if (storageKey !== lastStorageKey) {
       lastStorageKey = storageKey;
-      savedPositions = pruneSavedPositions(readSavedPositions(storageKey), nodeIDs);
+      manualPositions = pruneManualPositions(readLayoutState(storageKey), nodeIDs);
       return;
     }
 
-    const pruned = pruneSavedPositions(savedPositions, nodeIDs);
-    if (!samePositions(savedPositions, pruned)) {
-      savedPositions = pruned;
-      persistSavedPositions(storageKey, pruned);
+    const pruned = pruneManualPositions(manualPositions, nodeIDs);
+    if (!samePositions(manualPositions, pruned)) {
+      manualPositions = pruned;
+      persistLayoutState(storageKey, pruned);
     }
   });
 
@@ -150,14 +154,14 @@
     const currentFilters = filters;
     const currentSelectedNodeID = nodePopup?.nodeId ?? null;
     const currentLayoutMode = layoutMode;
-    const currentSavedPositions = savedPositions;
+    const currentManualPositions = manualPositions;
     const currentReservedInsets = reservedCanvasInsets;
     void refreshFlowGraph(
       currentModel,
       currentFilters,
       currentSelectedNodeID,
       currentLayoutMode,
-      currentSavedPositions,
+      currentManualPositions,
       currentReservedInsets,
     );
   });
@@ -251,7 +255,7 @@
     currentFilters: Filters,
     selectedNodeID: string | null,
     currentLayoutMode: LayoutMode,
-    currentSavedPositions: SavedPositions,
+    currentManualPositions: ManualPositions,
     currentReservedInsets: { top: number; left: number },
   ): Promise<void> {
     const revision = ++refreshVersion;
@@ -261,7 +265,7 @@
       currentFilters,
       selectedNodeID,
       currentLayoutMode,
-      currentSavedPositions,
+      currentManualPositions,
       currentReservedInsets,
     );
 
@@ -368,8 +372,8 @@
   }
 
   function resetLayout(): void {
-    savedPositions = {};
-    clearSavedPositions(storageKey);
+    manualPositions = {};
+    clearLayoutState(storageKey);
     nodePopup = null;
     activePopover = null;
   }
@@ -396,17 +400,51 @@
 
   function handleNodeDragStop({ nodes }: { nodes: Node[] }): void {
     const draggedPositions = new Map(nodes.map((node) => [node.id, node.position]));
+    const nextManualPositions = {
+      ...manualPositions,
+      ...Object.fromEntries(
+        nodes.map((node) => [
+          node.id,
+          {
+            x: node.position.x,
+            y: node.position.y,
+          },
+        ]),
+      ),
+    };
     const merged = flowNodes.map((node) => {
       const position = draggedPositions.get(node.id);
       return position ? { ...node, position } : node;
     });
-    const locked = new Set(nodes.map((node) => node.id));
+    const resolved = resolvePositions(merged, layoutMode, {
+      lockedNodeIds: new Set(Object.keys(nextManualPositions)),
+      priorityNodeIds: new Set(nodes.map((node) => node.id)),
+      reservedInsets: reservedCanvasInsets,
+    });
+    const nextFlowNodes = merged.map((node) => ({
+      ...node,
+      position: resolved[node.id] ?? node.position,
+    }));
     const next = {
-      ...savedPositions,
-      ...resolvePositions(merged, layoutMode, locked, reservedCanvasInsets),
+      ...manualPositions,
+      ...Object.fromEntries(
+        nodes.map((node) => {
+          const position = resolved[node.id] ?? node.position;
+          return [
+            node.id,
+            {
+              x: position.x,
+              y: position.y,
+            },
+          ];
+        }),
+      ),
     };
-    savedPositions = next;
-    persistSavedPositions(storageKey, next);
+
+    flowNodes = nextFlowNodes;
+    manualPositions = next;
+    persistLayoutState(storageKey, next);
+    nodePopup = null;
   }
 
   function closeTransientUI(): void {
@@ -529,27 +567,45 @@
     return `${nodeIDs}::${edgeIDs}`;
   }
 
-  function readSavedPositions(key: string): SavedPositions {
+  function readLayoutState(key: string): ManualPositions {
     try {
       const raw = window.localStorage.getItem(key);
       if (!raw) {
         return {};
       }
-      return JSON.parse(raw) as SavedPositions;
+      const parsed = JSON.parse(raw) as PersistedLayoutState | ManualPositions;
+      if (isManualPositions(parsed)) {
+        return parsed;
+      }
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        'version' in parsed &&
+        parsed.version === 1 &&
+        'manualPositions' in parsed &&
+        isManualPositions(parsed.manualPositions)
+      ) {
+        return parsed.manualPositions;
+      }
+      return {};
     } catch {
       return {};
     }
   }
 
-  function persistSavedPositions(key: string, positions: SavedPositions): void {
+  function persistLayoutState(key: string, positions: ManualPositions): void {
     try {
-      window.localStorage.setItem(key, JSON.stringify(positions));
+      const state: PersistedLayoutState = {
+        version: 1,
+        manualPositions: positions,
+      };
+      window.localStorage.setItem(key, JSON.stringify(state));
     } catch {
       return;
     }
   }
 
-  function clearSavedPositions(key: string): void {
+  function clearLayoutState(key: string): void {
     try {
       window.localStorage.removeItem(key);
     } catch {
@@ -557,14 +613,14 @@
     }
   }
 
-  function pruneSavedPositions(positions: SavedPositions, nodeIDs: string[]): SavedPositions {
+  function pruneManualPositions(positions: ManualPositions, nodeIDs: string[]): ManualPositions {
     const allowed = new Set(nodeIDs);
     return Object.fromEntries(
       Object.entries(positions).filter(([nodeID]) => allowed.has(nodeID)),
     );
   }
 
-  function samePositions(left: SavedPositions, right: SavedPositions): boolean {
+  function samePositions(left: ManualPositions, right: ManualPositions): boolean {
     const leftKeys = Object.keys(left).sort();
     const rightKeys = Object.keys(right).sort();
     if (leftKeys.length !== rightKeys.length) {
@@ -581,6 +637,21 @@
       }
     }
     return true;
+  }
+
+  function isManualPositions(value: unknown): value is ManualPositions {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return false;
+    }
+
+    return Object.values(value).every((position) => {
+      if (!position || typeof position !== 'object' || Array.isArray(position)) {
+        return false;
+      }
+
+      const point = position as { x?: unknown; y?: unknown };
+      return typeof point.x === 'number' && typeof point.y === 'number';
+    });
   }
 
   function popupStyle(): string {

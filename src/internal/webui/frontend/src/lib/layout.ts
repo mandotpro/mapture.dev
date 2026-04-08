@@ -20,14 +20,21 @@ type SimNode = {
 
 type LayoutOptions = {
   mode: LayoutMode;
-  savedPositions: Record<string, { x: number; y: number }>;
+  manualPositions: Record<string, { x: number; y: number }>;
   reservedInsets: { top: number; left: number };
+};
+
+type ResolvePositionOptions = {
+  lockedNodeIds?: Set<string>;
+  priorityNodeIds?: Set<string>;
+  reservedInsets?: { top: number; left: number };
 };
 
 type CollisionOptions = {
   margin: number;
   maxIterations: number;
   lockIDs?: Set<string>;
+  priorityIDs?: Set<string>;
   reservedInsets?: { top: number; left: number };
 };
 
@@ -80,18 +87,29 @@ export async function layoutGraph(
     return { nodes, edges };
   }
 
-  if (options.mode === 'elk-horizontal') {
-    return await layoutWithELK(nodes, edges, options);
-  }
+  const baseLayout = options.mode === 'elk-horizontal'
+    ? await layoutWithELK(nodes, edges, options)
+    : layoutWithForce(nodes, edges, options);
 
-  return layoutWithForce(nodes, edges, options);
+  const mergedNodes = applyManualPositions(baseLayout.nodes, options.manualPositions);
+  const resolved = resolvePositions(mergedNodes, options.mode, {
+    lockedNodeIds: new Set(Object.keys(options.manualPositions)),
+    reservedInsets: options.reservedInsets,
+  });
+
+  return {
+    nodes: mergedNodes.map((node) => ({
+      ...node,
+      position: resolved[node.id] ?? node.position,
+    })),
+    edges: baseLayout.edges,
+  };
 }
 
 export function resolvePositions(
   nodes: Node[],
   mode: LayoutMode,
-  lockIDs?: Set<string>,
-  reservedInsets?: { top: number; left: number },
+  options: ResolvePositionOptions = {},
 ): Record<string, { x: number; y: number }> {
   const tuning = layoutTuning[mode];
   const resolved = resolveNodeCollisions(
@@ -105,8 +123,9 @@ export function resolvePositions(
     {
       margin: tuning.collisionMargin,
       maxIterations: tuning.collisionIterations,
-      lockIDs,
-      reservedInsets,
+      lockIDs: options.lockedNodeIds,
+      priorityIDs: options.priorityNodeIds,
+      reservedInsets: options.reservedInsets,
     },
   );
 
@@ -127,7 +146,6 @@ function layoutWithForce(nodes: Node[], edges: Edge[], options: LayoutOptions): 
   const random = mulberry32(hashSeed(nodes.map((node) => node.id).join('|')));
 
   const simNodes: SimNode[] = nodes.map((node) => {
-    const saved = options.savedPositions[node.id];
     const domain = readString(node, 'domain');
     const owner = readString(node, 'owner');
     const center = domainCenters.get(domain) ?? {
@@ -140,8 +158,8 @@ function layoutWithForce(nodes: Node[], edges: Edge[], options: LayoutOptions): 
       id: node.id,
       domain,
       owner,
-      x: saved?.x ?? center.x + (random() - 0.5) * 140 + ownerOffset - 20,
-      y: saved?.y ?? center.y + (random() - 0.5) * 140 - ownerOffset + 20,
+      x: center.x + (random() - 0.5) * 140 + ownerOffset - 20,
+      y: center.y + (random() - 0.5) * 140 - ownerOffset + 20,
       vx: 0,
       vy: 0,
     };
@@ -242,8 +260,9 @@ async function layoutWithELK(
   const resolved = resolvePositions(
     laidOutNodes,
     'elk-horizontal',
-    undefined,
-    options.reservedInsets,
+    {
+      reservedInsets: options.reservedInsets,
+    },
   );
 
   return {
@@ -257,6 +276,7 @@ async function layoutWithELK(
 
 function resolveNodeCollisions(nodes: CollisionNode[], options: CollisionOptions): CollisionNode[] {
   const lockIDs = options.lockIDs ?? new Set<string>();
+  const priorityIDs = options.priorityIDs ?? new Set<string>();
   const resolved = nodes
     .map((node) => ({ ...node }))
     .sort((left, right) => left.id.localeCompare(right.id));
@@ -284,9 +304,28 @@ function resolveNodeCollisions(nodes: CollisionNode[], options: CollisionOptions
 
         const leftLocked = lockIDs.has(left.id);
         const rightLocked = lockIDs.has(right.id);
+        const leftPriority = priorityIDs.has(left.id);
+        const rightPriority = priorityIDs.has(right.id);
+
+        if (leftPriority && rightPriority) {
+          nudge(left, -directionX * shiftX, -directionY * shiftY, primary);
+          nudge(right, directionX * shiftX, directionY * shiftY, primary);
+          continue;
+        }
+
+        if (leftPriority) {
+          nudge(right, directionX * overlap.x, directionY * overlap.y, primary);
+          continue;
+        }
+
+        if (rightPriority) {
+          nudge(left, -directionX * overlap.x, -directionY * overlap.y, primary);
+          continue;
+        }
 
         if (leftLocked && rightLocked) {
-          nudge(right, directionX * overlap.x, directionY * overlap.y, primary);
+          nudge(left, -directionX * shiftX, -directionY * shiftY, primary);
+          nudge(right, directionX * shiftX, directionY * shiftY, primary);
           continue;
         }
 
@@ -305,6 +344,7 @@ function resolveNodeCollisions(nodes: CollisionNode[], options: CollisionOptions
       }
     }
 
+    applyViewportBounds(resolved);
     applyReservedArea(resolved, options.reservedInsets);
 
     if (!moved) {
@@ -312,7 +352,7 @@ function resolveNodeCollisions(nodes: CollisionNode[], options: CollisionOptions
     }
   }
 
-  normalizePositions(resolved, options.reservedInsets);
+  applyViewportBounds(resolved);
   applyReservedArea(resolved, options.reservedInsets);
   return resolved;
 }
@@ -343,23 +383,13 @@ function nudge(node: CollisionNode, dx: number, dy: number, primary: 'x' | 'y'):
   node.y += dy;
 }
 
-function normalizePositions(nodes: CollisionNode[], reservedInsets?: { top: number; left: number }): void {
-  let minX = Number.POSITIVE_INFINITY;
-  let minY = Number.POSITIVE_INFINITY;
-
-  for (const node of nodes) {
-    minX = Math.min(minX, node.x);
-    minY = Math.min(minY, node.y);
-  }
-
+function applyViewportBounds(nodes: CollisionNode[]): void {
   const safeLeft = VIEWPORT_MARGIN;
   const safeTop = VIEWPORT_MARGIN;
-  const offsetX = minX < safeLeft ? safeLeft - minX : 0;
-  const offsetY = minY < safeTop ? safeTop - minY : 0;
 
   for (const node of nodes) {
-    node.x += offsetX;
-    node.y += offsetY;
+    node.x = Math.max(node.x, safeLeft);
+    node.y = Math.max(node.y, safeTop);
   }
 }
 
@@ -424,6 +454,26 @@ function buildDomainCenters(nodes: Node[], reservedInsets: { top: number; left: 
 function readString(node: Node, key: string): string {
   const value = (node.data as Record<string, unknown> | undefined)?.[key];
   return typeof value === 'string' ? value : '';
+}
+
+function applyManualPositions(
+  nodes: Node[],
+  manualPositions: Record<string, { x: number; y: number }>,
+): Node[] {
+  return nodes.map((node) => {
+    const manualPosition = manualPositions[node.id];
+    if (!manualPosition) {
+      return node;
+    }
+
+    return {
+      ...node,
+      position: {
+        x: manualPosition.x,
+        y: manualPosition.y,
+      },
+    };
+  });
 }
 
 function hashSeed(input: string): number {
