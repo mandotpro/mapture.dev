@@ -1,10 +1,13 @@
-.PHONY: help build test test-go lint vet cli-help validate-demo validate-ecommerce install-dev-tools install-git-hooks init-hooks playground-init run-demo run-playground fmt
+.PHONY: help build test test-go lint vet cli-help validate-demo validate-ecommerce install-dev-tools install-git-hooks init-hooks playground-init run-demo run-playground fmt web
 
 help: ## Show available development commands
 	@awk 'BEGIN {FS = ": ## "}; /^[a-zA-Z0-9_.-]+: ## / {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 build: ## Build the local mapture binary into build/
 	@./scripts/build.sh
+
+web: ## Rebuild the frontend bundle under web/dist/
+	@go run ./scripts/build-web
 
 test-go: ## Run Go tests through gotestsum
 	@./scripts/test-go.sh

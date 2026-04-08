@@ -2,7 +2,7 @@
 id: 013
 title: Frontend UI — graph explorer
 milestone: v0.3.0
-status: todo
+status: done
 prd: §18 (UI goals), §29 v0.3.0
 depends_on: [001]
 ---
