@@ -1,8 +1,8 @@
 import dagre from '@dagrejs/dagre';
 import type { Edge, Node } from '@xyflow/svelte';
 
-const NODE_WIDTH = 210;
-const NODE_HEIGHT = 120;
+const NODE_WIDTH = 170;
+const NODE_HEIGHT = 84;
 
 export function layoutGraph(nodes: Node[], edges: Edge[]): { nodes: Node[]; edges: Edge[] } {
   const graph = new dagre.graphlib.Graph();
@@ -10,10 +10,10 @@ export function layoutGraph(nodes: Node[], edges: Edge[]): { nodes: Node[]; edge
   graph.setGraph({
     rankdir: 'LR',
     align: 'UL',
-    nodesep: 30,
-    ranksep: 90,
-    marginx: 32,
-    marginy: 32,
+    nodesep: 18,
+    ranksep: 38,
+    marginx: 16,
+    marginy: 16,
   });
 
   for (const node of nodes) {

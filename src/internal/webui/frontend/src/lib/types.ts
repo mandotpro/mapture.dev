@@ -95,9 +95,9 @@ export interface GraphModel {
 
 export interface Filters {
   query: string;
-  nodeType: string;
-  domain: string;
-  owner: string;
+  nodeTypes: string[];
+  domains: string[];
+  owners: string[];
 }
 
 export interface WindowWithPayload extends Window {

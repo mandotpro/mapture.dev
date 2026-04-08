@@ -1,4 +1,4 @@
-import type { Edge, MarkerType, Node } from '@xyflow/svelte';
+import { MarkerType, Position, type Edge, type Node } from '@xyflow/svelte';
 import type {
   BackendGraph,
   CatalogPayload,
@@ -80,7 +80,7 @@ export function toSvelteFlowNodes(
 
   const nodes = visibleNodes.map((node) => ({
     id: node.id,
-    type: 'default',
+    type: 'architecture',
     position: { x: 0, y: 0 },
     data: {
       label: node.name,
@@ -88,13 +88,12 @@ export function toSvelteFlowNodes(
       type: node.type,
       summary: node.summary,
     },
-    class: [
-      'flow-node',
-      node.type,
-      selectedNodeId === node.id ? 'selected' : '',
-    ].filter(Boolean).join(' '),
-    sourcePosition: 'right',
-    targetPosition: 'left',
+    sourcePosition: Position.Right,
+    targetPosition: Position.Left,
+    selectable: true,
+    draggable: false,
+    connectable: false,
+    class: selectedNodeId === node.id ? 'selected' : '',
   })) satisfies Node[];
 
   const edges = toSvelteFlowEdges(model, filters, allowed);
@@ -119,7 +118,7 @@ export function toSvelteFlowEdges(
       type: 'smoothstep',
       label: edge.type,
       markerEnd: {
-        type: 'arrowclosed' as MarkerType,
+        type: MarkerType.ArrowClosed,
         color: edgeColor(edge.type),
       },
       style: {
@@ -209,13 +208,13 @@ function normalizeBackendGraph(graph: BackendGraph): { nodes: GraphNode[]; edges
 }
 
 function matchesFilters(node: GraphNode, filters: Filters): boolean {
-  if (filters.nodeType && node.type !== filters.nodeType) {
+  if (filters.nodeTypes.length > 0 && !filters.nodeTypes.includes(node.type)) {
     return false;
   }
-  if (filters.domain && node.domain !== filters.domain) {
+  if (filters.domains.length > 0 && !filters.domains.includes(node.domain)) {
     return false;
   }
-  if (filters.owner && node.owner !== filters.owner) {
+  if (filters.owners.length > 0 && !filters.owners.includes(node.owner)) {
     return false;
   }
   if (filters.query) {

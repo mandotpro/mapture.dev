@@ -1,7 +1,17 @@
+<svelte:options runes={true} />
+
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Background, Controls, MiniMap, SvelteFlow } from '@xyflow/svelte';
-  import type { Edge, Node } from '@xyflow/svelte';
+  import {
+    Background,
+    Controls,
+    MiniMap,
+    Panel,
+    SvelteFlow,
+    type Edge,
+    type Node,
+    type NodeTypes,
+  } from '@xyflow/svelte';
   import { loadGraphFromApi, loadGraphFromFile } from './lib/api';
   import {
     domainName,
@@ -14,6 +24,7 @@
     toSvelteFlowNodes,
     visibleStats,
   } from './lib/adapter';
+  import FlowNode from './lib/FlowNode.svelte';
   import type { Filters, GraphModel, WindowWithPayload } from './lib/types';
 
   const emptyModel: GraphModel = {
@@ -29,37 +40,43 @@
     events: new Map(),
   };
 
-  let model: GraphModel = emptyModel;
-  let nodes: Node[] = [];
-  let edges: Edge[] = [];
-  let loading = true;
-  let live = false;
-  let selectedNodeId: string | null = null;
-  let loadError = '';
-  let sourceLabel = 'api';
-  let fileInput: HTMLInputElement | null = null;
-  let filters: Filters = {
+  const nodeTypes = {
+    architecture: FlowNode,
+  } satisfies NodeTypes;
+
+  let model = $state.raw<GraphModel>(emptyModel);
+  let flowNodes = $state.raw<Node[]>([]);
+  let flowEdges = $state.raw<Edge[]>([]);
+  let loading = $state(true);
+  let live = $state(false);
+  let selectedNodeId = $state<string | null>(null);
+  let loadError = $state('');
+  let sourceLabel = $state('api');
+  let fileInput = $state<HTMLInputElement | null>(null);
+  let showFilters = $state(false);
+  let showDiagnostics = $state(false);
+  let filters = $state.raw<Filters>({
     query: '',
-    nodeType: '',
-    domain: '',
-    owner: '',
-  };
+    nodeTypes: [],
+    domains: [],
+    owners: [],
+  });
 
-  $: selectedNode = findNode(model, selectedNodeId);
-  $: counts = graphStats(model);
-  $: visible = visibleStats(model, filters);
-  $: summary = severitySummary(model.diagnostics);
-  $: applyGraph();
+  const selectedNode = $derived(findNode(model, selectedNodeId));
+  const counts = $derived(graphStats(model));
+  const visible = $derived(visibleStats(model, filters));
+  const summary = $derived(severitySummary(model.diagnostics));
+  const typeCounts = $derived(countBy(model.nodes, (node) => node.type));
+  const domainCounts = $derived(countBy(model.nodes, (node) => node.domain));
+  const ownerCounts = $derived(countBy(model.nodes, (node) => node.owner));
 
-  function applyGraph(): void {
-    const nextNodes = toSvelteFlowNodes(model, filters, selectedNodeId);
-    const nextEdges = toSvelteFlowEdges(model, filters, new Set(nextNodes.map((node) => node.id)));
-    nodes = nextNodes;
-    edges = nextEdges;
-    if (selectedNodeId && !nextNodes.some((node) => node.id === selectedNodeId)) {
+  $effect(() => {
+    flowNodes = toSvelteFlowNodes(model, filters, selectedNodeId);
+    flowEdges = toSvelteFlowEdges(model, filters);
+    if (selectedNodeId && !matchesSelected(selectedNodeId)) {
       selectedNodeId = null;
     }
-  }
+  });
 
   async function boot(): Promise<void> {
     loading = true;
@@ -69,11 +86,11 @@
       const injected = (window as WindowWithPayload).__MAPTURE_DATA__;
       if (injected?.graph) {
         model = normalizeGraph(injected, injected, { teams: [], domains: [], events: [] });
-        sourceLabel = 'embedded payload';
+        sourceLabel = 'static payload';
       } else {
         const payload = await loadGraphFromApi();
         model = normalizeGraph(payload.graph, payload.validation, payload.catalog);
-        sourceLabel = 'live server';
+        sourceLabel = 'live api';
         bindLiveReload();
       }
     } catch (error) {
@@ -94,6 +111,7 @@
       try {
         const payload = await loadGraphFromApi();
         model = normalizeGraph(payload.graph, payload.validation, payload.catalog);
+        loadError = '';
       } catch (error) {
         loadError = error instanceof Error ? error.message : String(error);
       }
@@ -104,18 +122,48 @@
     });
   }
 
-  function handleNodeClick(event: CustomEvent<{ node: Node }>): void {
-    selectedNodeId = event.detail.node.id;
+  function handleNodeClick({ node }: { node: Node }): void {
+    selectedNodeId = node.id;
   }
 
   function resetFilters(): void {
     filters = {
       query: '',
-      nodeType: '',
-      domain: '',
-      owner: '',
+      nodeTypes: [],
+      domains: [],
+      owners: [],
     };
     selectedNodeId = null;
+  }
+
+  function toggleFilter(kind: 'nodeTypes' | 'domains' | 'owners', value: string): void {
+    const next = new Set(filters[kind]);
+    if (next.has(value)) {
+      next.delete(value);
+    } else {
+      next.add(value);
+    }
+    filters = {
+      ...filters,
+      [kind]: Array.from(next).sort((left, right) => left.localeCompare(right)),
+    };
+  }
+
+  function matchesSelected(nodeID: string): boolean {
+    const node = model.nodes.find((candidate) => candidate.id === nodeID);
+    if (!node) {
+      return false;
+    }
+    return (
+      (filters.nodeTypes.length === 0 || filters.nodeTypes.includes(node.type)) &&
+      (filters.domains.length === 0 || filters.domains.includes(node.domain)) &&
+      (filters.owners.length === 0 || filters.owners.includes(node.owner)) &&
+      (!filters.query ||
+        [node.id, node.name, node.domain, node.owner, node.file, node.summary]
+          .join(' ')
+          .toLowerCase()
+          .includes(filters.query.toLowerCase()))
+    );
   }
 
   async function handleFileChange(event: Event): Promise<void> {
@@ -130,8 +178,8 @@
       model = normalizeGraph(payload, payload, { teams: [], domains: [], events: [] });
       sourceLabel = `file: ${file.name}`;
       loadError = '';
-      loading = false;
       selectedNodeId = null;
+      loading = false;
     } catch (error) {
       loadError = error instanceof Error ? error.message : String(error);
     } finally {
@@ -139,242 +187,233 @@
     }
   }
 
+  function connectionPill(): string {
+    if (loadError) {
+      return 'load failed';
+    }
+    if (loading) {
+      return 'loading';
+    }
+    if (sourceLabel.startsWith('file:')) {
+      return 'local file';
+    }
+    if (sourceLabel === 'static payload') {
+      return 'static build';
+    }
+    return 'live api connected';
+  }
+
+  function countBy<T>(items: T[], pick: (item: T) => string): Record<string, number> {
+    return items.reduce<Record<string, number>>((result, item) => {
+      const key = pick(item);
+      if (!key) {
+        return result;
+      }
+      result[key] = (result[key] ?? 0) + 1;
+      return result;
+    }, {});
+  }
+
   onMount(() => {
     void boot();
   });
 </script>
 
-<div class="shell">
-  <section class="hero">
-    <div class="panel hero-card">
-      <div class="hero-title">
-        <div>
-          <p class="eyebrow">Architecture Explorer</p>
-          <h1>Explore the validated graph, not raw comments.</h1>
-        </div>
-        <div class="status-pill" class:error={!!loadError} class:warning={!loadError && summary.warnings > 0}>
-          {#if loadError}
-            load failed
-          {:else if loading}
-            loading
-          {:else if summary.errors > 0}
-            validation issues
-          {:else}
-            ready
-          {/if}
-        </div>
-      </div>
-      <p class="hero-copy">
-        This UI reads the existing Go endpoints, adapts the normalized graph model into Svelte Flow,
-        and keeps details, diagnostics, search, and filtering centered around the current backend shape.
-      </p>
-      <div class="hero-stats">
-        <div class="stat">
-          <span class="detail-label">Total nodes</span>
-          <strong>{counts.nodes}</strong>
-        </div>
-        <div class="stat">
-          <span class="detail-label">Total edges</span>
-          <strong>{counts.edges}</strong>
-        </div>
-        <div class="stat">
-          <span class="detail-label">Visible nodes</span>
-          <strong>{visible.nodes}</strong>
-        </div>
-        <div class="stat">
-          <span class="detail-label">Visible edges</span>
-          <strong>{visible.edges}</strong>
-        </div>
-      </div>
-    </div>
-    <div class="status-stack">
-      <div class="panel status-card">
-        <div class="status-row">
-          <h2>Backend contract</h2>
-          <span class="status-pill">{sourceLabel}</span>
-        </div>
-        <div class="status-meta">
-          <span>`GET /api/graph` nodes and edges</span>
-          <span>`GET /api/validate` diagnostics</span>
-          <span>`GET /api/catalog` owners and domains</span>
-          <span>`GET /api/events` live reload</span>
-        </div>
-      </div>
-      <div class="panel status-card">
-        <div class="status-row">
-          <h2>Diagnostics</h2>
-          <span>{summary.errors} errors · {summary.warnings} warnings</span>
-        </div>
-        {#if loadError}
-          <p class="empty">{loadError}</p>
-        {:else if loading}
-          <p class="empty">Loading graph and catalog data…</p>
-        {:else}
-          <p class="empty">
-            The explorer stays compatible with current backend output and can also load exported JSON payloads from disk.
-          </p>
-        {/if}
-      </div>
-    </div>
-  </section>
+<main class="immersive-shell">
+  <SvelteFlow
+    nodes={flowNodes}
+    edges={flowEdges}
+    {nodeTypes}
+    fitView
+    fitViewOptions={{ padding: 0.22 }}
+    minZoom={0.12}
+    maxZoom={1.8}
+    nodesDraggable={false}
+    nodesConnectable={false}
+    elementsSelectable
+    onnodeclick={handleNodeClick}
+    attributionPosition="bottom-left"
+    class="immersive-flow"
+  >
+    <Background color="rgba(24, 34, 40, 0.08)" gap={24} />
+    <MiniMap position="bottom-left" pannable zoomable />
+    <Controls position="bottom-right" />
 
-  <aside class="panel left-rail">
-    <div class="toolbar">
-      <div>
-        <h2>Filters</h2>
-        <p class="empty">Search is matched against id, name, domain, owner, file, and summary.</p>
-      </div>
-
-      <input bind:value={filters.query} type="search" placeholder="Search graph" />
-
-      <select bind:value={filters.nodeType}>
-        <option value="">All node types</option>
-        {#each model.nodeTypes as nodeType}
-          <option value={nodeType}>{nodeType}</option>
-        {/each}
-      </select>
-
-      <select bind:value={filters.domain}>
-        <option value="">All domains</option>
-        {#each model.domains as domain}
-          <option value={domain}>{domainName(model, domain)}</option>
-        {/each}
-      </select>
-
-      <select bind:value={filters.owner}>
-        <option value="">All owners</option>
-        {#each model.owners as owner}
-          <option value={owner}>{teamName(model, owner)}</option>
-        {/each}
-      </select>
-
-      <div class="actions">
-        <button type="button" on:click={resetFilters}>Reset filters</button>
-        <button class="secondary" type="button" on:click={() => fileInput?.click()}>Load JSON file</button>
-        <input bind:this={fileInput} class="file-input" type="file" accept="application/json,.json" on:change={handleFileChange} />
-      </div>
-    </div>
-
-    <div class="legend">
-      <h3>Node types</h3>
-      {#each model.nodeTypes as nodeType}
-        <button
-          type="button"
-          class:off={filters.nodeType !== '' && filters.nodeType !== nodeType}
-          on:click={() => {
-            filters.nodeType = filters.nodeType === nodeType ? '' : nodeType;
-            filters = filters;
-          }}
-        >
-          <span class="legend-label">
-            <span class={"dot " + nodeType}></span>
-            <span>{nodeType}</span>
+    <Panel position="top-left" class="overlay-stack overlay-top">
+      <section class="overlay-card overlay-hero">
+        <div class="pill-row">
+          <span class={['pill', 'status', loadError ? 'error' : summary.warnings > 0 ? 'warning' : 'ok'].join(' ')}>
+            {connectionPill()}
           </span>
-          <span class="edge-chip">
-            {model.nodes.filter((node) => node.type === nodeType).length}
-          </span>
-        </button>
-      {/each}
-    </div>
-
-    <div class="legend">
-      <h3>Edge types</h3>
-      {#each model.edgeTypes as edgeType}
-        <div class="detail-card">
-          <span class="detail-label">{edgeType}</span>
-          <div class="edge-chip">{model.edges.filter((edge) => edge.type === edgeType).length} edges</div>
+          <span class="pill soft">{visible.nodes} visible nodes</span>
+          <span class="pill soft">{visible.edges} visible edges</span>
         </div>
-      {/each}
-    </div>
-  </aside>
+        <div class="overlay-hero__title">
+          <div>
+            <p class="eyebrow">Mapture Explorer</p>
+            <h1>Architecture graph on the full canvas.</h1>
+          </div>
+          <div class="pill-grid">
+            <span class="metric-pill"><strong>{counts.nodes}</strong><small>nodes</small></span>
+            <span class="metric-pill"><strong>{counts.edges}</strong><small>edges</small></span>
+            <span class="metric-pill"><strong>{counts.domains}</strong><small>domains</small></span>
+            <span class="metric-pill"><strong>{counts.owners}</strong><small>teams</small></span>
+          </div>
+        </div>
+        <div class="pill-row pill-row--wrap">
+          {#each model.nodeTypes as nodeType}
+            <span class={"pill type-pill " + nodeType}>
+              {nodeType} {typeCounts[nodeType] ?? 0}
+            </span>
+          {/each}
+        </div>
+      </section>
+    </Panel>
 
-  <section class="panel canvas">
-    <div class="flow-host">
-      <SvelteFlow
-        class="flow-shell"
-        {nodes}
-        {edges}
-        fitView
-        minZoom={0.1}
-        maxZoom={1.8}
-        on:nodeclick={handleNodeClick}
-      >
-        <Background color="rgba(24, 34, 40, 0.09)" gap={22} />
-        <Controls />
-        <MiniMap pannable zoomable />
-      </SvelteFlow>
-    </div>
-  </section>
+    <Panel position="top-right" class="overlay-stack overlay-right">
+      <section class="overlay-card overlay-controls">
+        <div class="control-row">
+          <input bind:value={filters.query} type="search" placeholder="Search id, name, domain, owner, file" />
+          <button type="button" class="secondary" onclick={() => (showFilters = !showFilters)}>
+            {showFilters ? 'Hide filters' : 'Show filters'}
+          </button>
+        </div>
+        <div class="control-row">
+          <button type="button" onclick={resetFilters}>Reset</button>
+          <button type="button" class="secondary" onclick={() => fileInput?.click()}>Load JSON</button>
+          <button type="button" class="secondary" onclick={() => (showDiagnostics = !showDiagnostics)}>
+            {showDiagnostics ? 'Hide issues' : 'Show issues'}
+          </button>
+          <input bind:this={fileInput} class="file-input" type="file" accept="application/json,.json" onchange={handleFileChange} />
+        </div>
 
-  <aside class="panel right-rail">
-    <div class="details-grid">
-      <div>
-        <h2>Node details</h2>
-        {#if selectedNode}
-          <div class="detail-card">
-            <span class="detail-label">Node</span>
-            <strong>{selectedNode.name}</strong>
-            <div class="diag-meta mono">{selectedNode.id}</div>
-          </div>
-          <div class="detail-card">
-            <span class="detail-label">Type</span>
-            <div>{selectedNode.type}</div>
-          </div>
-          <div class="detail-card">
-            <span class="detail-label">Domain</span>
-            <div>{selectedNode.domain ? domainName(model, selectedNode.domain) : 'n/a'}</div>
-          </div>
-          <div class="detail-card">
-            <span class="detail-label">Owner</span>
-            <div>{selectedNode.owner ? teamName(model, selectedNode.owner) : 'n/a'}</div>
-          </div>
-          <div class="detail-card">
-            <span class="detail-label">Source</span>
-            <div class="mono">
-              {#if selectedNode.file}
-                {selectedNode.file}{selectedNode.line ? `:${selectedNode.line}` : ''}
-              {:else}
-                n/a
-              {/if}
-            </div>
-          </div>
-          {#if selectedNode.symbol}
-            <div class="detail-card">
-              <span class="detail-label">Symbol</span>
-              <div class="mono">{selectedNode.symbol}</div>
-            </div>
-          {/if}
-          {#if selectedNode.summary}
-            <div class="detail-card">
-              <span class="detail-label">Summary</span>
-              <div>{selectedNode.summary}</div>
-            </div>
-          {/if}
-        {:else}
-          <p class="empty">Select a node on the canvas to inspect its owner, source attachment, and summary.</p>
-        {/if}
-      </div>
-
-      <div>
-        <h2>Validation feed</h2>
-        {#if model.diagnostics.length === 0}
-          <p class="empty">No diagnostics for the current graph.</p>
-        {:else}
-          <div class="diagnostics">
-            {#each model.diagnostics as diagnostic}
-              <div class={"diag-item " + diagnostic.severity}>
-                <strong>{diagnostic.message}</strong>
-                <div class="diag-meta">
-                  {diagnostic.severity} · layer {diagnostic.layer} · {diagnostic.code}
-                  {#if diagnostic.file}
-                    · {diagnostic.file}{diagnostic.line ? `:${diagnostic.line}` : ''}
-                  {/if}
-                </div>
+        {#if showFilters}
+          <div class="filter-groups">
+            <section>
+              <div class="filter-heading">Teams</div>
+              <div class="chip-grid">
+                {#each model.owners as owner}
+                  <button
+                    type="button"
+                    class={['filter-chip', filters.owners.includes(owner) ? 'active' : ''].join(' ')}
+                    onclick={() => toggleFilter('owners', owner)}
+                  >
+                    <span>{teamName(model, owner)}</span>
+                    <small>{ownerCounts[owner] ?? 0}</small>
+                  </button>
+                {/each}
               </div>
-            {/each}
+            </section>
+
+            <section>
+              <div class="filter-heading">Domains</div>
+              <div class="chip-grid">
+                {#each model.domains as domain}
+                  <button
+                    type="button"
+                    class={['filter-chip', filters.domains.includes(domain) ? 'active' : ''].join(' ')}
+                    onclick={() => toggleFilter('domains', domain)}
+                  >
+                    <span>{domainName(model, domain)}</span>
+                    <small>{domainCounts[domain] ?? 0}</small>
+                  </button>
+                {/each}
+              </div>
+            </section>
+
+            <section>
+              <div class="filter-heading">Node types</div>
+              <div class="chip-grid">
+                {#each model.nodeTypes as nodeType}
+                  <button
+                    type="button"
+                    class={['filter-chip', 'kind', nodeType, filters.nodeTypes.includes(nodeType) ? 'active' : ''].join(' ')}
+                    onclick={() => toggleFilter('nodeTypes', nodeType)}
+                  >
+                    <span>{nodeType}</span>
+                    <small>{typeCounts[nodeType] ?? 0}</small>
+                  </button>
+                {/each}
+              </div>
+            </section>
           </div>
         {/if}
-      </div>
-    </div>
-  </aside>
-</div>
+      </section>
+    </Panel>
+
+    {#if selectedNode}
+      <Panel position="bottom-right" class="overlay-stack overlay-bottom-right">
+        <section class="overlay-card detail-panel">
+          <div class="detail-heading">
+            <h2>{selectedNode.name}</h2>
+            <span class="pill soft">{selectedNode.type}</span>
+          </div>
+
+          <div class="detail-grid">
+            <div>
+              <span class="detail-label">Node id</span>
+              <div class="mono">{selectedNode.id}</div>
+            </div>
+            <div>
+              <span class="detail-label">Domain</span>
+              <div>{selectedNode.domain ? domainName(model, selectedNode.domain) : 'n/a'}</div>
+            </div>
+            <div>
+              <span class="detail-label">Owner</span>
+              <div>{selectedNode.owner ? teamName(model, selectedNode.owner) : 'n/a'}</div>
+            </div>
+            <div>
+              <span class="detail-label">Source</span>
+              <div class="mono">
+                {#if selectedNode.file}
+                  {selectedNode.file}{selectedNode.line ? `:${selectedNode.line}` : ''}
+                {:else}
+                  n/a
+                {/if}
+              </div>
+            </div>
+            {#if selectedNode.summary}
+              <div class="detail-summary">
+                <span class="detail-label">Summary</span>
+                <p>{selectedNode.summary}</p>
+              </div>
+            {/if}
+          </div>
+        </section>
+      </Panel>
+    {/if}
+
+    {#if showDiagnostics}
+      <Panel position="bottom-left" class="overlay-stack overlay-bottom-left">
+        <section class="overlay-card diagnostics-panel">
+          <div class="detail-heading">
+            <h2>Validation feed</h2>
+            <span class="pill soft">{summary.errors} errors · {summary.warnings} warnings</span>
+          </div>
+
+          {#if loadError}
+            <p class="empty">{loadError}</p>
+          {:else if loading}
+            <p class="empty">Loading graph data…</p>
+          {:else if model.diagnostics.length === 0}
+            <p class="empty">No diagnostics for the current graph.</p>
+          {:else}
+            <div class="diagnostic-list">
+              {#each model.diagnostics as diagnostic}
+                <article class={['diagnostic-item', diagnostic.severity].join(' ')}>
+                  <strong>{diagnostic.message}</strong>
+                  <div class="diag-meta">
+                    {diagnostic.severity} · layer {diagnostic.layer} · {diagnostic.code}
+                    {#if diagnostic.file}
+                      · {diagnostic.file}{diagnostic.line ? `:${diagnostic.line}` : ''}
+                    {/if}
+                  </div>
+                </article>
+              {/each}
+            </div>
+          {/if}
+        </section>
+      </Panel>
+    {/if}
+  </SvelteFlow>
+</main>
