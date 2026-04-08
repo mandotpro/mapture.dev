@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/angelmanchev/mapture/src/internal/graph"
-	"github.com/angelmanchev/mapture/src/internal/validator"
+	"github.com/mandotpro/mapture.dev/src/internal/graph"
+	"github.com/mandotpro/mapture.dev/src/internal/validator"
 )
 
 func ecommerceConfig(t *testing.T) string {

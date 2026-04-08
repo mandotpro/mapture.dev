@@ -10,7 +10,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/angelmanchev/mapture/src/internal/schema"
+	"github.com/mandotpro/mapture.dev/src/internal/schema"
 )
 
 // Catalog is the in-memory union of all catalog YAML files under a

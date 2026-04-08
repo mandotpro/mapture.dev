@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/angelmanchev/mapture/src/internal/schema"
+	"github.com/mandotpro/mapture.dev/src/internal/schema"
 )
 
 const filename = "mapture.yaml"

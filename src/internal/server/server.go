@@ -20,11 +20,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/angelmanchev/mapture/src/internal/catalog"
-	"github.com/angelmanchev/mapture/src/internal/config"
-	"github.com/angelmanchev/mapture/src/internal/scanner"
-	"github.com/angelmanchev/mapture/src/internal/validator"
 	"github.com/fsnotify/fsnotify"
+	"github.com/mandotpro/mapture.dev/src/internal/catalog"
+	"github.com/mandotpro/mapture.dev/src/internal/config"
+	"github.com/mandotpro/mapture.dev/src/internal/scanner"
+	"github.com/mandotpro/mapture.dev/src/internal/validator"
 )
 
 //go:embed ui/*

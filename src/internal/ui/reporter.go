@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/angelmanchev/mapture/src/internal/validator"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mandotpro/mapture.dev/src/internal/validator"
 	"golang.org/x/term"
 )
 

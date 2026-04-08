@@ -15,13 +15,13 @@ import (
 	"runtime"
 	"syscall"
 
-	"github.com/angelmanchev/mapture/src/internal/bootstrap"
-	"github.com/angelmanchev/mapture/src/internal/catalog"
-	"github.com/angelmanchev/mapture/src/internal/config"
-	"github.com/angelmanchev/mapture/src/internal/scanner"
-	"github.com/angelmanchev/mapture/src/internal/server"
-	"github.com/angelmanchev/mapture/src/internal/ui"
-	"github.com/angelmanchev/mapture/src/internal/validator"
+	"github.com/mandotpro/mapture.dev/src/internal/bootstrap"
+	"github.com/mandotpro/mapture.dev/src/internal/catalog"
+	"github.com/mandotpro/mapture.dev/src/internal/config"
+	"github.com/mandotpro/mapture.dev/src/internal/scanner"
+	"github.com/mandotpro/mapture.dev/src/internal/server"
+	"github.com/mandotpro/mapture.dev/src/internal/ui"
+	"github.com/mandotpro/mapture.dev/src/internal/validator"
 	"github.com/spf13/cobra"
 )
 
