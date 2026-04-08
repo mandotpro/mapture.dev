@@ -106,6 +106,42 @@ func TestServeGraphEndpointReturnsGraph(t *testing.T) {
 	}
 }
 
+func TestServeExplorerEndpointReturnsCanonicalPayload(t *testing.T) {
+	baseURL, stop := startTestServer(t, false)
+	defer stop()
+
+	resp, err := http.Get(baseURL + "/api/explorer")
+	if err != nil {
+		t.Fatalf("GET /api/explorer: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected status: %d", resp.StatusCode)
+	}
+
+	var payload ExplorerPayload
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode explorer payload: %v", err)
+	}
+
+	if payload.SchemaVersion != explorerPayloadSchemaVersion {
+		t.Fatalf("unexpected schema version: %d", payload.SchemaVersion)
+	}
+	if len(payload.Graph.Nodes) == 0 {
+		t.Fatal("expected graph nodes in explorer payload")
+	}
+	if len(payload.Catalog.Teams) == 0 || len(payload.Catalog.Domains) == 0 {
+		t.Fatalf("expected catalog in explorer payload, got %+v", payload.Catalog)
+	}
+	if payload.UI.NodeColors.Service == "" || payload.UI.NodeColors.Event == "" {
+		t.Fatalf("expected ui node colors in explorer payload, got %+v", payload.UI.NodeColors)
+	}
+	if payload.Meta.ProjectID == "" || payload.Meta.Mode != "live" || payload.Meta.SourceLabel == "" {
+		t.Fatalf("unexpected explorer meta: %+v", payload.Meta)
+	}
+}
+
 func TestServeValidateEndpointReturnsResult(t *testing.T) {
 	baseURL, stop := startTestServer(t, false)
 	defer stop()
@@ -145,24 +181,12 @@ func TestServeCatalogEndpoint(t *testing.T) {
 		Teams   []map[string]any `json:"teams"`
 		Domains []map[string]any `json:"domains"`
 		Events  []map[string]any `json:"events"`
-		UI      struct {
-			NodeColors map[string]string `json:"nodeColors"`
-		} `json:"ui"`
-		Meta struct {
-			ProjectID string `json:"projectId"`
-		} `json:"meta"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode catalog: %v", err)
 	}
 	if len(payload.Teams) == 0 || len(payload.Domains) == 0 {
 		t.Fatalf("expected populated catalog, got %+v", payload)
-	}
-	if payload.UI.NodeColors["service"] == "" || payload.UI.NodeColors["event"] == "" {
-		t.Fatalf("expected UI node colors in catalog payload, got %+v", payload.UI.NodeColors)
-	}
-	if payload.Meta.ProjectID == "" {
-		t.Fatalf("expected catalog meta.projectId, got %+v", payload.Meta)
 	}
 }
 

@@ -17,7 +17,7 @@
     domainName,
     findNode,
     nodeColor,
-    normalizePayload,
+    normalizeGraph,
     severitySummary,
     teamName,
     toSvelteFlowEdges,
@@ -63,6 +63,14 @@
       },
     },
     projectId: '',
+    sourceLabel: 'offline',
+    mode: 'offline',
+    summary: {
+      errors: 0,
+      warnings: 0,
+      nodes: 0,
+      edges: 0,
+    },
   };
 
   const nodeTypes = {
@@ -134,14 +142,12 @@
     try {
       const injected = (window as WindowWithPayload).__MAPTURE_DATA__;
       if (injected) {
-        const normalized = normalizePayload(injected, 'static build');
-        model = normalized.model;
-        sourceLabel = normalized.sourceLabel;
+        model = normalizeGraph(injected);
+        sourceLabel = injected.meta.sourceLabel;
       } else {
         const payload = await loadGraphFromApi();
-        const normalized = normalizePayload(payload, 'live api');
-        model = normalized.model;
-        sourceLabel = normalized.sourceLabel;
+        model = normalizeGraph(payload);
+        sourceLabel = payload.meta.sourceLabel;
         bindLiveReload();
       }
     } catch (error) {
@@ -162,8 +168,7 @@
     stream.addEventListener('graph', async () => {
       try {
         const payload = await loadGraphFromApi();
-        const normalized = normalizePayload(payload, 'live api');
-        model = normalized.model;
+        model = normalizeGraph(payload);
         loadError = '';
       } catch (error) {
         loadError = error instanceof Error ? error.message : String(error);

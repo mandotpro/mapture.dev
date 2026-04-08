@@ -129,18 +129,6 @@ type explorer struct {
 	broadcaster *broadcaster
 }
 
-type catalogResponse struct {
-	Teams   []catalog.Team   `json:"teams"`
-	Domains []catalog.Domain `json:"domains"`
-	Events  []catalog.Event  `json:"events"`
-	UI      config.UI        `json:"ui"`
-	Meta    catalogMeta      `json:"meta"`
-}
-
-type catalogMeta struct {
-	ProjectID string `json:"projectId"`
-}
-
 func newServer(configPath string) (*explorer, error) {
 	return &explorer{
 		configPath:  configPath,
@@ -150,6 +138,7 @@ func newServer(configPath string) (*explorer, error) {
 }
 
 func (e *explorer) register(mux *http.ServeMux) {
+	mux.HandleFunc("/api/explorer", e.handleExplorer)
 	mux.HandleFunc("/api/graph", e.handleGraph)
 	mux.HandleFunc("/api/catalog", e.handleCatalog)
 	mux.HandleFunc("/api/validate", e.handleValidate)
@@ -196,6 +185,65 @@ func (e *explorer) buildResult() (*validator.Result, error) {
 	return result, nil
 }
 
+func (e *explorer) buildExplorerPayload() (*ExplorerPayload, error) {
+	cfg, cat, root, err := e.loadProject()
+	if err != nil {
+		return nil, err
+	}
+
+	blocks, err := scanner.Scan(root, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := validator.Build(cfg, cat, blocks)
+	if err != nil {
+		var vErr *validator.ValidationError
+		if !errors.As(err, &vErr) || vErr.Result == nil {
+			return nil, err
+		}
+		result = vErr.Result
+	}
+
+	return &ExplorerPayload{
+		SchemaVersion: explorerPayloadSchemaVersion,
+		Graph:         result.Graph,
+		Catalog: ExplorerCatalog{
+			Teams:   cat.Teams,
+			Domains: cat.Domains,
+			Events:  cat.Events,
+		},
+		Validation: ExplorerValidation{
+			Diagnostics: result.Diagnostics,
+			Summary: ValidationSummary{
+				Errors:   countDiagnostics(result.Diagnostics, "error"),
+				Warnings: countDiagnostics(result.Diagnostics, "warning"),
+				Nodes:    len(result.Graph.Nodes),
+				Edges:    len(result.Graph.Edges),
+			},
+		},
+		UI: cfg.UI,
+		Meta: ExplorerMeta{
+			ProjectID:   filepath.Dir(e.configPath),
+			SourceLabel: "live api",
+			Mode:        "live",
+		},
+	}, nil
+}
+
+func (e *explorer) handleExplorer(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	payload, err := e.buildExplorerPayload()
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, payload)
+}
+
 func (e *explorer) handleGraph(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -227,19 +275,15 @@ func (e *explorer) handleCatalog(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	cfg, cat, _, err := e.loadProject()
+	_, cat, _, err := e.loadProject()
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, catalogResponse{
+	writeJSON(w, ExplorerCatalog{
 		Teams:   cat.Teams,
 		Domains: cat.Domains,
 		Events:  cat.Events,
-		UI:      cfg.UI,
-		Meta: catalogMeta{
-			ProjectID: filepath.Dir(e.configPath),
-		},
 	})
 }
 
@@ -343,6 +387,16 @@ func (e *explorer) watch(ctx context.Context) error {
 			_ = err
 		}
 	}
+}
+
+func countDiagnostics(diagnostics []validator.Diagnostic, severity string) int {
+	count := 0
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Severity == severity {
+			count++
+		}
+	}
+	return count
 }
 
 func addWatchRoots(watcher *fsnotify.Watcher, root string, cfg *config.Config) error {

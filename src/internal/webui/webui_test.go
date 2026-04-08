@@ -39,9 +39,7 @@ func TestAppJSContainsExpectedAPI(t *testing.T) {
 	}
 	body := string(data)
 	for _, needle := range []string{
-		"/api/graph",
-		"/api/validate",
-		"/api/catalog",
+		"/api/explorer",
 		"/api/events",
 		"__MAPTURE_DATA__",
 	} {

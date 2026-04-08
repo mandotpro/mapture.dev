@@ -61,21 +61,37 @@ export interface UIConfig {
   nodeColors?: UINodeColors;
 }
 
-export interface CatalogMeta {
-  projectId?: string;
+export interface ExplorerMeta {
+  projectId: string;
+  sourceLabel: string;
+  mode: 'live' | 'offline';
 }
 
 export interface CatalogPayload {
-  teams?: CatalogTeam[];
-  domains?: CatalogDomain[];
-  events?: CatalogEvent[];
-  ui?: UIConfig;
-  meta?: CatalogMeta;
+  teams: CatalogTeam[];
+  domains: CatalogDomain[];
+  events: CatalogEvent[];
 }
 
 export interface ValidationPayload {
-  graph?: BackendGraph;
-  diagnostics?: Diagnostic[];
+  diagnostics: Diagnostic[];
+  summary: ValidationSummary;
+}
+
+export interface ValidationSummary {
+  errors: number;
+  warnings: number;
+  nodes: number;
+  edges: number;
+}
+
+export interface ExplorerPayload {
+  schemaVersion: number;
+  graph: BackendGraph;
+  catalog: CatalogPayload;
+  validation: ValidationPayload;
+  ui: UIConfig;
+  meta: ExplorerMeta;
 }
 
 export interface GraphNode {
@@ -110,6 +126,9 @@ export interface GraphModel {
   events: Map<string, CatalogEvent>;
   ui: Required<UIConfig>;
   projectId: string;
+  sourceLabel: string;
+  mode: 'live' | 'offline';
+  summary: ValidationSummary;
 }
 
 export interface Filters {
@@ -119,13 +138,6 @@ export interface Filters {
   owners: string[];
 }
 
-export interface AppPayload {
-  graph?: ValidationPayload | BackendGraph;
-  validation?: ValidationPayload;
-  catalog?: CatalogPayload;
-  diagnostics?: Diagnostic[];
-}
-
 export interface WindowWithPayload extends Window {
-  __MAPTURE_DATA__?: ValidationPayload | AppPayload;
+  __MAPTURE_DATA__?: ExplorerPayload;
 }
