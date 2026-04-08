@@ -14,6 +14,7 @@
   } from '@xyflow/svelte';
   import { loadGraphFromApi } from './lib/api';
   import {
+    applyPreset,
     domainName,
     findNode,
     nodeColor,
@@ -22,14 +23,14 @@
     teamName,
     toSvelteFlowEdges,
     toSvelteFlowNodes,
+    visibleNodesForFilters,
     visibleStats,
   } from './lib/adapter';
   import { resolvePositions } from './lib/layout';
   import FlowNode from './lib/FlowNode.svelte';
-  import type { Filters, GraphModel, WindowWithPayload } from './lib/types';
+  import type { FilterPreset, Filters, GraphModel, LayoutMode, WindowWithPayload } from './lib/types';
 
-  type PopoverKind = 'search' | 'owners' | 'domains' | 'nodeTypes' | 'layout' | null;
-  type LayoutMode = 'freeform' | 'clustered';
+  type PopoverKind = 'search' | 'presets' | 'owners' | 'domains' | 'nodeTypes' | 'layout' | null;
   type NodePopup = {
     nodeId: string;
     x: number;
@@ -37,7 +38,7 @@
   } | null;
   type SavedPositions = Record<string, { x: number; y: number }>;
   type ActiveFilterBadge = {
-    kind: 'query' | 'owners' | 'domains' | 'nodeTypes';
+    kind: 'preset' | 'query' | 'owners' | 'domains' | 'nodeTypes' | 'relationTypes';
     value: string;
     label: string;
   };
@@ -77,6 +78,12 @@
   const nodeTypes = {
     architecture: FlowNode,
   } satisfies NodeTypes;
+  const presetOptions: Array<{ id: FilterPreset; label: string }> = [
+    { id: 'service-map', label: 'Service map' },
+    { id: 'event-map', label: 'Event map' },
+    { id: 'producer-consumer', label: 'Producer to consumer flow' },
+    { id: 'api-dependencies', label: 'APIs and dependencies' },
+  ];
 
   let model = $state.raw<GraphModel>(emptyModel);
   let flowNodes = $state.raw<Node[]>([]);
@@ -88,26 +95,36 @@
   let activePopover = $state<PopoverKind>(null);
   let nodePopup = $state<NodePopup>(null);
   let layoutMode = $state<LayoutMode>('freeform');
+  let activePreset = $state<FilterPreset | null>(null);
+  let toolbarElement = $state<HTMLElement | null>(null);
+  let toolbarSize = $state.raw({ width: 420, height: 52 });
   let savedPositions = $state.raw<SavedPositions>({});
   let lastStorageKey = '';
+  let refreshVersion = 0;
   let filters = $state.raw<Filters>({
     query: '',
     nodeTypes: [],
     domains: [],
     owners: [],
+    relationTypes: [],
   });
 
   const popupNode = $derived(findNode(model, nodePopup?.nodeId ?? null));
   const visible = $derived(visibleStats(model, filters));
   const summary = $derived(severitySummary(model.diagnostics));
-  const typeCounts = $derived(countBy(model.nodes, (node) => node.type));
-  const ownerCounts = $derived(countBy(model.nodes, (node) => node.owner));
-  const domainCounts = $derived(countBy(model.nodes, (node) => node.domain));
   const activeFilterBadges = $derived(buildActiveFilterBadges(model, filters));
   const graphFingerprintKey = $derived(graphFingerprint(model));
   const projectIdentity = $derived(model.projectId || sourceLabel || 'default');
   const storageKey = $derived(`${STORAGE_PREFIX}:${projectIdentity}:${graphFingerprintKey}:${layoutMode}`);
   const paletteStyle = $derived(buildPaletteStyle(model));
+  const visibleTypeCounts = $derived(countBy(visibleNodesForFilters(model, filters), (node) => node.type));
+  const visibleOwnerCounts = $derived(countBy(visibleNodesForFilters(model, filters), (node) => node.owner));
+  const visibleDomainCounts = $derived(countBy(visibleNodesForFilters(model, filters), (node) => node.domain));
+  const relationCounts = $derived(countRelationTypes(model, filters));
+  const reservedCanvasInsets = $derived({
+    top: Math.ceil(toolbarSize.height + 72),
+    left: Math.ceil(toolbarSize.width + 72),
+  });
 
   $effect(() => {
     const nodeIDs = model.nodes.map((node) => node.id);
@@ -129,11 +146,20 @@
   });
 
   $effect(() => {
-    flowNodes = toSvelteFlowNodes(model, filters, nodePopup?.nodeId ?? null, layoutMode, savedPositions);
-    flowEdges = toSvelteFlowEdges(model, filters);
-    if (nodePopup && !matchesFilters(nodePopup.nodeId)) {
-      nodePopup = null;
-    }
+    const currentModel = model;
+    const currentFilters = filters;
+    const currentSelectedNodeID = nodePopup?.nodeId ?? null;
+    const currentLayoutMode = layoutMode;
+    const currentSavedPositions = savedPositions;
+    const currentReservedInsets = reservedCanvasInsets;
+    void refreshFlowGraph(
+      currentModel,
+      currentFilters,
+      currentSelectedNodeID,
+      currentLayoutMode,
+      currentSavedPositions,
+      currentReservedInsets,
+    );
   });
 
   async function boot(): Promise<void> {
@@ -213,12 +239,44 @@
       nodeTypes: [],
       domains: [],
       owners: [],
+      relationTypes: [],
     };
+    activePreset = null;
     activePopover = null;
     nodePopup = null;
   }
 
-  function clearFilter(kind: 'owners' | 'domains' | 'nodeTypes'): void {
+  async function refreshFlowGraph(
+    currentModel: GraphModel,
+    currentFilters: Filters,
+    selectedNodeID: string | null,
+    currentLayoutMode: LayoutMode,
+    currentSavedPositions: SavedPositions,
+    currentReservedInsets: { top: number; left: number },
+  ): Promise<void> {
+    const revision = ++refreshVersion;
+    const nextEdges = toSvelteFlowEdges(currentModel, currentFilters);
+    const nextNodes = await toSvelteFlowNodes(
+      currentModel,
+      currentFilters,
+      selectedNodeID,
+      currentLayoutMode,
+      currentSavedPositions,
+      currentReservedInsets,
+    );
+
+    if (revision !== refreshVersion) {
+      return;
+    }
+
+    flowEdges = nextEdges;
+    flowNodes = nextNodes;
+    if (nodePopup && !matchesFilters(nodePopup.nodeId)) {
+      nodePopup = null;
+    }
+  }
+
+  function clearFilter(kind: 'owners' | 'domains' | 'nodeTypes' | 'relationTypes'): void {
     filters = {
       ...filters,
       [kind]: [],
@@ -230,7 +288,7 @@
     nodePopup = null;
   }
 
-  function toggleFilter(kind: 'owners' | 'domains' | 'nodeTypes', value: string): void {
+  function toggleFilter(kind: 'owners' | 'domains' | 'nodeTypes' | 'relationTypes', value: string): void {
     const next = new Set(filters[kind]);
     if (next.has(value)) {
       next.delete(value);
@@ -243,7 +301,28 @@
     };
   }
 
+  function setPreset(preset: FilterPreset | null): void {
+    activePreset = preset;
+    filters = applyPreset(model, preset, {
+      ...filters,
+      nodeTypes: [],
+      relationTypes: [],
+    });
+    nodePopup = null;
+    activePopover = null;
+  }
+
   function removeBadge(badge: ActiveFilterBadge): void {
+    if (badge.kind === 'preset') {
+      activePreset = null;
+      filters = {
+        ...applyPreset(model, null, filters),
+        nodeTypes: [],
+        relationTypes: [],
+      };
+      return;
+    }
+
     if (badge.kind === 'query') {
       filters = {
         ...filters,
@@ -264,6 +343,14 @@
       filters = {
         ...filters,
         domains: filters.domains.filter((domain) => domain !== badge.value),
+      };
+      return;
+    }
+
+    if (badge.kind === 'relationTypes') {
+      filters = {
+        ...filters,
+        relationTypes: filters.relationTypes.filter((relationType) => relationType !== badge.value),
       };
       return;
     }
@@ -308,10 +395,15 @@
   }
 
   function handleNodeDragStop({ nodes }: { nodes: Node[] }): void {
+    const draggedPositions = new Map(nodes.map((node) => [node.id, node.position]));
+    const merged = flowNodes.map((node) => {
+      const position = draggedPositions.get(node.id);
+      return position ? { ...node, position } : node;
+    });
     const locked = new Set(nodes.map((node) => node.id));
     const next = {
       ...savedPositions,
-      ...resolvePositions(flowNodes, layoutMode, locked),
+      ...resolvePositions(merged, layoutMode, locked, reservedCanvasInsets),
     };
     savedPositions = next;
     persistSavedPositions(storageKey, next);
@@ -353,6 +445,13 @@
 
   function buildActiveFilterBadges(currentModel: GraphModel, currentFilters: Filters): ActiveFilterBadge[] {
     const badges: ActiveFilterBadge[] = [];
+    if (activePreset) {
+      badges.push({
+        kind: 'preset',
+        value: activePreset,
+        label: presetLabel(activePreset),
+      });
+    }
     if (currentFilters.query) {
       badges.push({
         kind: 'query',
@@ -381,7 +480,38 @@
         label: nodeType,
       });
     }
+    for (const relationType of currentFilters.relationTypes) {
+      badges.push({
+        kind: 'relationTypes',
+        value: relationType,
+        label: relationType,
+      });
+    }
     return badges;
+  }
+
+  function presetLabel(preset: FilterPreset): string {
+    if (preset === 'service-map') {
+      return 'Service map';
+    }
+    if (preset === 'event-map') {
+      return 'Event map';
+    }
+    if (preset === 'producer-consumer') {
+      return 'Producer to consumer flow';
+    }
+    return 'APIs and dependencies';
+  }
+
+  function countRelationTypes(currentModel: GraphModel, currentFilters: Filters): Record<string, number> {
+    const visibleNodes = new Set(visibleNodesForFilters(currentModel, { ...currentFilters, relationTypes: [] }).map((node) => node.id));
+    return currentModel.edges.reduce<Record<string, number>>((result, edge) => {
+      if (!visibleNodes.has(edge.from) || !visibleNodes.has(edge.to)) {
+        return result;
+      }
+      result[edge.type] = (result[edge.type] ?? 0) + 1;
+      return result;
+    }, {});
   }
 
   function buildPaletteStyle(currentModel: GraphModel): string {
@@ -498,6 +628,30 @@
       window.removeEventListener('click', handleWindowClick);
     };
   });
+
+  $effect(() => {
+    const element = toolbarElement;
+    if (!element || typeof ResizeObserver === 'undefined') {
+      return;
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) {
+        return;
+      }
+
+      toolbarSize = {
+        width: entry.contentRect.width,
+        height: entry.contentRect.height,
+      };
+    });
+    observer.observe(element);
+
+    return () => {
+      observer.disconnect();
+    };
+  });
 </script>
 
 <main class="app-shell" style={paletteStyle}>
@@ -540,7 +694,7 @@
       <Controls position="bottom-right" />
 
       <Panel position="top-left" class="canvas-toolbar-shell">
-        <div class="canvas-toolbar" data-interactive-root>
+        <div class="canvas-toolbar" data-interactive-root bind:this={toolbarElement}>
           <div class="canvas-rail">
             <button
               type="button"
@@ -548,6 +702,13 @@
               onclick={() => togglePopover('search')}
             >
               Search
+            </button>
+            <button
+              type="button"
+              class={['rail-pill', activePopover === 'presets' ? 'active' : '', activePreset ? 'has-value' : ''].join(' ')}
+              onclick={() => togglePopover('presets')}
+            >
+              Flows
             </button>
             <button
               type="button"
@@ -587,6 +748,45 @@
             </div>
           {/if}
 
+          {#if activePopover === 'presets'}
+            <div class="toolbar-popover toolbar-popover--wide" data-interactive-root>
+              <div class="popover-head">
+                <strong>Common flows</strong>
+                <button type="button" class="mini-action" onclick={() => setPreset(null)}>Clear</button>
+              </div>
+              <div class="chip-list">
+                {#each presetOptions as preset}
+                  <button
+                    type="button"
+                    class={['filter-chip', activePreset === preset.id ? 'active' : ''].join(' ')}
+                    onclick={() => setPreset(preset.id)}
+                  >
+                    <span>{preset.label}</span>
+                  </button>
+                {/each}
+              </div>
+
+              <div class="popover-section">
+                <div class="popover-head">
+                  <strong>Relations</strong>
+                  <button type="button" class="mini-action" onclick={() => clearFilter('relationTypes')}>Reset</button>
+                </div>
+                <div class="chip-list">
+                  {#each model.edgeTypes as relationType}
+                    <button
+                      type="button"
+                      class={['filter-chip', filters.relationTypes.includes(relationType) ? 'active' : ''].join(' ')}
+                      onclick={() => toggleFilter('relationTypes', relationType)}
+                    >
+                      <span>{relationType}</span>
+                      <small>{relationCounts[relationType] ?? 0}</small>
+                    </button>
+                  {/each}
+                </div>
+              </div>
+            </div>
+          {/if}
+
           {#if activePopover === 'owners'}
             <div class="toolbar-popover" data-interactive-root>
               <div class="popover-head">
@@ -601,7 +801,7 @@
                     onclick={() => toggleFilter('owners', owner)}
                   >
                     <span>{teamName(model, owner)}</span>
-                    <small>{ownerCounts[owner] ?? 0}</small>
+                    <small>{visibleOwnerCounts[owner] ?? 0}</small>
                   </button>
                 {/each}
               </div>
@@ -622,7 +822,7 @@
                     onclick={() => toggleFilter('domains', domain)}
                   >
                     <span>{domainName(model, domain)}</span>
-                    <small>{domainCounts[domain] ?? 0}</small>
+                    <small>{visibleDomainCounts[domain] ?? 0}</small>
                   </button>
                 {/each}
               </div>
@@ -644,7 +844,7 @@
                     onclick={() => toggleFilter('nodeTypes', nodeType)}
                   >
                     <span>{nodeType}</span>
-                    <small>{typeCounts[nodeType] ?? 0}</small>
+                    <small>{visibleTypeCounts[nodeType] ?? 0}</small>
                   </button>
                 {/each}
               </div>
@@ -671,6 +871,13 @@
                   onclick={() => setLayoutMode('clustered')}
                 >
                   <span>Clustered</span>
+                </button>
+                <button
+                  type="button"
+                  class={['filter-chip', layoutMode === 'elk-horizontal' ? 'active' : ''].join(' ')}
+                  onclick={() => setLayoutMode('elk-horizontal')}
+                >
+                  <span>ELK Horizontal</span>
                 </button>
               </div>
             </div>

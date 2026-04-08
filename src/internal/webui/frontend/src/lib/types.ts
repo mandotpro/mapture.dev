@@ -113,6 +113,10 @@ export interface GraphEdge {
   type: string;
 }
 
+export type LayoutMode = 'freeform' | 'clustered' | 'elk-horizontal';
+
+export type FilterPreset = 'service-map' | 'event-map' | 'producer-consumer' | 'api-dependencies';
+
 export interface GraphModel {
   nodes: GraphNode[];
   edges: GraphEdge[];
@@ -136,6 +140,7 @@ export interface Filters {
   nodeTypes: string[];
   domains: string[];
   owners: string[];
+  relationTypes: string[];
 }
 
 export interface WindowWithPayload extends Window {

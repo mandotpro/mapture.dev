@@ -5,10 +5,12 @@ import type {
   CatalogEvent,
   Diagnostic,
   ExplorerPayload,
+  FilterPreset,
   Filters,
   GraphEdge,
   GraphModel,
   GraphNode,
+  LayoutMode,
   UIConfig,
 } from './types';
 import { layoutGraph } from './layout';
@@ -81,14 +83,15 @@ export function normalizeGraph(
   };
 }
 
-export function toSvelteFlowNodes(
+export async function toSvelteFlowNodes(
   model: GraphModel,
   filters: Filters,
   selectedNodeId: string | null,
-  layoutMode: 'freeform' | 'clustered',
+  layoutMode: LayoutMode,
   savedPositions: Record<string, { x: number; y: number }>,
-): Node[] {
-  const visibleNodes = model.nodes.filter((node) => matchesFilters(node, filters));
+  reservedInsets: { top: number; left: number },
+): Promise<Node[]> {
+  const visibleNodes = visibleNodesForFilters(model, filters);
   const allowed = new Set(visibleNodes.map((node) => node.id));
 
   const nodes = visibleNodes.map((node) => ({
@@ -113,7 +116,12 @@ export function toSvelteFlowNodes(
   })) satisfies Node[];
 
   const edges = toSvelteFlowEdges(model, filters, allowed);
-  return layoutGraph(nodes, edges, { mode: layoutMode, savedPositions }).nodes;
+  const laidOut = await layoutGraph(nodes, edges, {
+    mode: layoutMode,
+    savedPositions,
+    reservedInsets,
+  });
+  return laidOut.nodes;
 }
 
 export function toSvelteFlowEdges(
@@ -122,25 +130,27 @@ export function toSvelteFlowEdges(
   allowedNodeIDs?: Set<string>,
 ): Edge[] {
   const visibleNodeIDs = allowedNodeIDs ?? new Set(
-    model.nodes.filter((node) => matchesFilters(node, filters)).map((node) => node.id),
+    visibleNodesForFilters(model, filters).map((node) => node.id),
   );
 
   return model.edges
-    .filter((edge) => visibleNodeIDs.has(edge.from) && visibleNodeIDs.has(edge.to))
+    .filter((edge) => (
+      visibleNodeIDs.has(edge.from) &&
+      visibleNodeIDs.has(edge.to) &&
+      (filters.relationTypes.length === 0 || filters.relationTypes.includes(edge.type))
+    ))
     .map((edge) => ({
       id: edge.id,
       source: edge.from,
       target: edge.to,
       type: 'smoothstep',
+      label: edge.type,
       markerEnd: {
         type: MarkerType.ArrowClosed,
         color: edgeColor(edge.type),
       },
-      style: {
-        stroke: edgeColor(edge.type),
-        strokeWidth: 1.5,
-        opacity: 0.7,
-      },
+      style: `stroke:${edgeColor(edge.type)};stroke-width:1.5;opacity:0.72;`,
+      labelStyle: 'font-size:11px;font-weight:600;color:#4f5b66;background:rgba(255,252,246,0.94);border:1px solid rgba(23,32,39,0.08);border-radius:999px;padding:3px 8px;box-shadow:0 8px 20px rgba(58,39,14,0.08);',
     }));
 }
 
@@ -154,9 +164,13 @@ export function graphStats(model: GraphModel): Record<string, number> {
 }
 
 export function visibleStats(model: GraphModel, filters: Filters): Record<string, number> {
-  const visibleNodes = model.nodes.filter((node) => matchesFilters(node, filters));
+  const visibleNodes = visibleNodesForFilters(model, filters);
   const visibleIDs = new Set(visibleNodes.map((node) => node.id));
-  const visibleEdges = model.edges.filter((edge) => visibleIDs.has(edge.from) && visibleIDs.has(edge.to));
+  const visibleEdges = model.edges.filter((edge) => (
+    visibleIDs.has(edge.from) &&
+    visibleIDs.has(edge.to) &&
+    (filters.relationTypes.length === 0 || filters.relationTypes.includes(edge.type))
+  ));
   return {
     nodes: visibleNodes.length,
     edges: visibleEdges.length,
@@ -194,6 +208,43 @@ export function domainName(model: GraphModel, domainID: string): string {
 
 export function nodeColor(model: GraphModel, nodeType: string): string {
   return model.ui.nodeColors[nodeType as keyof typeof model.ui.nodeColors] ?? DEFAULT_NODE_COLORS.service;
+}
+
+export function visibleNodesForFilters(model: GraphModel, filters: Filters): GraphNode[] {
+  return model.nodes.filter((node) => matchesFilters(node, filters));
+}
+
+export function applyPreset(model: GraphModel, preset: FilterPreset | null, filters: Filters): Filters {
+  const next: Filters = {
+    ...filters,
+    relationTypes: [],
+  };
+
+  if (!preset) {
+    return next;
+  }
+
+  if (preset === 'service-map') {
+    next.nodeTypes = ['service', 'api', 'database'];
+    next.relationTypes = ['calls', 'depends_on', 'stores_in', 'reads_from'];
+    return next;
+  }
+
+  if (preset === 'event-map') {
+    next.nodeTypes = ['event', 'service', 'api'];
+    next.relationTypes = ['emits', 'consumes', 'depends_on'];
+    return next;
+  }
+
+  if (preset === 'producer-consumer') {
+    next.nodeTypes = ['service', 'event', 'api'];
+    next.relationTypes = ['emits', 'consumes'];
+    return next;
+  }
+
+  next.nodeTypes = ['api', 'service', 'database'];
+  next.relationTypes = ['calls', 'depends_on', 'stores_in', 'reads_from'];
+  return next;
 }
 
 function normalizeBackendGraph(graph: BackendGraph): { nodes: GraphNode[]; edges: GraphEdge[] } {
