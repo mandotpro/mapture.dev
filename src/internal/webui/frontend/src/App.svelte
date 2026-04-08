@@ -16,7 +16,6 @@
   import {
     domainName,
     findNode,
-    graphStats,
     normalizeGraph,
     severitySummary,
     teamName,
@@ -26,6 +25,13 @@
   } from './lib/adapter';
   import FlowNode from './lib/FlowNode.svelte';
   import type { Filters, GraphModel, WindowWithPayload } from './lib/types';
+
+  type FilterPopover = 'owners' | 'domains' | 'nodeTypes' | null;
+  type NodePopup = {
+    nodeId: string;
+    x: number;
+    y: number;
+  } | null;
 
   const emptyModel: GraphModel = {
     nodes: [],
@@ -49,12 +55,12 @@
   let flowEdges = $state.raw<Edge[]>([]);
   let loading = $state(true);
   let live = $state(false);
-  let selectedNodeId = $state<string | null>(null);
   let loadError = $state('');
   let sourceLabel = $state('api');
   let fileInput = $state<HTMLInputElement | null>(null);
-  let showFilters = $state(false);
-  let showDiagnostics = $state(false);
+  let searchOpen = $state(false);
+  let activePopover = $state<FilterPopover>(null);
+  let nodePopup = $state<NodePopup>(null);
   let filters = $state.raw<Filters>({
     query: '',
     nodeTypes: [],
@@ -62,19 +68,19 @@
     owners: [],
   });
 
-  const selectedNode = $derived(findNode(model, selectedNodeId));
-  const counts = $derived(graphStats(model));
+  const popupNode = $derived(findNode(model, nodePopup?.nodeId ?? null));
   const visible = $derived(visibleStats(model, filters));
   const summary = $derived(severitySummary(model.diagnostics));
   const typeCounts = $derived(countBy(model.nodes, (node) => node.type));
-  const domainCounts = $derived(countBy(model.nodes, (node) => node.domain));
   const ownerCounts = $derived(countBy(model.nodes, (node) => node.owner));
+  const domainCounts = $derived(countBy(model.nodes, (node) => node.domain));
+  const compactTypePills = $derived(model.nodeTypes.slice(0, 4));
 
   $effect(() => {
-    flowNodes = toSvelteFlowNodes(model, filters, selectedNodeId);
+    flowNodes = toSvelteFlowNodes(model, filters, nodePopup?.nodeId ?? null);
     flowEdges = toSvelteFlowEdges(model, filters);
-    if (selectedNodeId && !matchesSelected(selectedNodeId)) {
-      selectedNodeId = null;
+    if (nodePopup && !matchesFilters(nodePopup.nodeId)) {
+      nodePopup = null;
     }
   });
 
@@ -86,7 +92,7 @@
       const injected = (window as WindowWithPayload).__MAPTURE_DATA__;
       if (injected?.graph) {
         model = normalizeGraph(injected, injected, { teams: [], domains: [], events: [] });
-        sourceLabel = 'static payload';
+        sourceLabel = 'static build';
       } else {
         const payload = await loadGraphFromApi();
         model = normalizeGraph(payload.graph, payload.validation, payload.catalog);
@@ -105,6 +111,7 @@
     if (live || typeof EventSource === 'undefined') {
       return;
     }
+
     live = true;
     const stream = new EventSource('/api/events');
     stream.addEventListener('graph', async () => {
@@ -122,8 +129,27 @@
     });
   }
 
-  function handleNodeClick({ node }: { node: Node }): void {
-    selectedNodeId = node.id;
+  function connectionLabel(): string {
+    if (loadError) {
+      return 'load failed';
+    }
+    if (loading) {
+      return 'loading';
+    }
+    if (sourceLabel.startsWith('file:')) {
+      return 'local file';
+    }
+    return sourceLabel;
+  }
+
+  function connectionTone(): string {
+    if (loadError) {
+      return 'error';
+    }
+    if (summary.warnings > 0) {
+      return 'warning';
+    }
+    return 'ok';
   }
 
   function resetFilters(): void {
@@ -133,10 +159,23 @@
       domains: [],
       owners: [],
     };
-    selectedNodeId = null;
+    activePopover = null;
+    nodePopup = null;
   }
 
-  function toggleFilter(kind: 'nodeTypes' | 'domains' | 'owners', value: string): void {
+  function clearFilter(kind: 'owners' | 'domains' | 'nodeTypes'): void {
+    filters = {
+      ...filters,
+      [kind]: [],
+    };
+  }
+
+  function togglePopover(kind: FilterPopover): void {
+    searchOpen = false;
+    activePopover = activePopover === kind ? null : kind;
+  }
+
+  function toggleFilter(kind: 'owners' | 'domains' | 'nodeTypes', value: string): void {
     const next = new Set(filters[kind]);
     if (next.has(value)) {
       next.delete(value);
@@ -149,21 +188,30 @@
     };
   }
 
-  function matchesSelected(nodeID: string): boolean {
-    const node = model.nodes.find((candidate) => candidate.id === nodeID);
-    if (!node) {
-      return false;
+  function handleNodeClick({ node, event }: { node: Node; event: MouseEvent | TouchEvent }): void {
+    activePopover = null;
+    searchOpen = false;
+
+    let x = 220;
+    let y = 160;
+    if ('touches' in event && event.touches.length > 0) {
+      x = event.touches[0].clientX;
+      y = event.touches[0].clientY;
+    } else if ('clientX' in event) {
+      x = event.clientX;
+      y = event.clientY;
     }
-    return (
-      (filters.nodeTypes.length === 0 || filters.nodeTypes.includes(node.type)) &&
-      (filters.domains.length === 0 || filters.domains.includes(node.domain)) &&
-      (filters.owners.length === 0 || filters.owners.includes(node.owner)) &&
-      (!filters.query ||
-        [node.id, node.name, node.domain, node.owner, node.file, node.summary]
-          .join(' ')
-          .toLowerCase()
-          .includes(filters.query.toLowerCase()))
-    );
+
+    nodePopup = {
+      nodeId: node.id,
+      x,
+      y,
+    };
+  }
+
+  function closeTransientUI(): void {
+    activePopover = null;
+    nodePopup = null;
   }
 
   async function handleFileChange(event: Event): Promise<void> {
@@ -178,7 +226,8 @@
       model = normalizeGraph(payload, payload, { teams: [], domains: [], events: [] });
       sourceLabel = `file: ${file.name}`;
       loadError = '';
-      selectedNodeId = null;
+      nodePopup = null;
+      activePopover = null;
       loading = false;
     } catch (error) {
       loadError = error instanceof Error ? error.message : String(error);
@@ -187,20 +236,22 @@
     }
   }
 
-  function connectionPill(): string {
-    if (loadError) {
-      return 'load failed';
+  function matchesFilters(nodeID: string): boolean {
+    const node = model.nodes.find((candidate) => candidate.id === nodeID);
+    if (!node) {
+      return false;
     }
-    if (loading) {
-      return 'loading';
-    }
-    if (sourceLabel.startsWith('file:')) {
-      return 'local file';
-    }
-    if (sourceLabel === 'static payload') {
-      return 'static build';
-    }
-    return 'live api connected';
+
+    return (
+      (filters.nodeTypes.length === 0 || filters.nodeTypes.includes(node.type)) &&
+      (filters.domains.length === 0 || filters.domains.includes(node.domain)) &&
+      (filters.owners.length === 0 || filters.owners.includes(node.owner)) &&
+      (!filters.query ||
+        [node.id, node.name, node.domain, node.owner, node.file, node.summary]
+          .join(' ')
+          .toLowerCase()
+          .includes(filters.query.toLowerCase()))
+    );
   }
 
   function countBy<T>(items: T[], pick: (item: T) => string): Record<string, number> {
@@ -216,6 +267,41 @@
 
   onMount(() => {
     void boot();
+
+    function handleEscape(event: KeyboardEvent): void {
+      if (event.key === 'Escape') {
+        activePopover = null;
+        nodePopup = null;
+        searchOpen = false;
+      }
+    }
+
+    function handleWindowClick(event: MouseEvent): void {
+      const target = event.target as HTMLElement | null;
+      if (!target) {
+        return;
+      }
+
+      if (
+        target.closest('[data-toolbar-root]') ||
+        target.closest('[data-node-popup]') ||
+        target.closest('.svelte-flow__node')
+      ) {
+        return;
+      }
+
+      activePopover = null;
+      searchOpen = false;
+      nodePopup = null;
+    }
+
+    window.addEventListener('keydown', handleEscape);
+    window.addEventListener('click', handleWindowClick);
+
+    return () => {
+      window.removeEventListener('keydown', handleEscape);
+      window.removeEventListener('click', handleWindowClick);
+    };
   });
 </script>
 
@@ -225,73 +311,67 @@
     edges={flowEdges}
     {nodeTypes}
     fitView
-    fitViewOptions={{ padding: 0.22 }}
-    minZoom={0.12}
-    maxZoom={1.8}
-    nodesDraggable={false}
+    fitViewOptions={{ padding: 0.08 }}
+    minZoom={0.18}
+    maxZoom={2.2}
+    nodesDraggable
     nodesConnectable={false}
     elementsSelectable
     onnodeclick={handleNodeClick}
+    onpaneclick={closeTransientUI}
     attributionPosition="bottom-left"
     class="immersive-flow"
   >
-    <Background color="rgba(24, 34, 40, 0.08)" gap={24} />
+    <Background color="rgba(24, 34, 40, 0.07)" gap={26} />
     <MiniMap position="bottom-left" pannable zoomable />
     <Controls position="bottom-right" />
 
-    <Panel position="top-left" class="overlay-stack overlay-top">
-      <section class="overlay-card overlay-hero">
-        <div class="pill-row">
-          <span class={['pill', 'status', loadError ? 'error' : summary.warnings > 0 ? 'warning' : 'ok'].join(' ')}>
-            {connectionPill()}
-          </span>
-          <span class="pill soft">{visible.nodes} visible nodes</span>
-          <span class="pill soft">{visible.edges} visible edges</span>
-        </div>
-        <div class="overlay-hero__title">
-          <div>
-            <p class="eyebrow">Mapture Explorer</p>
-            <h1>Architecture graph on the full canvas.</h1>
-          </div>
-          <div class="pill-grid">
-            <span class="metric-pill"><strong>{counts.nodes}</strong><small>nodes</small></span>
-            <span class="metric-pill"><strong>{counts.edges}</strong><small>edges</small></span>
-            <span class="metric-pill"><strong>{counts.domains}</strong><small>domains</small></span>
-            <span class="metric-pill"><strong>{counts.owners}</strong><small>teams</small></span>
-          </div>
-        </div>
-        <div class="pill-row pill-row--wrap">
-          {#each model.nodeTypes as nodeType}
-            <span class={"pill type-pill " + nodeType}>
-              {nodeType} {typeCounts[nodeType] ?? 0}
-            </span>
-          {/each}
-        </div>
-      </section>
-    </Panel>
+    <Panel position="top-left" class="top-toolbar-shell">
+      <div class="top-toolbar" data-toolbar-root>
+        <span class={['toolbar-pill', 'status-pill', connectionTone()].join(' ')}>
+          <span class="status-dot"></span>
+          {connectionLabel()}
+        </span>
+        <span class="toolbar-pill soft-pill">{visible.nodes} nodes</span>
+        <span class="toolbar-pill soft-pill">{visible.edges} edges</span>
+        {#each compactTypePills as nodeType}
+          <span class={"toolbar-pill type-pill " + nodeType}>{nodeType} {typeCounts[nodeType] ?? 0}</span>
+        {/each}
 
-    <Panel position="top-right" class="overlay-stack overlay-right">
-      <section class="overlay-card overlay-controls">
-        <div class="control-row">
-          <input bind:value={filters.query} type="search" placeholder="Search id, name, domain, owner, file" />
-          <button type="button" class="secondary" onclick={() => (showFilters = !showFilters)}>
-            {showFilters ? 'Hide filters' : 'Show filters'}
+        <div class="toolbar-spacer"></div>
+
+        <div class="toolbar-search">
+          <button
+            type="button"
+            class={['toolbar-pill', 'toolbar-action', searchOpen ? 'active' : ''].join(' ')}
+            onclick={() => {
+              searchOpen = !searchOpen;
+              activePopover = null;
+            }}
+          >
+            Search
           </button>
-        </div>
-        <div class="control-row">
-          <button type="button" onclick={resetFilters}>Reset</button>
-          <button type="button" class="secondary" onclick={() => fileInput?.click()}>Load JSON</button>
-          <button type="button" class="secondary" onclick={() => (showDiagnostics = !showDiagnostics)}>
-            {showDiagnostics ? 'Hide issues' : 'Show issues'}
-          </button>
-          <input bind:this={fileInput} class="file-input" type="file" accept="application/json,.json" onchange={handleFileChange} />
+          {#if searchOpen}
+            <div class="toolbar-popover search-popover" data-toolbar-root>
+              <input bind:value={filters.query} type="search" placeholder="Search id, name, domain, owner, file" />
+              {#if filters.query}
+                <button type="button" class="mini-action" onclick={() => (filters = { ...filters, query: '' })}>Clear</button>
+              {/if}
+            </div>
+          {/if}
         </div>
 
-        {#if showFilters}
-          <div class="filter-groups">
-            <section>
-              <div class="filter-heading">Teams</div>
-              <div class="chip-grid">
+        <div class="toolbar-filter">
+          <button type="button" class={['toolbar-pill', 'toolbar-action', activePopover === 'owners' ? 'active' : ''].join(' ')} onclick={() => togglePopover('owners')}>
+            Teams
+          </button>
+          {#if activePopover === 'owners'}
+            <div class="toolbar-popover" data-toolbar-root>
+              <div class="popover-head">
+                <strong>Teams</strong>
+                <button type="button" class="mini-action" onclick={() => clearFilter('owners')}>Reset</button>
+              </div>
+              <div class="chip-list">
                 {#each model.owners as owner}
                   <button
                     type="button"
@@ -303,11 +383,21 @@
                   </button>
                 {/each}
               </div>
-            </section>
+            </div>
+          {/if}
+        </div>
 
-            <section>
-              <div class="filter-heading">Domains</div>
-              <div class="chip-grid">
+        <div class="toolbar-filter">
+          <button type="button" class={['toolbar-pill', 'toolbar-action', activePopover === 'domains' ? 'active' : ''].join(' ')} onclick={() => togglePopover('domains')}>
+            Domains
+          </button>
+          {#if activePopover === 'domains'}
+            <div class="toolbar-popover" data-toolbar-root>
+              <div class="popover-head">
+                <strong>Domains</strong>
+                <button type="button" class="mini-action" onclick={() => clearFilter('domains')}>Reset</button>
+              </div>
+              <div class="chip-list">
                 {#each model.domains as domain}
                   <button
                     type="button"
@@ -319,15 +409,25 @@
                   </button>
                 {/each}
               </div>
-            </section>
+            </div>
+          {/if}
+        </div>
 
-            <section>
-              <div class="filter-heading">Node types</div>
-              <div class="chip-grid">
+        <div class="toolbar-filter">
+          <button type="button" class={['toolbar-pill', 'toolbar-action', activePopover === 'nodeTypes' ? 'active' : ''].join(' ')} onclick={() => togglePopover('nodeTypes')}>
+            Types
+          </button>
+          {#if activePopover === 'nodeTypes'}
+            <div class="toolbar-popover" data-toolbar-root>
+              <div class="popover-head">
+                <strong>Types</strong>
+                <button type="button" class="mini-action" onclick={() => clearFilter('nodeTypes')}>Reset</button>
+              </div>
+              <div class="chip-list">
                 {#each model.nodeTypes as nodeType}
                   <button
                     type="button"
-                    class={['filter-chip', 'kind', nodeType, filters.nodeTypes.includes(nodeType) ? 'active' : ''].join(' ')}
+                    class={['filter-chip', 'kind-chip', nodeType, filters.nodeTypes.includes(nodeType) ? 'active' : ''].join(' ')}
                     onclick={() => toggleFilter('nodeTypes', nodeType)}
                   >
                     <span>{nodeType}</span>
@@ -335,84 +435,50 @@
                   </button>
                 {/each}
               </div>
-            </section>
-          </div>
-        {/if}
-      </section>
-    </Panel>
-
-    {#if selectedNode}
-      <Panel position="bottom-right" class="overlay-stack overlay-bottom-right">
-        <section class="overlay-card detail-panel">
-          <div class="detail-heading">
-            <h2>{selectedNode.name}</h2>
-            <span class="pill soft">{selectedNode.type}</span>
-          </div>
-
-          <div class="detail-grid">
-            <div>
-              <span class="detail-label">Node id</span>
-              <div class="mono">{selectedNode.id}</div>
-            </div>
-            <div>
-              <span class="detail-label">Domain</span>
-              <div>{selectedNode.domain ? domainName(model, selectedNode.domain) : 'n/a'}</div>
-            </div>
-            <div>
-              <span class="detail-label">Owner</span>
-              <div>{selectedNode.owner ? teamName(model, selectedNode.owner) : 'n/a'}</div>
-            </div>
-            <div>
-              <span class="detail-label">Source</span>
-              <div class="mono">
-                {#if selectedNode.file}
-                  {selectedNode.file}{selectedNode.line ? `:${selectedNode.line}` : ''}
-                {:else}
-                  n/a
-                {/if}
-              </div>
-            </div>
-            {#if selectedNode.summary}
-              <div class="detail-summary">
-                <span class="detail-label">Summary</span>
-                <p>{selectedNode.summary}</p>
-              </div>
-            {/if}
-          </div>
-        </section>
-      </Panel>
-    {/if}
-
-    {#if showDiagnostics}
-      <Panel position="bottom-left" class="overlay-stack overlay-bottom-left">
-        <section class="overlay-card diagnostics-panel">
-          <div class="detail-heading">
-            <h2>Validation feed</h2>
-            <span class="pill soft">{summary.errors} errors · {summary.warnings} warnings</span>
-          </div>
-
-          {#if loadError}
-            <p class="empty">{loadError}</p>
-          {:else if loading}
-            <p class="empty">Loading graph data…</p>
-          {:else if model.diagnostics.length === 0}
-            <p class="empty">No diagnostics for the current graph.</p>
-          {:else}
-            <div class="diagnostic-list">
-              {#each model.diagnostics as diagnostic}
-                <article class={['diagnostic-item', diagnostic.severity].join(' ')}>
-                  <strong>{diagnostic.message}</strong>
-                  <div class="diag-meta">
-                    {diagnostic.severity} · layer {diagnostic.layer} · {diagnostic.code}
-                    {#if diagnostic.file}
-                      · {diagnostic.file}{diagnostic.line ? `:${diagnostic.line}` : ''}
-                    {/if}
-                  </div>
-                </article>
-              {/each}
             </div>
           {/if}
-        </section>
+        </div>
+
+        <button type="button" class="toolbar-pill toolbar-action" onclick={() => fileInput?.click()}>
+          Load JSON
+        </button>
+        <input bind:this={fileInput} class="file-input" type="file" accept="application/json,.json" onchange={handleFileChange} />
+      </div>
+    </Panel>
+
+    {#if nodePopup && popupNode}
+      <Panel position="top-left" class="node-popup-shell">
+        <article
+          class="node-popup"
+          data-node-popup
+          style={`left:${Math.max(20, Math.min(nodePopup.x + 14, window.innerWidth - 304))}px;top:${Math.max(72, Math.min(nodePopup.y + 14, window.innerHeight - 240))}px;`}
+        >
+          <div class="node-popup__head">
+            <strong>{popupNode.name}</strong>
+            <span class={"toolbar-pill type-pill " + popupNode.type}>{popupNode.type}</span>
+          </div>
+          <div class="popup-meta">
+            <span class="meta-label">Domain</span>
+            <span>{popupNode.domain ? domainName(model, popupNode.domain) : 'n/a'}</span>
+          </div>
+          <div class="popup-meta">
+            <span class="meta-label">Owner</span>
+            <span>{popupNode.owner ? teamName(model, popupNode.owner) : 'n/a'}</span>
+          </div>
+          <div class="popup-meta">
+            <span class="meta-label">Source</span>
+            <span class="mono">
+              {#if popupNode.file}
+                {popupNode.file}{popupNode.line ? `:${popupNode.line}` : ''}
+              {:else}
+                n/a
+              {/if}
+            </span>
+          </div>
+          {#if popupNode.summary}
+            <p class="popup-summary">{popupNode.summary}</p>
+          {/if}
+        </article>
       </Panel>
     {/if}
   </SvelteFlow>

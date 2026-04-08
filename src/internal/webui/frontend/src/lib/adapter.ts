@@ -84,8 +84,10 @@ export function toSvelteFlowNodes(
     position: { x: 0, y: 0 },
     data: {
       label: node.name,
-      subtitle: node.domain ? `${node.domain} · ${node.owner || 'unowned'}` : node.owner || 'unowned',
+      subtitle: node.domain || node.owner || '',
       type: node.type,
+      domain: node.domain,
+      owner: node.owner,
       summary: node.summary,
     },
     sourcePosition: Position.Right,
@@ -116,23 +118,14 @@ export function toSvelteFlowEdges(
       source: edge.from,
       target: edge.to,
       type: 'smoothstep',
-      label: edge.type,
       markerEnd: {
         type: MarkerType.ArrowClosed,
         color: edgeColor(edge.type),
       },
       style: {
         stroke: edgeColor(edge.type),
-        strokeWidth: 1.8,
-      },
-      labelStyle: {
-        fill: '#5c605d',
-        fontSize: 11,
-      },
-      labelBgPadding: [6, 3],
-      labelBgStyle: {
-        fill: 'rgba(255, 251, 242, 0.92)',
-        fillOpacity: 1,
+        strokeWidth: 1.5,
+        opacity: 0.7,
       },
     }));
 }
