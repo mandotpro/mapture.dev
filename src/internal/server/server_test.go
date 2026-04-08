@@ -145,12 +145,24 @@ func TestServeCatalogEndpoint(t *testing.T) {
 		Teams   []map[string]any `json:"teams"`
 		Domains []map[string]any `json:"domains"`
 		Events  []map[string]any `json:"events"`
+		UI      struct {
+			NodeColors map[string]string `json:"nodeColors"`
+		} `json:"ui"`
+		Meta struct {
+			ProjectID string `json:"projectId"`
+		} `json:"meta"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode catalog: %v", err)
 	}
 	if len(payload.Teams) == 0 || len(payload.Domains) == 0 {
 		t.Fatalf("expected populated catalog, got %+v", payload)
+	}
+	if payload.UI.NodeColors["service"] == "" || payload.UI.NodeColors["event"] == "" {
+		t.Fatalf("expected UI node colors in catalog payload, got %+v", payload.UI.NodeColors)
+	}
+	if payload.Meta.ProjectID == "" {
+		t.Fatalf("expected catalog meta.projectId, got %+v", payload.Meta)
 	}
 }
 

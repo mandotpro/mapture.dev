@@ -20,6 +20,7 @@ type Config struct {
 	Languages  Languages  `json:"languages"`
 	Comments   Comments   `json:"comments"`
 	Validation Validation `json:"validation"`
+	UI         UI         `json:"ui"`
 }
 
 // Catalog configures where catalog YAML files live.
@@ -55,6 +56,26 @@ type Validation struct {
 	RequireMetadataOn      []string `json:"requireMetadataOn"`
 	WarnOnOrphanedNodes    bool     `json:"warnOnOrphanedNodes"`
 	WarnOnDeprecatedEvents bool     `json:"warnOnDeprecatedEvents"`
+}
+
+// UI configures optional web explorer presentation settings.
+type UI struct {
+	NodeColors NodeColors `json:"nodeColors"`
+}
+
+// NodeColors controls node-type colors used by the web explorer.
+type NodeColors struct {
+	Service  string `json:"service"`
+	API      string `json:"api"`
+	Database string `json:"database"`
+	Event    string `json:"event"`
+}
+
+var defaultNodeColors = NodeColors{
+	Service:  "#1664d9",
+	API:      "#0f8f78",
+	Database: "#a56614",
+	Event:    "#a73f7f",
 }
 
 // Discover walks up from start until it finds mapture.yaml.
@@ -101,6 +122,7 @@ func Load(path string) (*Config, error) {
 	if !cfg.Languages.PHP && !cfg.Languages.Go && !cfg.Languages.TypeScript && !cfg.Languages.JavaScript {
 		return nil, fmt.Errorf("%s: at least one language must be enabled", path)
 	}
+	cfg.applyDefaults()
 
 	return &cfg, nil
 }
@@ -114,4 +136,19 @@ func (c *Config) CatalogDir(configPath string) (string, error) {
 		return c.Catalog.Dir, nil
 	}
 	return filepath.Join(filepath.Dir(configPath), c.Catalog.Dir), nil
+}
+
+func (c *Config) applyDefaults() {
+	if c.UI.NodeColors.Service == "" {
+		c.UI.NodeColors.Service = defaultNodeColors.Service
+	}
+	if c.UI.NodeColors.API == "" {
+		c.UI.NodeColors.API = defaultNodeColors.API
+	}
+	if c.UI.NodeColors.Database == "" {
+		c.UI.NodeColors.Database = defaultNodeColors.Database
+	}
+	if c.UI.NodeColors.Event == "" {
+		c.UI.NodeColors.Event = defaultNodeColors.Event
+	}
 }

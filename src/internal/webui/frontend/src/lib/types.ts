@@ -42,18 +42,35 @@ export interface CatalogDomain {
 }
 
 export interface CatalogEvent {
-  id: string;
-  name: string;
-  domain: string;
+ id: string;
+ name: string;
+ domain: string;
   owner_team: string;
   status?: string;
   description?: string;
+}
+
+export interface UINodeColors {
+  service?: string;
+  api?: string;
+  database?: string;
+  event?: string;
+}
+
+export interface UIConfig {
+  nodeColors?: UINodeColors;
+}
+
+export interface CatalogMeta {
+  projectId?: string;
 }
 
 export interface CatalogPayload {
   teams?: CatalogTeam[];
   domains?: CatalogDomain[];
   events?: CatalogEvent[];
+  ui?: UIConfig;
+  meta?: CatalogMeta;
 }
 
 export interface ValidationPayload {
@@ -91,6 +108,8 @@ export interface GraphModel {
   teams: Map<string, string>;
   domainNames: Map<string, string>;
   events: Map<string, CatalogEvent>;
+  ui: Required<UIConfig>;
+  projectId: string;
 }
 
 export interface Filters {
@@ -100,6 +119,13 @@ export interface Filters {
   owners: string[];
 }
 
+export interface AppPayload {
+  graph?: ValidationPayload | BackendGraph;
+  validation?: ValidationPayload;
+  catalog?: CatalogPayload;
+  diagnostics?: Diagnostic[];
+}
+
 export interface WindowWithPayload extends Window {
-  __MAPTURE_DATA__?: ValidationPayload;
+  __MAPTURE_DATA__?: ValidationPayload | AppPayload;
 }

@@ -1,10 +1,6 @@
-import type { CatalogPayload, ValidationPayload } from './types';
+import type { AppPayload, CatalogPayload, ValidationPayload } from './types';
 
-export async function loadGraphFromApi(fetcher: typeof fetch = fetch): Promise<{
-  graph: ValidationPayload;
-  validation: ValidationPayload;
-  catalog: CatalogPayload;
-}> {
+export async function loadGraphFromApi(fetcher: typeof fetch = fetch): Promise<AppPayload> {
   const [graphResponse, validationResponse, catalogResponse] = await Promise.all([
     fetcher('/api/graph'),
     fetcher('/api/validate'),

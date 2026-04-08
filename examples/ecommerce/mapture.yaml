@@ -37,3 +37,10 @@ validation:
     - subscriber
     - bridge-out
     - bridge-in
+
+ui:
+  nodeColors:
+    service: "#1d4ed8"
+    api: "#0f766e"
+    database: "#b45309"
+    event: "#be185d"

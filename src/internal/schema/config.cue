@@ -5,6 +5,7 @@ package schema
 #KebabID: =~"^[a-z0-9-]+$"
 #EventID: =~"^[a-z0-9]+(?:\\.[a-z0-9]+)+$"
 #Email:   =~"^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+#HexColor: =~"^#[0-9a-fA-F]{6}$"
 
 #Config: {
 	version: 1
@@ -37,5 +38,14 @@ package schema
 		requireMetadataOn:       *[] | [...#EventRole]
 		warnOnOrphanedNodes:     *false | bool
 		warnOnDeprecatedEvents: *true | bool
+	}
+
+	ui?: {
+		nodeColors?: {
+			service?:  #HexColor
+			api?:      #HexColor
+			database?: #HexColor
+			event?:    #HexColor
+		}
 	}
 }

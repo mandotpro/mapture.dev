@@ -129,6 +129,18 @@ type explorer struct {
 	broadcaster *broadcaster
 }
 
+type catalogResponse struct {
+	Teams   []catalog.Team   `json:"teams"`
+	Domains []catalog.Domain `json:"domains"`
+	Events  []catalog.Event  `json:"events"`
+	UI      config.UI        `json:"ui"`
+	Meta    catalogMeta      `json:"meta"`
+}
+
+type catalogMeta struct {
+	ProjectID string `json:"projectId"`
+}
+
 func newServer(configPath string) (*explorer, error) {
 	return &explorer{
 		configPath:  configPath,
@@ -215,19 +227,19 @@ func (e *explorer) handleCatalog(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	_, cat, _, err := e.loadProject()
+	cfg, cat, _, err := e.loadProject()
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, struct {
-		Teams   []catalog.Team   `json:"teams"`
-		Domains []catalog.Domain `json:"domains"`
-		Events  []catalog.Event  `json:"events"`
-	}{
+	writeJSON(w, catalogResponse{
 		Teams:   cat.Teams,
 		Domains: cat.Domains,
 		Events:  cat.Events,
+		UI:      cfg.UI,
+		Meta: catalogMeta{
+			ProjectID: filepath.Dir(e.configPath),
+		},
 	})
 }
 

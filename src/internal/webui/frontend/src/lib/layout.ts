@@ -15,15 +15,26 @@ type SimNode = {
   vy: number;
 };
 
-export function layoutGraph(nodes: Node[], edges: Edge[]): { nodes: Node[]; edges: Edge[] } {
+type LayoutMode = 'freeform' | 'clustered';
+
+type LayoutOptions = {
+  mode: LayoutMode;
+  savedPositions: Record<string, { x: number; y: number }>;
+};
+
+export function layoutGraph(nodes: Node[], edges: Edge[], options: LayoutOptions): { nodes: Node[]; edges: Edge[] } {
   if (nodes.length === 0) {
     return { nodes, edges };
   }
 
+  const clusterStrength = options.mode === 'clustered' ? 0.19 : 0.1;
+  const linkStrength = options.mode === 'clustered' ? 0.22 : 0.12;
+  const linkDistance = options.mode === 'clustered' ? 96 : 118;
   const domainCenters = buildDomainCenters(nodes);
   const random = mulberry32(hashSeed(nodes.map((node) => node.id).join('|')));
 
   const simNodes: SimNode[] = nodes.map((node) => {
+    const saved = options.savedPositions[node.id];
     const domain = readString(node, 'domain');
     const owner = readString(node, 'owner');
     const center = domainCenters.get(domain) ?? { x: 0, y: 0 };
@@ -33,8 +44,8 @@ export function layoutGraph(nodes: Node[], edges: Edge[]): { nodes: Node[]; edge
       id: node.id,
       domain,
       owner,
-      x: center.x + (random() - 0.5) * 140 + ownerOffset - 20,
-      y: center.y + (random() - 0.5) * 140 - ownerOffset + 20,
+      x: saved?.x ?? center.x + (random() - 0.5) * 140 + ownerOffset - 20,
+      y: saved?.y ?? center.y + (random() - 0.5) * 140 - ownerOffset + 20,
       vx: 0,
       vy: 0,
     };
@@ -45,23 +56,15 @@ export function layoutGraph(nodes: Node[], edges: Edge[]): { nodes: Node[]; edge
     .force('collide', forceCollide<SimNode>().radius(56).strength(0.95))
     .force('link', forceLink<SimNode, { source: string; target: string }>(
       edges.map((edge) => ({ source: edge.source, target: edge.target })),
-    ).id((node) => node.id).distance(110).strength(0.16))
+    ).id((node) => node.id).distance(linkDistance).strength(linkStrength))
     .force('center', forceCenter(0, 0))
-    .force('cluster-x', forceX<SimNode>((node) => (domainCenters.get(node.domain) ?? { x: 0 }).x).strength(0.11))
-    .force('cluster-y', forceY<SimNode>((node) => (domainCenters.get(node.domain) ?? { y: 0 }).y).strength(0.11))
+    .force('cluster-x', forceX<SimNode>((node) => (domainCenters.get(node.domain) ?? { x: 0 }).x).strength(clusterStrength))
+    .force('cluster-y', forceY<SimNode>((node) => (domainCenters.get(node.domain) ?? { y: 0 }).y).strength(clusterStrength))
     .stop();
 
   for (let tick = 0; tick < TICKS; tick += 1) {
     simulation.tick();
   }
-
-  const bounds = simNodes.reduce(
-    (result, node) => ({
-      minX: Math.min(result.minX, node.x),
-      minY: Math.min(result.minY, node.y),
-    }),
-    { minX: Number.POSITIVE_INFINITY, minY: Number.POSITIVE_INFINITY },
-  );
 
   const byID = new Map(simNodes.map((node) => [node.id, node]));
 
@@ -73,8 +76,8 @@ export function layoutGraph(nodes: Node[], edges: Edge[]): { nodes: Node[]; edge
         width: NODE_WIDTH,
         height: NODE_HEIGHT,
         position: {
-          x: (position?.x ?? 0) - bounds.minX + 40,
-          y: (position?.y ?? 0) - bounds.minY + 40,
+          x: position?.x ?? 180,
+          y: position?.y ?? 140,
         },
       };
     }),
@@ -85,9 +88,11 @@ export function layoutGraph(nodes: Node[], edges: Edge[]): { nodes: Node[]; edge
 function buildDomainCenters(nodes: Node[]): Map<string, { x: number; y: number }> {
   const domains = Array.from(new Set(nodes.map((node) => readString(node, 'domain') || 'unassigned'))).sort();
   const centers = new Map<string, { x: number; y: number }>();
+  const centerX = 420;
+  const centerY = 280;
 
   if (domains.length === 1) {
-    centers.set(domains[0], { x: 0, y: 0 });
+    centers.set(domains[0], { x: centerX, y: centerY });
     return centers;
   }
 
@@ -95,8 +100,8 @@ function buildDomainCenters(nodes: Node[]): Map<string, { x: number; y: number }
   domains.forEach((domain, index) => {
     const angle = (index / domains.length) * Math.PI * 2;
     centers.set(domain, {
-      x: Math.cos(angle) * radius,
-      y: Math.sin(angle) * radius,
+      x: centerX + Math.cos(angle) * radius,
+      y: centerY + Math.sin(angle) * radius,
     });
   });
 

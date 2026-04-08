@@ -27,3 +27,10 @@ validation:
   requireMetadataOn:
     - trigger
     - listener
+
+ui:
+  nodeColors:
+    service: "#2563eb"
+    api: "#0f766e"
+    database: "#b45309"
+    event: "#be185d"

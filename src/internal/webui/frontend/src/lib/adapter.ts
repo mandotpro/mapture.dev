@@ -1,5 +1,6 @@
 import { MarkerType, Position, type Edge, type Node } from '@xyflow/svelte';
 import type {
+  AppPayload,
   BackendGraph,
   CatalogPayload,
   CatalogEvent,
@@ -8,11 +9,12 @@ import type {
   GraphEdge,
   GraphModel,
   GraphNode,
+  UIConfig,
   ValidationPayload,
 } from './types';
 import { layoutGraph } from './layout';
 
-const NODE_COLORS: Record<string, string> = {
+const DEFAULT_NODE_COLORS: Required<NonNullable<UIConfig['nodeColors']>> = {
   service: '#1664d9',
   api: '#0f8f78',
   database: '#a56614',
@@ -67,6 +69,10 @@ export function normalizeGraph(
     teams,
     domainNames,
     events,
+    ui: {
+      nodeColors: resolveNodeColors(catalogPayload.ui),
+    },
+    projectId: catalogPayload.meta?.projectId ?? '',
   };
 }
 
@@ -74,6 +80,8 @@ export function toSvelteFlowNodes(
   model: GraphModel,
   filters: Filters,
   selectedNodeId: string | null,
+  layoutMode: 'freeform' | 'clustered',
+  savedPositions: Record<string, { x: number; y: number }>,
 ): Node[] {
   const visibleNodes = model.nodes.filter((node) => matchesFilters(node, filters));
   const allowed = new Set(visibleNodes.map((node) => node.id));
@@ -89,17 +97,18 @@ export function toSvelteFlowNodes(
       domain: node.domain,
       owner: node.owner,
       summary: node.summary,
+      color: nodeColor(model, node.type),
     },
     sourcePosition: Position.Right,
     targetPosition: Position.Left,
     selectable: true,
-    draggable: false,
+    draggable: true,
     connectable: false,
     class: selectedNodeId === node.id ? 'selected' : '',
   })) satisfies Node[];
 
   const edges = toSvelteFlowEdges(model, filters, allowed);
-  return layoutGraph(nodes, edges).nodes;
+  return layoutGraph(nodes, edges, { mode: layoutMode, savedPositions }).nodes;
 }
 
 export function toSvelteFlowEdges(
@@ -178,6 +187,31 @@ export function domainName(model: GraphModel, domainID: string): string {
   return model.domainNames.get(domainID) ?? domainID;
 }
 
+export function nodeColor(model: GraphModel, nodeType: string): string {
+  return model.ui.nodeColors[nodeType as keyof typeof model.ui.nodeColors] ?? DEFAULT_NODE_COLORS.service;
+}
+
+export function normalizePayload(payload: ValidationPayload | AppPayload, sourceLabel: string): {
+  model: GraphModel;
+  sourceLabel: string;
+} {
+  if ('graph' in payload || 'validation' in payload || 'catalog' in payload) {
+    const appPayload = payload as AppPayload;
+    const graphPayload = asValidationPayload(appPayload.graph ?? appPayload.validation ?? {});
+    const validationPayload = asValidationPayload(appPayload.validation ?? appPayload.graph ?? {});
+    const model = normalizeGraph(
+      graphPayload,
+      validationPayload,
+      appPayload.catalog ?? { teams: [], domains: [], events: [] },
+    );
+    return { model, sourceLabel };
+  }
+
+  const validationPayload = payload as ValidationPayload;
+  const model = normalizeGraph(validationPayload, validationPayload, { teams: [], domains: [], events: [] });
+  return { model, sourceLabel };
+}
+
 function normalizeBackendGraph(graph: BackendGraph): { nodes: GraphNode[]; edges: GraphEdge[] } {
   return {
     nodes: (graph.nodes ?? []).map((node) => ({
@@ -234,6 +268,24 @@ function unique(values: string[]): string[] {
 function inferNodeType(nodeID: string): string {
   const [kind] = nodeID.split(':', 1);
   return kind || 'service';
+}
+
+function resolveNodeColors(ui: UIConfig | undefined): Required<NonNullable<UIConfig['nodeColors']>> {
+  return {
+    service: ui?.nodeColors?.service ?? DEFAULT_NODE_COLORS.service,
+    api: ui?.nodeColors?.api ?? DEFAULT_NODE_COLORS.api,
+    database: ui?.nodeColors?.database ?? DEFAULT_NODE_COLORS.database,
+    event: ui?.nodeColors?.event ?? DEFAULT_NODE_COLORS.event,
+  };
+}
+
+function asValidationPayload(payload: ValidationPayload | BackendGraph): ValidationPayload {
+  if ('nodes' in payload || 'edges' in payload) {
+    return {
+      graph: payload,
+    };
+  }
+  return payload;
 }
 
 function edgeColor(edgeType: string): string {

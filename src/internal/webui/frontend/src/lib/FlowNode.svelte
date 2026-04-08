@@ -10,7 +10,7 @@
 </script>
 
 <Handle type="target" position={targetPosition} />
-<article class={['mapture-node', data.type, selected ? 'selected' : ''].join(' ')}>
+<article class={['mapture-node', data.type, selected ? 'selected' : ''].join(' ')} style={`--node-color:${data.color};`}>
   <div class="mapture-node__eyebrow">
     <span class="mapture-node__dot"></span>
     <span>{data.type}</span>
