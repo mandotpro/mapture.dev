@@ -8,9 +8,10 @@ export const NODE_HEIGHT = 82;
 
 const VIEWPORT_MARGIN = 56;
 const WORKBENCH_TICKS = 220;
-const EVENT_FLOW_STAGE_GAP = 244;
-const EVENT_FLOW_DOMAIN_GAP = 56;
-const EVENT_FLOW_NODE_GAP = 26;
+const EVENT_FLOW_STAGE_GAP = 308;
+const EVENT_FLOW_DOMAIN_GAP = 108;
+const EVENT_FLOW_ROW_GAP = 42;
+const EVENT_FLOW_MIN_ROWS = 2;
 const LANE_WIDTH = 368;
 const LANE_GAP = 72;
 const LANE_COLUMN_GAP = 18;
@@ -227,15 +228,17 @@ function layoutWithEventFlow(
   const stageOrder = ['support', 'producer', 'event', 'consumer'] as const;
   const domains = sortedDomains(nodes);
   const domainStartY = new Map<string, number>();
+  const domainRowCount = new Map<string, number>();
   let cursorY = options.reservedInsets.top + VIEWPORT_MARGIN;
 
   for (const domain of domains) {
     const stageCounts = stageOrder.map((stage) => (
       nodes.filter((node) => readString(node, 'domain') === domain && readString(node, 'stage') === stage).length
     ));
-    const domainRows = Math.max(1, ...stageCounts);
+    const domainRows = Math.max(EVENT_FLOW_MIN_ROWS, ...stageCounts);
     domainStartY.set(domain, cursorY);
-    cursorY += domainRows * (NODE_HEIGHT + EVENT_FLOW_NODE_GAP) + EVENT_FLOW_DOMAIN_GAP;
+    domainRowCount.set(domain, domainRows);
+    cursorY += domainRows * (NODE_HEIGHT + EVENT_FLOW_ROW_GAP) + EVENT_FLOW_DOMAIN_GAP;
   }
 
   const stageX = new Map<string, number>();
@@ -263,18 +266,35 @@ function layoutWithEventFlow(
       const key = `${stage}:${domain}`;
       const siblings = nodesByStageDomain.get(key) ?? [];
       const index = siblings.findIndex((candidate) => candidate.id === node.id);
+      const slots = distributeEventFlowSlots(domainRowCount.get(domain) ?? EVENT_FLOW_MIN_ROWS, siblings.length);
+      const slotIndex = index >= 0 ? slots[index] ?? index : 0;
       return {
         ...node,
         width: NODE_WIDTH,
         height: NODE_HEIGHT,
         position: {
           x: stageX.get(stage) ?? stageX.get('support') ?? 180,
-          y: (domainStartY.get(domain) ?? options.reservedInsets.top + VIEWPORT_MARGIN) + index * (NODE_HEIGHT + EVENT_FLOW_NODE_GAP),
+          y: Math.round((domainStartY.get(domain) ?? options.reservedInsets.top + VIEWPORT_MARGIN) + slotIndex * (NODE_HEIGHT + EVENT_FLOW_ROW_GAP)),
         },
       };
     }),
     edges,
   };
+}
+
+function distributeEventFlowSlots(domainRows: number, count: number): number[] {
+  if (count <= 0) {
+    return [];
+  }
+  if (count === 1) {
+    return [(domainRows - 1) / 2];
+  }
+  if (count >= domainRows) {
+    return Array.from({ length: count }, (_, index) => index);
+  }
+
+  const step = (domainRows - 1) / (count - 1);
+  return Array.from({ length: count }, (_, index) => step * index);
 }
 
 function layoutWithDomainLanes(
