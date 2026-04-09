@@ -3,7 +3,7 @@
 > Repo-native architecture mapping that stays close to the code.
 
 [![CI](https://github.com/mandotpro/mapture.dev/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/mandotpro/mapture.dev/actions/workflows/ci.yml)
-[![Nightly](https://github.com/mandotpro/mapture.dev/actions/workflows/nightly.yml/badge.svg?branch=main)](https://github.com/mandotpro/mapture.dev/actions/workflows/nightly.yml)
+[![Canary](https://github.com/mandotpro/mapture.dev/actions/workflows/canary.yml/badge.svg?branch=main)](https://github.com/mandotpro/mapture.dev/actions/workflows/canary.yml)
 [![Release](https://img.shields.io/github/v/release/mandotpro/mapture.dev?display_name=tag)](https://github.com/mandotpro/mapture.dev/releases)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/mandotpro/mapture.dev)](https://github.com/mandotpro/mapture.dev/blob/main/go.mod)
 [![License](https://img.shields.io/github/license/mandotpro/mapture.dev)](./LICENSE)
@@ -34,9 +34,9 @@ Then open the local explorer and inspect the bundled example graph.
 
 Download a prebuilt binary from [GitHub Releases](https://github.com/mandotpro/mapture.dev/releases).
 
-### Nightly builds
+### Canary builds
 
-Nightly prereleases from `main` are published at [the rolling nightly release](https://github.com/mandotpro/mapture.dev/releases/tag/nightly).
+Rolling canary prereleases from the latest successful `main` build are published at [the canary release](https://github.com/mandotpro/mapture.dev/releases/tag/canary).
 
 ### Build from source
 
@@ -58,7 +58,7 @@ go install github.com/mandotpro/mapture.dev@latest
 - Comments-first only. No AST or Tree-sitter source analysis yet.
 - The public graph and UI are still evolving under pre-`v1.0.0` versioning.
 - HTML export and AI bundle export are planned, but not yet implemented.
-- Release channels are early: nightly builds are convenient for evaluation, not stability guarantees.
+- Release channels are early: canary builds are convenient for evaluation, not stability guarantees.
 
 ## Why comments-first
 
@@ -88,7 +88,7 @@ That means:
 ## Release channels
 
 - Stable releases use semver tags and are published through the automated release flow.
-- Nightly builds are rolling prereleases from the latest successful `main` build.
+- Canary builds are rolling prereleases from the latest successful `main` build.
 - Stable version bumps are driven by Conventional Commit style squash-merge titles.
 
 ## Contributing and support
