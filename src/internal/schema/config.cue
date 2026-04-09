@@ -41,6 +41,7 @@ package schema
 	}
 
 	ui?: {
+		defaultLayout?: *"elk-horizontal" | "freeform" | "clustered"
 		nodeColors?: {
 			service?:  #HexColor
 			api?:      #HexColor

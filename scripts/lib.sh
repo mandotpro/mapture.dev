@@ -24,6 +24,10 @@ outputs_dir() {
   printf '%s/outputs\n' "$(testing_dir)"
 }
 
+testing_examples_dir() {
+  printf '%s/examples\n' "$(testing_dir)"
+}
+
 ensure_gotestsum() {
   local tools_dir bin version
   tools_dir="$(tools_bin_dir)"

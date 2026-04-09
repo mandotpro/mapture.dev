@@ -6,6 +6,14 @@
 // Validation enforces the allowed set in the validator package.
 package graph
 
+import "time"
+
+// SchemaVersion is the stable public graph JSON contract version.
+const SchemaVersion = 1
+
+// DefaultScannerVersion is used until release/version injection is wired.
+const DefaultScannerVersion = "dev"
+
 // NodeType values supported in v1.
 const (
 	NodeService  = "service"
@@ -55,9 +63,39 @@ type Edge struct {
 	Type string `json:"type"`
 }
 
+// Metadata describes how and from where a graph snapshot was produced.
+type Metadata struct {
+	GeneratedAt    string `json:"generatedAt"`
+	ScannerVersion string `json:"scannerVersion"`
+	SourceRoot     string `json:"sourceRoot"`
+}
+
 // Graph is the normalized scan result. It is the shared payload between
 // scanner output, validator input, and every exporter.
 type Graph struct {
-	Nodes []Node `json:"nodes"`
-	Edges []Edge `json:"edges"`
+	SchemaVersion int      `json:"schemaVersion"`
+	Metadata      Metadata `json:"metadata"`
+	Nodes         []Node   `json:"nodes"`
+	Edges         []Edge   `json:"edges"`
+}
+
+// NewMetadata builds a stable metadata payload for public graph JSON.
+func NewMetadata(sourceRoot string, generatedAt time.Time, scannerVersion string) Metadata {
+	if generatedAt.IsZero() {
+		generatedAt = time.Now().UTC()
+	} else {
+		generatedAt = generatedAt.UTC()
+	}
+	if scannerVersion == "" {
+		scannerVersion = DefaultScannerVersion
+	}
+	if sourceRoot == "" {
+		sourceRoot = "."
+	}
+
+	return Metadata{
+		GeneratedAt:    generatedAt.Format(time.RFC3339),
+		ScannerVersion: scannerVersion,
+		SourceRoot:     sourceRoot,
+	}
 }

@@ -29,6 +29,7 @@ validation:
     - listener
 
 ui:
+  defaultLayout: elk-horizontal
   nodeColors:
     service: "#2563eb"
     api: "#0f766e"

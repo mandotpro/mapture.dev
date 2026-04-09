@@ -6,6 +6,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -19,6 +20,7 @@ import (
 	"github.com/mandotpro/mapture.dev/src/internal/catalog"
 	"github.com/mandotpro/mapture.dev/src/internal/config"
 	exportermermaid "github.com/mandotpro/mapture.dev/src/internal/exporter/mermaid"
+	"github.com/mandotpro/mapture.dev/src/internal/projectscope"
 	"github.com/mandotpro/mapture.dev/src/internal/scanner"
 	"github.com/mandotpro/mapture.dev/src/internal/server"
 	"github.com/mandotpro/mapture.dev/src/internal/ui"
@@ -92,21 +94,31 @@ func newInitCmd() *cobra.Command {
 }
 
 func newValidateCmd() *cobra.Command {
-	return &cobra.Command{
+	c := &cobra.Command{
 		Use:   "validate [path]",
 		Short: "Validate config, catalogs, comments, and graph references",
 		Args:  cobra.MaximumNArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			target := "."
 			if len(args) > 0 {
 				target = args[0]
 			}
-			return runValidate(target, commandStdout, commandStderr)
+			scopes, err := cmd.Flags().GetStringSlice("scope")
+			if err != nil {
+				return err
+			}
+			return runValidateWithScopes(target, scopes, commandStdout, commandStderr)
 		},
 	}
+	bindScopeFlag(c)
+	return c
 }
 
 func runValidate(target string, stdout, stderr io.Writer) error {
+	return runValidateWithScopes(target, nil, stdout, stderr)
+}
+
+func runValidateWithScopes(target string, scopes []string, stdout, stderr io.Writer) error {
 	reporter := ui.NewReporter(stdout, stderr)
 
 	if err := reporter.Stage("Resolving project", target); err != nil {
@@ -147,10 +159,14 @@ func runValidate(target string, stdout, stderr io.Writer) error {
 	}
 
 	projectRoot := filepath.Dir(configPath)
+	scoped, err := projectscope.Apply(projectRoot, cfg, scopes)
+	if err != nil {
+		return err
+	}
 	if err := reporter.Stage("Scanning sources", filepath.Clean(projectRoot)); err != nil {
 		return err
 	}
-	blocks, err := scanner.Scan(projectRoot, cfg)
+	blocks, err := scanner.Scan(projectRoot, scoped.Config)
 	if err != nil {
 		return err
 	}
@@ -161,7 +177,10 @@ func runValidate(target string, stdout, stderr io.Writer) error {
 	if err := reporter.Stage("Building graph", "layers 4-6"); err != nil {
 		return err
 	}
-	result, err := validator.Build(cfg, c, blocks)
+	result, err := validator.Build(cfg, c, blocks, validator.BuildOptions{
+		SourceRoot: projectRoot,
+		Scoped:     scoped.Scoped,
+	})
 	if result != nil {
 		if diagErr := reporter.Diagnostics(result.Diagnostics); diagErr != nil {
 			return diagErr
@@ -177,13 +196,21 @@ func runValidate(target string, stdout, stderr io.Writer) error {
 	return reporter.Success("Validation complete", fmt.Sprintf("config=%s", filepath.Clean(configPath)))
 }
 
-func validateProject(root string, cfg *config.Config, c *catalog.Catalog) ([]scanner.RawBlock, *validator.Result, error) {
-	blocks, err := scanner.Scan(root, cfg)
+func validateProject(root string, cfg *config.Config, c *catalog.Catalog, scopes []string) ([]scanner.RawBlock, *validator.Result, error) {
+	scoped, err := projectscope.Apply(root, cfg, scopes)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	result, err := validator.Build(cfg, c, blocks)
+	blocks, err := scanner.Scan(root, scoped.Config)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	result, err := validator.Build(cfg, c, blocks, validator.BuildOptions{
+		SourceRoot: root,
+		Scoped:     scoped.Scoped,
+	})
 	if err != nil {
 		return blocks, result, err
 	}
@@ -236,14 +263,18 @@ func countErrors(diagnostics []validator.Diagnostic) int {
 }
 
 func newScanCmd() *cobra.Command {
-	return &cobra.Command{
+	c := &cobra.Command{
 		Use:   "scan [path]",
 		Short: "Parse comments and emit normalized graph JSON",
 		Args:  cobra.MaximumNArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			target := "."
 			if len(args) > 0 {
 				target = args[0]
+			}
+			scopes, err := cmd.Flags().GetStringSlice("scope")
+			if err != nil {
+				return err
 			}
 
 			configPath, cfg, _, err := loadProject(target)
@@ -251,16 +282,23 @@ func newScanCmd() *cobra.Command {
 				return err
 			}
 
-			blocks, err := scanner.Scan(filepath.Dir(configPath), cfg)
+			scoped, err := projectscope.Apply(filepath.Dir(configPath), cfg, scopes)
 			if err != nil {
 				return err
 			}
 
-			encoder := json.NewEncoder(os.Stdout)
+			blocks, err := scanner.Scan(filepath.Dir(configPath), scoped.Config)
+			if err != nil {
+				return err
+			}
+
+			encoder := json.NewEncoder(cmd.OutOrStdout())
 			encoder.SetIndent("", "  ")
 			return encoder.Encode(blocks)
 		},
 	}
+	bindScopeFlag(c)
+	return c
 }
 
 func newGraphCmd() *cobra.Command {
@@ -273,12 +311,16 @@ func newGraphCmd() *cobra.Command {
 			if len(args) > 0 {
 				target = args[0]
 			}
+			scopes, err := cmd.Flags().GetStringSlice("scope")
+			if err != nil {
+				return err
+			}
 
 			configPath, cfg, c, err := loadProject(target)
 			if err != nil {
 				return err
 			}
-			blocks, result, err := validateProject(filepath.Dir(configPath), cfg, c)
+			blocks, result, err := validateProject(filepath.Dir(configPath), cfg, c, scopes)
 			_ = blocks
 			if err != nil {
 				return err
@@ -322,6 +364,7 @@ func newGraphCmd() *cobra.Command {
 	c.Flags().StringSlice("domain", nil, "include only nodes in the given domain ids")
 	c.Flags().StringSlice("team", nil, "include only nodes owned by the given team ids")
 	c.Flags().StringSlice("type", nil, "include only nodes of the given node types")
+	bindScopeFlag(c)
 	return c
 }
 
@@ -348,35 +391,66 @@ func newServeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			scopes, err := cmd.Flags().GetStringSlice("scope")
+			if err != nil {
+				return err
+			}
 
 			configPath, err := config.Discover(target)
 			if err != nil {
 				return err
 			}
 
-			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM, syscall.SIGTSTP)
 			defer stop()
 
 			opts := server.Options{
 				ConfigPath: configPath,
 				Addr:       addr,
+				Scopes:     scopes,
 				Watch:      !noWatch,
 				OnReady: func(url string) {
-					_, _ = fmt.Fprintf(os.Stdout, "mapture serve: listening on %s (config=%s)\n", url, configPath)
+					writeCommandf(commandStdout, "mapture serve: listening on %s (config=%s)\n", url, configPath)
 					if open {
 						if err := openBrowser(url); err != nil {
-							_, _ = fmt.Fprintf(os.Stderr, "mapture serve: could not open browser: %v\n", err)
+							writeCommandf(commandStderr, "mapture serve: could not open browser: %v\n", err)
 						}
 					}
 				},
 			}
-			return server.Serve(ctx, opts)
+			if err := server.Serve(ctx, opts); err != nil {
+				reportServeError(commandStderr, addr, err)
+				return err
+			}
+			return nil
 		},
 	}
 	c.Flags().String("addr", server.DefaultAddr, "listen address")
 	c.Flags().Bool("no-watch", false, "disable filesystem watching and live reload")
 	c.Flags().Bool("open", false, "open the explorer in the default browser on start")
+	bindScopeFlag(c)
 	return c
+}
+
+func bindScopeFlag(c *cobra.Command) {
+	c.Flags().StringSlice("scope", nil, "narrow scanning to one or more project-relative files or directories")
+}
+
+func writeCommandf(w io.Writer, format string, args ...any) {
+	if w == nil {
+		return
+	}
+	_, _ = fmt.Fprintf(w, format, args...)
+}
+
+func reportServeError(w io.Writer, addr string, err error) {
+	if err == nil {
+		return
+	}
+	writeCommandf(w, "mapture serve: %v\n", err)
+	if errors.Is(err, syscall.EADDRINUSE) {
+		writeCommandf(w, "mapture serve: %s is already in use; if you suspended a previous server with Ctrl-Z, run `jobs`, `fg`, or `kill %%<job>` and try again\n", addr)
+	}
 }
 
 func openBrowser(url string) error {

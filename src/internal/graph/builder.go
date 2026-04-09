@@ -43,7 +43,7 @@ func (b *Builder) HasNode(nodeID string) bool {
 }
 
 // Build returns a stable graph snapshot sorted for deterministic output.
-func (b *Builder) Build() Graph {
+func (b *Builder) Build(metadata Metadata) Graph {
 	nodes := make([]Node, 0, len(b.nodes))
 	for _, node := range b.nodes {
 		nodes = append(nodes, node)
@@ -64,7 +64,9 @@ func (b *Builder) Build() Graph {
 	})
 
 	return Graph{
-		Nodes: nodes,
-		Edges: edges,
+		SchemaVersion: SchemaVersion,
+		Metadata:      metadata,
+		Nodes:         nodes,
+		Edges:         edges,
 	}
 }

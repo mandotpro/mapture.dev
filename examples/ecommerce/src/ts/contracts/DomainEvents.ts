@@ -7,7 +7,7 @@
  * @arch.name Order Placed Event
  * @arch.domain orders
  * @arch.owner team-commerce
- * @arch.description Canonical contract for a newly placed order.
+ * @arch.description Shared contract emitted when checkout commits a new order and downstream commerce workflows should begin. Billing, inventory, and notifications all depend on it, and version drift is the failure mode this contract keeps visible.
  * @event.id order.placed
  * @event.role definition
  * @event.domain orders
@@ -25,7 +25,7 @@ export interface OrderPlacedEvent {
  * @arch.name Payment Captured Event
  * @arch.domain billing
  * @arch.owner team-commerce
- * @arch.description Contract used by shipping and notifications after a successful payment capture.
+ * @arch.description Shared contract for a successfully captured payment after billing durably records the gateway result. Shipping and notifications consume it next, and schema drift would create duplicate shipment or messaging side effects.
  * @event.id payment.captured
  * @event.role definition
  * @event.domain billing
@@ -43,7 +43,7 @@ export interface PaymentCapturedEvent {
  * @arch.name Shipment Created Event
  * @arch.domain shipping
  * @arch.owner team-operations
- * @arch.description Contract sent when a carrier label is created.
+ * @arch.description Shared shipment contract emitted once shipping stores a carrier label and tracking number. Notifications rely on it for customer updates, and missing tracking fields are the failure mode this contract makes explicit.
  * @event.id shipment.created
  * @event.role definition
  * @event.domain shipping
@@ -61,7 +61,7 @@ export interface ShipmentCreatedEvent {
  * @arch.name Notification Sent Event
  * @arch.domain notifications
  * @arch.owner team-engagement
- * @arch.description Internal delivery contract used by notification telemetry consumers.
+ * @arch.description Internal delivery contract published after notification-service hands work to the messaging pipeline. Subscribers use it for telemetry and support timelines, and delivery payload drift is the failure mode this shared definition prevents.
  * @event.id notification.sent
  * @event.role definition
  * @event.domain notifications

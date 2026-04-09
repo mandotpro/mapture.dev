@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/mandotpro/mapture.dev/src/internal/catalog"
 	"github.com/mandotpro/mapture.dev/src/internal/config"
@@ -32,6 +33,14 @@ type Diagnostic struct {
 type Result struct {
 	Graph       graph.Graph  `json:"graph"`
 	Diagnostics []Diagnostic `json:"diagnostics,omitempty"`
+}
+
+// BuildOptions control metadata attached to the normalized graph.
+type BuildOptions struct {
+	SourceRoot     string
+	GeneratedAt    time.Time
+	ScannerVersion string
+	Scoped         bool
 }
 
 // ValidationError reports one or more validation errors.
@@ -70,7 +79,7 @@ func (e *ValidationError) Error() string {
 
 // Build validates scanned blocks against catalog/config state and returns
 // the normalized graph plus any warnings.
-func Build(cfg *config.Config, cat *catalog.Catalog, blocks []scanner.RawBlock) (*Result, error) {
+func Build(cfg *config.Config, cat *catalog.Catalog, blocks []scanner.RawBlock, opts ...BuildOptions) (*Result, error) {
 	result := &Result{}
 	if cfg == nil {
 		return result, fmt.Errorf("config is nil")
@@ -80,10 +89,20 @@ func Build(cfg *config.Config, cat *catalog.Catalog, blocks []scanner.RawBlock) 
 	}
 
 	builder := graph.NewBuilder()
+	buildOptions := BuildOptions{}
+	if len(opts) > 0 {
+		buildOptions = opts[0]
+	}
 	archNodes := make(map[string]graph.Node)
 	fileNodes := make(map[string][]graph.Node)
+	referencedEventIDs, requiredNodeRefs := collectScopedRefs(blocks)
 
 	for _, event := range cat.Events {
+		if buildOptions.Scoped {
+			if _, ok := referencedEventIDs[event.ID]; !ok {
+				continue
+			}
+		}
 		node := graph.Node{
 			ID:      eventNodeID(event.ID),
 			Type:    graph.NodeEvent,
@@ -133,6 +152,12 @@ func Build(cfg *config.Config, cat *catalog.Catalog, blocks []scanner.RawBlock) 
 			}
 			for relation, targets := range block.Relations {
 				for _, target := range targets {
+					if buildOptions.Scoped {
+						requiredNodeRefs[fmt.Sprintf("%s:%s", target.Type, target.ID)] = nodeRef{
+							Type: target.Type,
+							ID:   target.ID,
+						}
+					}
 					builder.AddEdge(graph.Edge{
 						From: sourceNode.ID,
 						To:   fmt.Sprintf("%s:%s", target.Type, target.ID),
@@ -159,6 +184,12 @@ func Build(cfg *config.Config, cat *catalog.Catalog, blocks []scanner.RawBlock) 
 			if relation.FromEvent {
 				from, to = to, from
 			}
+			if buildOptions.Scoped {
+				requiredNodeRefs[eventNodeID(block.Fields["id"])] = nodeRef{
+					Type: graph.NodeEvent,
+					ID:   block.Fields["id"],
+				}
+			}
 
 			builder.AddEdge(graph.Edge{
 				From: from,
@@ -168,7 +199,11 @@ func Build(cfg *config.Config, cat *catalog.Catalog, blocks []scanner.RawBlock) 
 		}
 	}
 
-	result.Graph = builder.Build()
+	if buildOptions.Scoped {
+		synthesizeScopedBoundaryNodes(builder, cat, requiredNodeRefs)
+	}
+
+	result.Graph = builder.Build(graph.NewMetadata(buildOptions.SourceRoot, buildOptions.GeneratedAt, buildOptions.ScannerVersion))
 
 	if cfg.Validation.WarnOnOrphanedNodes {
 		reportOrphanedNodes(result, result.Graph)
@@ -216,6 +251,39 @@ func parseNodeRef(value string) (nodeRef, error) {
 
 func eventNodeID(eventID string) string {
 	return graph.NodeEvent + ":" + eventID
+}
+
+func collectScopedRefs(blocks []scanner.RawBlock) (map[string]struct{}, map[string]nodeRef) {
+	eventIDs := make(map[string]struct{})
+	requiredNodeRefs := make(map[string]nodeRef)
+
+	for _, block := range blocks {
+		if block.Kind == "event" {
+			eventID := block.Fields["id"]
+			if eventID == "" {
+				continue
+			}
+			eventIDs[eventID] = struct{}{}
+			requiredNodeRefs[eventNodeID(eventID)] = nodeRef{
+				Type: graph.NodeEvent,
+				ID:   eventID,
+			}
+		}
+
+		for _, targets := range block.Relations {
+			for _, target := range targets {
+				if target.Type == graph.NodeEvent {
+					eventIDs[target.ID] = struct{}{}
+				}
+				requiredNodeRefs[fmt.Sprintf("%s:%s", target.Type, target.ID)] = nodeRef{
+					Type: target.Type,
+					ID:   target.ID,
+				}
+			}
+		}
+	}
+
+	return eventIDs, requiredNodeRefs
 }
 
 func checkDomain(result *Result, fail bool, file string, line int, domainID string, cat *catalog.Catalog) {
@@ -324,6 +392,49 @@ func validateEdgeTargets(result *Result, cfg *config.Config, g graph.Graph) {
 		}
 		addWarning(result, 6, "unknown_node_target", fmt.Sprintf("edge target %q does not exist", edge.To), "", 0)
 	}
+}
+
+func synthesizeScopedBoundaryNodes(builder *graph.Builder, cat *catalog.Catalog, refs map[string]nodeRef) {
+	for nodeID, ref := range refs {
+		if builder.HasNode(nodeID) {
+			continue
+		}
+
+		node := graph.Node{
+			ID:      nodeID,
+			Type:    ref.Type,
+			Name:    fallbackNodeName(ref.ID),
+			Summary: "Inferred out-of-scope boundary from scoped scan.",
+		}
+		if ref.Type == graph.NodeEvent {
+			if event, ok := cat.EventsByID[ref.ID]; ok {
+				node.Name = event.Name
+				node.Domain = event.Domain
+				node.Owner = event.OwnerTeam
+				if event.Description != "" {
+					node.Summary = event.Description
+				}
+			}
+		}
+
+		_ = builder.AddNode(node)
+	}
+}
+
+func fallbackNodeName(id string) string {
+	parts := strings.FieldsFunc(id, func(r rune) bool {
+		return r == '-' || r == '_' || r == '.'
+	})
+	for i, part := range parts {
+		if part == "" {
+			continue
+		}
+		parts[i] = strings.ToUpper(part[:1]) + part[1:]
+	}
+	if len(parts) == 0 {
+		return id
+	}
+	return strings.Join(parts, " ")
 }
 
 func addError(result *Result, layer int, code string, message string, file string, line int) {

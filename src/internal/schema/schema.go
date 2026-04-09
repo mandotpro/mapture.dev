@@ -11,6 +11,8 @@ import (
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/cuecontext"
 	cueerrors "cuelang.org/go/cue/errors"
+	"cuelang.org/go/cue/load"
+	cuejson "cuelang.org/go/encoding/json"
 	cueyaml "cuelang.org/go/encoding/yaml"
 )
 
@@ -22,10 +24,12 @@ type Definition string
 
 // Embedded schema entrypoints used by the YAML decoders.
 const (
-	ConfigDefinition  Definition = "Config"
-	TeamsDefinition   Definition = "TeamsFile"
-	DomainsDefinition Definition = "DomainsFile"
-	EventsDefinition  Definition = "EventsFile"
+	ConfigDefinition   Definition = "Config"
+	TeamsDefinition    Definition = "TeamsFile"
+	DomainsDefinition  Definition = "DomainsFile"
+	EventsDefinition   Definition = "EventsFile"
+	GraphDefinition    Definition = "Graph"
+	ExplorerDefinition Definition = "ExplorerPayload"
 )
 
 var (
@@ -47,6 +51,15 @@ func DecodeYAML(def Definition, filename string, src []byte, out any) error {
 		return err
 	}
 	return r.decodeYAML(def, filename, src, out)
+}
+
+// ValidateJSON validates a JSON payload against an embedded CUE definition.
+func ValidateJSON(def Definition, filename string, src []byte) error {
+	r, err := defaultRegistry()
+	if err != nil {
+		return err
+	}
+	return r.validateJSON(def, filename, src)
 }
 
 func defaultRegistry() (*registry, error) {
@@ -82,26 +95,30 @@ func compileSchema(ctx *cue.Context) (cue.Value, error) {
 	}
 	sort.Strings(names)
 
-	root := ctx.CompileString("{}")
-	if err := root.Err(); err != nil {
-		return cue.Value{}, fmt.Errorf("compile empty schema root: %w", err)
-	}
-
+	overlay := make(map[string]load.Source, len(names))
 	for _, name := range names {
 		data, err := schemaFS.ReadFile(name)
 		if err != nil {
 			return cue.Value{}, fmt.Errorf("read embedded schema %s: %w", name, err)
 		}
-
-		value := ctx.CompileString(string(data), cue.Filename(name))
-		if err := value.Err(); err != nil {
-			return cue.Value{}, fmt.Errorf("compile embedded schema: %w", err)
-		}
-		root = root.Unify(value)
+		overlay["/schema/"+name] = load.FromBytes(data)
 	}
 
+	instances := load.Instances([]string{"."}, &load.Config{
+		Dir:     "/schema",
+		Module:  "schema",
+		Overlay: overlay,
+	})
+	if len(instances) != 1 {
+		return cue.Value{}, fmt.Errorf("load embedded schema package: expected 1 instance, got %d", len(instances))
+	}
+	if instances[0].Err != nil {
+		return cue.Value{}, fmt.Errorf("load embedded schema package: %w", instances[0].Err)
+	}
+
+	root := ctx.BuildInstance(instances[0])
 	if err := root.Err(); err != nil {
-		return cue.Value{}, fmt.Errorf("unify embedded schema: %w", err)
+		return cue.Value{}, fmt.Errorf("compile embedded schema: %w", err)
 	}
 
 	return root, nil
@@ -132,6 +149,29 @@ func (r *registry) decodeYAML(def Definition, filename string, src []byte, out a
 		validated = defaulted
 	}
 	if err := validated.Decode(out); err != nil {
+		return formatError(filename, err)
+	}
+
+	return nil
+}
+
+func (r *registry) validateJSON(def Definition, filename string, src []byte) error {
+	expr, err := cuejson.Extract(filename, src)
+	if err != nil {
+		return formatError(filename, err)
+	}
+	data := r.ctx.BuildExpr(expr)
+	if err := data.Err(); err != nil {
+		return formatError(filename, err)
+	}
+
+	schemaValue := r.root.LookupPath(cue.MakePath(cue.Def(string(def))))
+	if err := schemaValue.Err(); err != nil {
+		return fmt.Errorf("lookup schema %s: %w", def, err)
+	}
+
+	validated := schemaValue.Unify(data).Eval()
+	if err := validated.Validate(cue.Final(), cue.Concrete(true)); err != nil {
 		return formatError(filename, err)
 	}
 

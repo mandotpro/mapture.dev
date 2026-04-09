@@ -22,6 +22,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/mandotpro/mapture.dev/src/internal/catalog"
 	"github.com/mandotpro/mapture.dev/src/internal/config"
+	"github.com/mandotpro/mapture.dev/src/internal/projectscope"
 	"github.com/mandotpro/mapture.dev/src/internal/scanner"
 	"github.com/mandotpro/mapture.dev/src/internal/validator"
 	"github.com/mandotpro/mapture.dev/src/internal/webui"
@@ -36,6 +37,8 @@ type Options struct {
 	ConfigPath string
 	// Addr is the listen address (e.g. "127.0.0.1:8765").
 	Addr string
+	// Scopes narrows scanning to one or more project-relative files/directories.
+	Scopes []string
 	// Watch enables fsnotify-based file watching + SSE reload.
 	Watch bool
 	// OnReady is invoked once the listener is bound, with the concrete
@@ -53,7 +56,7 @@ func Serve(ctx context.Context, opts Options) error {
 		addr = DefaultAddr
 	}
 
-	srv, err := newServer(opts.ConfigPath)
+	srv, err := newServer(opts.ConfigPath, opts.Scopes)
 	if err != nil {
 		return err
 	}
@@ -109,13 +112,15 @@ func Serve(ctx context.Context, opts Options) error {
 		return err
 	}
 
+	cancelWatch()
+	watcherWG.Wait()
+	// Close SSE subscriptions before shutting down the HTTP server so
+	// long-lived /api/events connections do not block graceful exit.
+	srv.broadcaster.close()
+
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	shutdownErr := httpSrv.Shutdown(shutdownCtx)
-
-	cancelWatch()
-	watcherWG.Wait()
-	srv.broadcaster.close()
 
 	if shutdownErr != nil {
 		return fmt.Errorf("shutdown: %w", shutdownErr)
@@ -125,13 +130,15 @@ func Serve(ctx context.Context, opts Options) error {
 
 type explorer struct {
 	configPath  string
+	scopes      []string
 	uiHandler   http.Handler
 	broadcaster *broadcaster
 }
 
-func newServer(configPath string) (*explorer, error) {
+func newServer(configPath string, scopes []string) (*explorer, error) {
 	return &explorer{
 		configPath:  configPath,
+		scopes:      append([]string(nil), scopes...),
 		uiHandler:   http.FileServer(http.FS(webui.FS())),
 		broadcaster: newBroadcaster(),
 	}, nil
@@ -161,7 +168,12 @@ func (e *explorer) loadProject() (*config.Config, *catalog.Catalog, string, erro
 	if err != nil {
 		return nil, nil, "", err
 	}
-	return cfg, cat, filepath.Dir(e.configPath), nil
+	root := filepath.Dir(e.configPath)
+	scoped, err := projectscope.Apply(root, cfg, e.scopes)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	return scoped.Config, cat, root, nil
 }
 
 func (e *explorer) buildResult() (*validator.Result, error) {
@@ -173,7 +185,10 @@ func (e *explorer) buildResult() (*validator.Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	result, err := validator.Build(cfg, cat, blocks)
+	result, err := validator.Build(cfg, cat, blocks, validator.BuildOptions{
+		SourceRoot: root,
+		Scoped:     len(e.scopes) > 0,
+	})
 	if err != nil {
 		// Return the partial result so the UI can surface diagnostics.
 		var vErr *validator.ValidationError
@@ -196,7 +211,10 @@ func (e *explorer) buildExplorerPayload() (*ExplorerPayload, error) {
 		return nil, err
 	}
 
-	result, err := validator.Build(cfg, cat, blocks)
+	result, err := validator.Build(cfg, cat, blocks, validator.BuildOptions{
+		SourceRoot: root,
+		Scoped:     len(e.scopes) > 0,
+	})
 	if err != nil {
 		var vErr *validator.ValidationError
 		if !errors.As(err, &vErr) || vErr.Result == nil {
@@ -225,10 +243,17 @@ func (e *explorer) buildExplorerPayload() (*ExplorerPayload, error) {
 		UI: cfg.UI,
 		Meta: ExplorerMeta{
 			ProjectID:   filepath.Dir(e.configPath),
-			SourceLabel: "live api",
+			SourceLabel: projectscope.SourceLabel("live api", scopedIncludes(cfg, len(e.scopes) > 0)),
 			Mode:        "live",
 		},
 	}, nil
+}
+
+func scopedIncludes(cfg *config.Config, scoped bool) []string {
+	if !scoped {
+		return nil
+	}
+	return append([]string(nil), cfg.Scan.Include...)
 }
 
 func (e *explorer) handleExplorer(w http.ResponseWriter, r *http.Request) {

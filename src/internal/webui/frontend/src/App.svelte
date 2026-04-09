@@ -16,32 +16,46 @@
   import {
     buildFlowPresentation,
     domainName,
-    findNode,
     nodeColor,
     normalizeGraph,
     severitySummary,
     teamName,
+    visibleNodesForFilters,
     viewModeFromLayout,
   } from './lib/adapter';
   import { resolvePositions } from './lib/layout';
   import DomainLanesBackdrop from './lib/DomainLanesBackdrop.svelte';
   import FlowViewportController from './lib/FlowViewportController.svelte';
-  import FlowNode from './lib/FlowNode.svelte';
+  import ApiNode from './lib/nodes/ApiNode.svelte';
+  import BridgeNode from './lib/nodes/BridgeNode.svelte';
+  import DatabaseNode from './lib/nodes/DatabaseNode.svelte';
+  import EventNode from './lib/nodes/EventNode.svelte';
+  import GroupNode from './lib/nodes/GroupNode.svelte';
+  import ServiceNode from './lib/nodes/ServiceNode.svelte';
+  import CanvasModal from './lib/ui/CanvasModal.svelte';
+  import ImpactPreviewPanel from './lib/ui/ImpactPreviewPanel.svelte';
+  import NodeInspector from './lib/ui/NodeInspector.svelte';
+  import SettingsField from './lib/ui/SettingsField.svelte';
+  import SettingsSection from './lib/ui/SettingsSection.svelte';
+  import TokenBadge from './lib/ui/TokenBadge.svelte';
   import type {
+    ExplorerSettings,
     DensityMode,
     Filters,
     GraphModel,
+    ImpactPreview,
+    NodeInspectorAction,
     PresentedGraph,
+    PresentedNode,
+    ResolvedTheme,
+    SettingsSectionConfig,
+    ThemePreference,
+    TraceSelection,
     ViewMode,
     WindowWithPayload,
   } from './lib/types';
 
-  type PopoverKind = 'search' | 'owners' | 'domains' | 'nodeTypes' | null;
-  type NodePopup = {
-    nodeId: string;
-    x: number;
-    y: number;
-  } | null;
+  type PopoverKind = 'search' | 'trace' | 'structure' | 'owners' | 'domains' | 'nodeTypes' | null;
   type ManualPositions = Record<string, { x: number; y: number }>;
   type PersistedLayoutState = {
     version: 1;
@@ -54,10 +68,26 @@
     icon: string;
     tone: string;
   };
+  type TraceDraft = {
+    sourceQuery: string;
+    targetQuery: string;
+  };
 
   const GITHUB_URL = 'https://github.com/mandotpro/mapture.dev';
   const STORAGE_PREFIX = 'mapture-layout';
+  const SETTINGS_STORAGE_KEY = 'mapture-explorer-settings';
   const FIT_VIEW_PADDING = 0.72;
+  const defaultExplorerSettings: ExplorerSettings = {
+    version: 2,
+    appearance: {
+      themePreference: 'system',
+    },
+    experimental: {
+      traceTools: false,
+      structureTools: false,
+      impactPreview: false,
+    },
+  };
 
   const emptyModel: GraphModel = {
     nodes: [],
@@ -94,10 +124,24 @@
     nodes: [],
     edges: [],
     lanes: [],
+    trace: {
+      active: false,
+      sourceId: null,
+      targetId: null,
+      found: false,
+      directed: true,
+      nodeIDs: [],
+      edgeIDs: [],
+    },
   };
 
   const nodeTypes = {
-    architecture: FlowNode,
+    service: ServiceNode,
+    api: ApiNode,
+    database: DatabaseNode,
+    event: EventNode,
+    group: GroupNode,
+    bridge: BridgeNode,
   } satisfies NodeTypes;
 
   const viewModeOptions: Array<{
@@ -123,8 +167,6 @@
     { value: 'detailed', label: 'Detailed', summary: 'All labels', glyph: 'DT' },
   ];
 
-  const railKinds = ['search', 'owners', 'domains', 'nodeTypes'] as const;
-
   let model = $state.raw<GraphModel>(emptyModel);
   let presentedGraph = $state.raw<PresentedGraph>(emptyGraph);
   let flowNodes = $state.raw<Node[]>([]);
@@ -134,16 +176,30 @@
   let loadError = $state('');
   let sourceLabel = $state('api');
   let activePopover = $state<PopoverKind>(null);
-  let nodePopup = $state<NodePopup>(null);
+  let selectedNodeId = $state<string | null>(null);
   let viewMode = $state<ViewMode>(viewModeFromLayout(emptyModel.ui.defaultLayout));
   let densityMode = $state<DensityMode>('standard');
   let modeMenuOpen = $state(false);
   let densityMenuOpen = $state(false);
+  let settingsOpen = $state(false);
   let hoveredNodeId = $state<string | null>(null);
   let hoveredEdgeId = $state<string | null>(null);
   let toolbarElement = $state<HTMLElement | null>(null);
   let toolbarSize = $state.raw({ width: 420, height: 52 });
   let manualPositions = $state.raw<ManualPositions>({});
+  let traceSelection = $state.raw<TraceSelection>({
+    sourceNodeId: null,
+    targetNodeId: null,
+  });
+  let traceDraft = $state.raw<TraceDraft>({
+    sourceQuery: '',
+    targetQuery: '',
+  });
+  let collapsedDomains = $state.raw<string[]>([]);
+  let collapsedOwners = $state.raw<string[]>([]);
+  let aggregateCrossDomain = $state(false);
+  let explorerSettings = $state.raw<ExplorerSettings>(defaultExplorerSettings);
+  let systemPrefersDark = $state(false);
   let lastStorageKey = '';
   let refreshVersion = 0;
   let refocusVersion = $state(0);
@@ -155,7 +211,10 @@
     owners: [],
   });
 
-  const popupNode = $derived(findNode(model, nodePopup?.nodeId ?? null));
+  const popupNode = $derived(
+    presentedGraph.nodes.find((node) => node.id === (selectedNodeId ?? '')) ?? null,
+  );
+  const baseVisibleNodes = $derived(visibleNodesForFilters(model, filters));
   const activeViewOption = $derived(
     viewModeOptions.find((option) => option.value === viewMode) ?? viewModeOptions[0],
   );
@@ -178,8 +237,27 @@
   const visibleOwnerCounts = $derived(countBy(presentedGraph.nodes, (node) => node.owner));
   const visibleDomainCounts = $derived(countBy(presentedGraph.nodes, (node) => node.domain));
   const searchSuggestions = $derived(buildSearchSuggestions(model, filters.query));
+  const traceSourceSuggestions = $derived(buildNodeSuggestions(presentedGraph.nodes, traceDraft.sourceQuery, traceSelection.targetNodeId));
+  const traceTargetSuggestions = $derived(buildNodeSuggestions(presentedGraph.nodes, traceDraft.targetQuery, traceSelection.sourceNodeId));
+  const structureDomainCounts = $derived(countBy(baseVisibleNodes, (node) => node.domain));
+  const structureOwnerCounts = $derived(countBy(baseVisibleNodes, (node) => node.owner));
+  const traceStatus = $derived(buildTraceStatus(presentedGraph, traceSelection));
+  const popupImpact = $derived(buildImpactPreview(presentedGraph, popupNode?.id ?? null));
+  const resolvedTheme = $derived<ResolvedTheme>(
+    explorerSettings.appearance.themePreference === 'system'
+      ? (systemPrefersDark ? 'dark' : 'light')
+      : explorerSettings.appearance.themePreference,
+  );
+  const settingsSections = $derived(buildSettingsSections(explorerSettings));
+  const nodeInspectorActions = $derived(buildNodeInspectorActions());
   const filterCounts = $derived({
     query: filters.query ? 1 : 0,
+    trace: explorerSettings.experimental.traceTools && (traceSelection.sourceNodeId || traceSelection.targetNodeId)
+      ? (traceSelection.sourceNodeId ? 1 : 0) + (traceSelection.targetNodeId ? 1 : 0)
+      : 0,
+    structure: explorerSettings.experimental.structureTools
+      ? collapsedDomains.length + collapsedOwners.length + (aggregateCrossDomain ? 1 : 0)
+      : 0,
     owners: filters.owners.length,
     domains: filters.domains.length,
     nodeTypes: filters.nodeTypes.length,
@@ -213,7 +291,6 @@
   });
 
   $effect(() => {
-    const selectedNodeId = nodePopup?.nodeId ?? null;
     void refreshFlowGraph(
       model,
       filters,
@@ -222,6 +299,10 @@
       hoveredEdgeId,
       viewMode,
       densityMode,
+      traceSelection,
+      collapsedDomains,
+      collapsedOwners,
+      aggregateCrossDomain,
       manualPositions,
       reservedCanvasInsets,
     );
@@ -235,6 +316,56 @@
 
     fitViewRequest = currentRefocusVersion;
     refocusVersion = 0;
+  });
+
+  $effect(() => {
+    if (explorerSettings.experimental.traceTools) {
+      return;
+    }
+
+    if (activePopover === 'trace') {
+      activePopover = null;
+    }
+    if (traceSelection.sourceNodeId || traceSelection.targetNodeId) {
+      traceSelection = {
+        sourceNodeId: null,
+        targetNodeId: null,
+      };
+    }
+    if (traceDraft.sourceQuery || traceDraft.targetQuery) {
+      traceDraft = {
+        sourceQuery: '',
+        targetQuery: '',
+      };
+    }
+  });
+
+  $effect(() => {
+    if (explorerSettings.experimental.structureTools) {
+      return;
+    }
+
+    if (activePopover === 'structure') {
+      activePopover = null;
+    }
+    if (collapsedDomains.length > 0) {
+      collapsedDomains = [];
+    }
+    if (collapsedOwners.length > 0) {
+      collapsedOwners = [];
+    }
+    if (aggregateCrossDomain) {
+      aggregateCrossDomain = false;
+    }
+  });
+
+  $effect(() => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    document.documentElement.dataset.theme = resolvedTheme;
+    document.documentElement.style.colorScheme = resolvedTheme;
   });
 
   async function boot(): Promise<void> {
@@ -260,6 +391,53 @@
     } finally {
       loading = false;
     }
+  }
+
+  function readExplorerSettings(): ExplorerSettings {
+    if (typeof window === 'undefined') {
+      return defaultExplorerSettings;
+    }
+
+    try {
+      const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+      if (!raw) {
+        return defaultExplorerSettings;
+      }
+      const parsed = JSON.parse(raw) as Partial<ExplorerSettings> & {
+        appearance?: { themePreference?: ThemePreference };
+      };
+      return {
+        version: 2,
+        appearance: {
+          themePreference: isThemePreference(parsed?.appearance?.themePreference)
+            ? parsed.appearance.themePreference
+            : 'system',
+        },
+        experimental: {
+          traceTools: parsed?.experimental?.traceTools === true,
+          structureTools: parsed?.experimental?.structureTools === true,
+          impactPreview: parsed?.experimental?.impactPreview === true,
+        },
+      };
+    } catch {
+      return defaultExplorerSettings;
+    }
+  }
+
+  function persistExplorerSettings(next: ExplorerSettings): void {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    try {
+      window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      return;
+    }
+  }
+
+  function updateExplorerSettings(next: ExplorerSettings): void {
+    explorerSettings = next;
+    persistExplorerSettings(next);
   }
 
   function bindLiveReload(): void {
@@ -318,9 +496,10 @@
       owners: [],
     };
     activePopover = null;
-    nodePopup = null;
+    selectedNodeId = null;
     modeMenuOpen = false;
     densityMenuOpen = false;
+    settingsOpen = false;
   }
 
   async function refreshFlowGraph(
@@ -331,6 +510,10 @@
     currentHoveredEdgeId: string | null,
     currentViewMode: ViewMode,
     currentDensityMode: DensityMode,
+    currentTraceSelection: TraceSelection,
+    currentCollapsedDomains: string[],
+    currentCollapsedOwners: string[],
+    currentAggregateCrossDomain: boolean,
     currentManualPositions: ManualPositions,
     currentReservedInsets: { top: number; left: number },
   ): Promise<void> {
@@ -343,6 +526,10 @@
         hoveredNodeId: currentHoveredNodeId,
         hoveredEdgeId: currentHoveredEdgeId,
       },
+      trace: currentTraceSelection,
+      collapsedDomains: new Set(currentCollapsedDomains),
+      collapsedOwners: new Set(currentCollapsedOwners),
+      aggregateCrossDomain: currentAggregateCrossDomain,
       manualPositions: currentManualPositions,
       reservedInsets: currentReservedInsets,
     });
@@ -355,8 +542,8 @@
     flowNodes = presentation.flowNodes;
     flowEdges = presentation.flowEdges;
 
-    if (nodePopup && !presentation.graph.nodes.some((node) => node.id === nodePopup.nodeId)) {
-      nodePopup = null;
+    if (selectedNodeId && !presentation.graph.nodes.some((node) => node.id === selectedNodeId)) {
+      selectedNodeId = null;
     }
     if (hoveredNodeId && !presentation.graph.nodes.some((node) => node.id === hoveredNodeId)) {
       hoveredNodeId = null;
@@ -373,25 +560,304 @@
     };
   }
 
+  function visibleRailKinds(): Array<Exclude<PopoverKind, null>> {
+    const kinds: Array<Exclude<PopoverKind, null>> = ['search'];
+    if (explorerSettings.experimental.traceTools) {
+      kinds.push('trace');
+    }
+    if (explorerSettings.experimental.structureTools) {
+      kinds.push('structure');
+    }
+    kinds.push('owners', 'domains', 'nodeTypes');
+    return kinds;
+  }
+
   function togglePopover(kind: PopoverKind): void {
     activePopover = activePopover === kind ? null : kind;
-    nodePopup = null;
+    selectedNodeId = null;
     modeMenuOpen = false;
     densityMenuOpen = false;
+    settingsOpen = false;
+  }
+
+  function toggleSettingsPanel(): void {
+    settingsOpen = !settingsOpen;
+    activePopover = null;
+    selectedNodeId = null;
+    modeMenuOpen = false;
+    densityMenuOpen = false;
+  }
+
+  function handleSettingsFieldChange(id: string, value: boolean | string): void {
+    if (id === 'themePreference' && typeof value === 'string' && isThemePreference(value)) {
+      updateExplorerSettings({
+        ...explorerSettings,
+        appearance: {
+          ...explorerSettings.appearance,
+          themePreference: value,
+        },
+      });
+      return;
+    }
+
+    if (typeof value !== 'boolean') {
+      return;
+    }
+
+    if (id === 'traceTools' || id === 'structureTools' || id === 'impactPreview') {
+      updateExplorerSettings({
+        ...explorerSettings,
+        experimental: {
+          ...explorerSettings.experimental,
+          [id]: value,
+        },
+      });
+    }
+  }
+
+  function buildSettingsSections(settings: ExplorerSettings): SettingsSectionConfig[] {
+    return [
+      {
+        id: 'appearance',
+        title: 'Appearance',
+        description: 'Control the explorer theme. System follows the OS preference by default.',
+        fields: [
+          {
+            id: 'themePreference',
+            kind: 'choice',
+            label: 'Theme',
+            description: 'Switch between system, light, and dark appearance.',
+            value: settings.appearance.themePreference,
+            options: [
+              { value: 'system', label: 'System', glyph: 'OS' },
+              { value: 'light', label: 'Light', glyph: 'LT' },
+              { value: 'dark', label: 'Dark', glyph: 'DK' },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'experimental',
+        title: 'Experimental',
+        description: 'Hidden tools that need more iteration before they become default.',
+        fields: [
+          {
+            id: 'traceTools',
+            kind: 'toggle',
+            label: 'Trace tools',
+            description: 'Path tracing workflows and quick trace actions.',
+            value: settings.experimental.traceTools,
+            badge: 'FT',
+          },
+          {
+            id: 'structureTools',
+            kind: 'toggle',
+            label: 'Structure tools',
+            description: 'Collapse domains and teams, plus cross-domain aggregation.',
+            value: settings.experimental.structureTools,
+            badge: 'FT',
+          },
+          {
+            id: 'impactPreview',
+            kind: 'toggle',
+            label: 'Impact preview',
+            description: 'Shows upstream and downstream reach for the selected node.',
+            value: settings.experimental.impactPreview,
+            badge: 'FT',
+          },
+        ],
+      },
+    ];
+  }
+
+  function buildNodeInspectorActions(): NodeInspectorAction[] {
+    if (!popupNode) {
+      return [];
+    }
+
+    const actions: NodeInspectorAction[] = [];
+    if (explorerSettings.experimental.traceTools) {
+      actions.push(
+        { id: 'trace-source', label: 'Trace from here', tone: 'accent', badge: 'FT' },
+        { id: 'trace-target', label: 'Trace to here', tone: 'accent', badge: 'FT' },
+      );
+    }
+    if (explorerSettings.experimental.structureTools && popupNode.domain) {
+      actions.push({
+        id: 'toggle-domain',
+        label: collapsedDomains.includes(popupNode.domain) ? 'Expand domain' : 'Collapse domain',
+        badge: 'FT',
+      });
+    }
+    if (explorerSettings.experimental.structureTools && popupNode.owner) {
+      actions.push({
+        id: 'toggle-owner',
+        label: collapsedOwners.includes(popupNode.owner) ? 'Expand team' : 'Collapse team',
+        badge: 'FT',
+      });
+    }
+    return actions;
+  }
+
+  function handleNodeInspectorAction(actionId: string): void {
+    if (actionId === 'trace-source') {
+      usePopupNodeAsTrace('source');
+      return;
+    }
+    if (actionId === 'trace-target') {
+      usePopupNodeAsTrace('target');
+      return;
+    }
+    if (actionId === 'toggle-domain') {
+      togglePopupDomainCollapse();
+      return;
+    }
+    if (actionId === 'toggle-owner') {
+      togglePopupOwnerCollapse();
+    }
+  }
+
+  function resetStructure(): void {
+    collapsedDomains = [];
+    collapsedOwners = [];
+    aggregateCrossDomain = false;
+  }
+
+  function toggleCollapsedDomain(domain: string): void {
+    collapsedDomains = toggleValue(collapsedDomains, domain);
+  }
+
+  function toggleCollapsedOwner(owner: string): void {
+    collapsedOwners = toggleValue(collapsedOwners, owner);
+  }
+
+  function toggleCrossDomainAggregation(): void {
+    aggregateCrossDomain = !aggregateCrossDomain;
+  }
+
+  function assignTraceEndpoint(slot: 'source' | 'target', node: PresentedNode): void {
+    if (slot === 'source') {
+      traceSelection = {
+        ...traceSelection,
+        sourceNodeId: node.id,
+      };
+      traceDraft = {
+        ...traceDraft,
+        sourceQuery: node.id,
+      };
+      return;
+    }
+
+    traceSelection = {
+      ...traceSelection,
+      targetNodeId: node.id,
+    };
+    traceDraft = {
+      ...traceDraft,
+      targetQuery: node.id,
+    };
+  }
+
+  function clearTrace(): void {
+    traceSelection = {
+      sourceNodeId: null,
+      targetNodeId: null,
+    };
+    traceDraft = {
+      sourceQuery: '',
+      targetQuery: '',
+    };
+  }
+
+  function clearTraceEndpoint(slot: 'source' | 'target'): void {
+    if (slot === 'source') {
+      traceSelection = {
+        ...traceSelection,
+        sourceNodeId: null,
+      };
+      traceDraft = {
+        ...traceDraft,
+        sourceQuery: '',
+      };
+      return;
+    }
+
+    traceSelection = {
+      ...traceSelection,
+      targetNodeId: null,
+    };
+    traceDraft = {
+      ...traceDraft,
+      targetQuery: '',
+    };
+  }
+
+  function swapTrace(): void {
+    traceSelection = {
+      sourceNodeId: traceSelection.targetNodeId,
+      targetNodeId: traceSelection.sourceNodeId,
+    };
+    traceDraft = {
+      sourceQuery: traceDraft.targetQuery,
+      targetQuery: traceDraft.sourceQuery,
+    };
+  }
+
+  function updateTraceDraft(slot: 'source' | 'target', value: string): void {
+    if (slot === 'source') {
+      traceDraft = {
+        ...traceDraft,
+        sourceQuery: value,
+      };
+      traceSelection = {
+        ...traceSelection,
+        sourceNodeId: traceSelection.sourceNodeId && traceSelection.sourceNodeId === value ? traceSelection.sourceNodeId : null,
+      };
+      return;
+    }
+
+    traceDraft = {
+      ...traceDraft,
+      targetQuery: value,
+    };
+    traceSelection = {
+      ...traceSelection,
+      targetNodeId: traceSelection.targetNodeId && traceSelection.targetNodeId === value ? traceSelection.targetNodeId : null,
+    };
+  }
+
+  function applyTraceSelection(): void {
+    const source = traceSelection.sourceNodeId
+      ? presentedGraph.nodes.find((node) => node.id === traceSelection.sourceNodeId) ?? null
+      : resolveTraceReference(traceDraft.sourceQuery);
+    const target = traceSelection.targetNodeId
+      ? presentedGraph.nodes.find((node) => node.id === traceSelection.targetNodeId) ?? null
+      : resolveTraceReference(traceDraft.targetQuery);
+
+    traceSelection = {
+      sourceNodeId: source?.id ?? null,
+      targetNodeId: target?.id ?? null,
+    };
+    traceDraft = {
+      sourceQuery: source?.id ?? traceDraft.sourceQuery,
+      targetQuery: target?.id ?? traceDraft.targetQuery,
+    };
   }
 
   function toggleModeMenu(): void {
     modeMenuOpen = !modeMenuOpen;
     densityMenuOpen = false;
+    settingsOpen = false;
     activePopover = null;
-    nodePopup = null;
+    selectedNodeId = null;
   }
 
   function toggleDensityMenu(): void {
     densityMenuOpen = !densityMenuOpen;
     modeMenuOpen = false;
+    settingsOpen = false;
     activePopover = null;
-    nodePopup = null;
+    selectedNodeId = null;
   }
 
   function toggleFilter(kind: 'owners' | 'domains' | 'nodeTypes', value: string): void {
@@ -447,10 +913,11 @@
     viewMode = mode;
     hoveredNodeId = null;
     hoveredEdgeId = null;
-    nodePopup = null;
+    selectedNodeId = null;
     activePopover = null;
     modeMenuOpen = false;
     densityMenuOpen = false;
+    settingsOpen = false;
     refocusVersion += 1;
   }
 
@@ -468,6 +935,7 @@
     refocusVersion += 1;
     modeMenuOpen = false;
     densityMenuOpen = false;
+    settingsOpen = false;
   }
 
   function resetLayout(): void {
@@ -475,33 +943,41 @@
     if (storageKey) {
       clearLayoutState(storageKey);
     }
-    nodePopup = null;
+    selectedNodeId = null;
     activePopover = null;
     modeMenuOpen = false;
     densityMenuOpen = false;
+    settingsOpen = false;
     refocusVersion += 1;
   }
 
-  function handleNodeClick({ node, event }: { node: Node; event: MouseEvent | TouchEvent }): void {
+  function handleNodeClick({ node }: { node: Node; event: MouseEvent | TouchEvent }): void {
     activePopover = null;
     modeMenuOpen = false;
     densityMenuOpen = false;
+    settingsOpen = false;
+    selectedNodeId = node.id;
+  }
 
-    let x = 220;
-    let y = 160;
-    if ('touches' in event && event.touches.length > 0) {
-      x = event.touches[0].clientX;
-      y = event.touches[0].clientY;
-    } else if ('clientX' in event) {
-      x = event.clientX;
-      y = event.clientY;
+  function usePopupNodeAsTrace(slot: 'source' | 'target'): void {
+    if (!popupNode) {
+      return;
     }
+    assignTraceEndpoint(slot, popupNode);
+  }
 
-    nodePopup = {
-      nodeId: node.id,
-      x,
-      y,
-    };
+  function togglePopupDomainCollapse(): void {
+    if (!popupNode?.domain) {
+      return;
+    }
+    toggleCollapsedDomain(popupNode.domain);
+  }
+
+  function togglePopupOwnerCollapse(): void {
+    if (!popupNode?.owner) {
+      return;
+    }
+    toggleCollapsedOwner(popupNode.owner);
   }
 
   function handleNodePointerEnter({ node }: { node: Node }): void {
@@ -576,14 +1052,15 @@
     if (storageKey) {
       persistLayoutState(storageKey, next);
     }
-    nodePopup = null;
+    selectedNodeId = null;
   }
 
   function closeTransientUI(): void {
     activePopover = null;
-    nodePopup = null;
+    selectedNodeId = null;
     modeMenuOpen = false;
     densityMenuOpen = false;
+    settingsOpen = false;
   }
 
   function countBy<T>(items: T[], pick: (item: T) => string): Record<string, number> {
@@ -641,11 +1118,36 @@
   function railButtonLabel(kind: Exclude<PopoverKind, null>): string {
     const labels: Record<Exclude<PopoverKind, null>, string> = {
       search: 'Search',
+      trace: 'Trace',
+      structure: 'Structure',
       owners: 'Teams',
       domains: 'Domains',
       nodeTypes: 'Types',
     };
     return labels[kind];
+  }
+
+  function popoverCount(kind: Exclude<PopoverKind, null>): number {
+    if (kind === 'search') {
+      return filterCounts.query;
+    }
+    if (kind === 'trace') {
+      return filterCounts.trace;
+    }
+    if (kind === 'structure') {
+      return filterCounts.structure;
+    }
+    if (kind === 'owners') {
+      return filterCounts.owners;
+    }
+    if (kind === 'domains') {
+      return filterCounts.domains;
+    }
+    return filterCounts.nodeTypes;
+  }
+
+  function popoverHasValue(kind: Exclude<PopoverKind, null>): boolean {
+    return popoverCount(kind) > 0;
   }
 
   function iconForKind(
@@ -660,6 +1162,12 @@
     }
     if (kind === 'domains') {
       return 'D';
+    }
+    if (kind === 'trace') {
+      return 'P';
+    }
+    if (kind === 'structure') {
+      return 'GR';
     }
     const nodeTypeIcons: Record<string, string> = {
       service: 'S',
@@ -683,6 +1191,12 @@
     }
     if (kind === 'domains') {
       return '#1664d9';
+    }
+    if (kind === 'trace') {
+      return '#8c6d44';
+    }
+    if (kind === 'structure') {
+      return '#8f4a18';
     }
     return nodeColor(currentModel, value ?? 'service');
   }
@@ -804,13 +1318,8 @@
     });
   }
 
-  function popupStyle(): string {
-    if (!nodePopup) {
-      return '';
-    }
-    const left = Math.max(20, Math.min(nodePopup.x + 14, window.innerWidth - 340));
-    const top = Math.max(90, Math.min(nodePopup.y + 14, window.innerHeight - 260));
-    return `left:${left}px;top:${top}px;`;
+  function isThemePreference(value: unknown): value is ThemePreference {
+    return value === 'system' || value === 'light' || value === 'dark';
   }
 
   function applySearchSuggestion(value: string): void {
@@ -845,15 +1354,244 @@
       .slice(0, 8);
   }
 
+  function buildNodeSuggestions(
+    nodes: PresentedNode[],
+    query: string,
+    excludeNodeId: string | null,
+  ): PresentedNode[] {
+    const normalizedQuery = query.trim().toLowerCase();
+    const visible = nodes.filter((node) => node.id !== excludeNodeId);
+    const sorted = [...visible].sort((left, right) => {
+      const leftLabel = `${left.name} ${left.id}`.toLowerCase();
+      const rightLabel = `${right.name} ${right.id}`.toLowerCase();
+      return leftLabel.localeCompare(rightLabel);
+    });
+
+    if (!normalizedQuery) {
+      return sorted.slice(0, 6);
+    }
+
+    return sorted
+      .filter((node) => (
+        `${node.id} ${node.name} ${node.domain} ${node.owner}`.toLowerCase().includes(normalizedQuery)
+      ))
+      .slice(0, 6);
+  }
+
+  function resolveTraceReference(query: string): PresentedNode | null {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const byID = presentedGraph.nodes.find((node) => node.id === trimmed);
+    if (byID) {
+      return byID;
+    }
+
+    const lowered = trimmed.toLowerCase();
+    const exactName = presentedGraph.nodes.find((node) => node.name.toLowerCase() === lowered);
+    if (exactName) {
+      return exactName;
+    }
+
+    const fuzzy = presentedGraph.nodes.filter((node) => (
+      `${node.id} ${node.name}`.toLowerCase().includes(lowered)
+    ));
+    return fuzzy.length === 1 ? fuzzy[0] : null;
+  }
+
+  function buildTraceStatus(
+    currentGraph: PresentedGraph,
+    currentTraceSelection: TraceSelection,
+  ): { label: string; tone: 'muted' | 'ok' | 'warning'; hops: number } {
+    if (!currentTraceSelection.sourceNodeId && !currentTraceSelection.targetNodeId) {
+      return {
+        label: 'Pick two visible nodes to trace a path.',
+        tone: 'muted',
+        hops: 0,
+      };
+    }
+
+    if (!(currentTraceSelection.sourceNodeId && currentTraceSelection.targetNodeId)) {
+      return {
+        label: 'Choose both a start and an end node.',
+        tone: 'muted',
+        hops: 0,
+      };
+    }
+
+    if (!currentGraph.trace.found) {
+      return {
+        label: 'No visible path in the current view.',
+        tone: 'warning',
+        hops: 0,
+      };
+    }
+
+    const hops = Math.max(0, currentGraph.trace.edgeIDs.length);
+    return {
+      label: currentGraph.trace.directed
+        ? `Directed path across ${hops} hop${hops === 1 ? '' : 's'}.`
+        : `Related path across ${hops} hop${hops === 1 ? '' : 's'} in the current view.`,
+      tone: 'ok',
+      hops,
+    };
+  }
+
+  function buildImpactPreview(currentGraph: PresentedGraph, nodeId: string | null): ImpactPreview {
+    if (!nodeId) {
+      return {
+        directUpstream: [],
+        directDownstream: [],
+        upstreamReach: 0,
+        downstreamReach: 0,
+        crossBoundaryTouches: 0,
+      };
+    }
+
+    const nodeMap = new Map(currentGraph.nodes.map((node) => [node.id, node]));
+    const directUpstreamIDs = uniquePreservingOrder(
+      currentGraph.edges.filter((edge) => edge.to === nodeId).map((edge) => edge.from),
+    );
+    const directDownstreamIDs = uniquePreservingOrder(
+      currentGraph.edges.filter((edge) => edge.from === nodeId).map((edge) => edge.to),
+    );
+    const crossBoundaryTouches = currentGraph.edges.filter((edge) => {
+      if (edge.from !== nodeId && edge.to !== nodeId) {
+        return false;
+      }
+      const source = nodeMap.get(edge.from);
+      const target = nodeMap.get(edge.to);
+      return Boolean(source?.domain && target?.domain && source.domain !== target.domain);
+    }).length;
+
+    return {
+      directUpstream: directUpstreamIDs.map((id) => nodeMap.get(id)).filter(Boolean) as PresentedNode[],
+      directDownstream: directDownstreamIDs.map((id) => nodeMap.get(id)).filter(Boolean) as PresentedNode[],
+      upstreamReach: countReachable(currentGraph.edges, nodeId, 'upstream'),
+      downstreamReach: countReachable(currentGraph.edges, nodeId, 'downstream'),
+      crossBoundaryTouches,
+    };
+  }
+
+  function countReachable(
+    edges: PresentedGraph['edges'],
+    originId: string,
+    direction: 'upstream' | 'downstream',
+  ): number {
+    const seen = new Set<string>();
+    const queue = [originId];
+
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (!current) {
+        break;
+      }
+
+      for (const edge of edges) {
+        const next = direction === 'downstream'
+          ? edge.from === current
+            ? edge.to
+            : null
+          : edge.to === current
+            ? edge.from
+            : null;
+        if (!next || next === originId || seen.has(next)) {
+          continue;
+        }
+        seen.add(next);
+        queue.push(next);
+      }
+    }
+
+    return seen.size;
+  }
+
+  function popupBadgeLabel(node: PresentedNode): string {
+    if (node.groupKind === 'domain') {
+      return 'domain group';
+    }
+    if (node.groupKind === 'team') {
+      return 'team group';
+    }
+    if (node.groupKind === 'boundary') {
+      return 'boundary';
+    }
+    return node.type;
+  }
+
+  function popupBadgeColor(node: PresentedNode): string {
+    return node.colorHint || nodeColor(model, node.type);
+  }
+
+  function popupTypeSummary(node: PresentedNode): string {
+    return [
+      node.typeSummary.service > 0 ? `${node.typeSummary.service}S` : '',
+      node.typeSummary.api > 0 ? `${node.typeSummary.api}A` : '',
+      node.typeSummary.database > 0 ? `${node.typeSummary.database}DB` : '',
+      node.typeSummary.event > 0 ? `${node.typeSummary.event}E` : '',
+    ].filter(Boolean).join(' · ');
+  }
+
+  function popupSourceLabel(node: PresentedNode): string {
+    if (!node.file) {
+      return 'n/a';
+    }
+    return `${node.file}${node.line ? `:${node.line}` : ''}`;
+  }
+
+  function popupCompositionLabel(node: PresentedNode): string {
+    const summary = popupTypeSummary(node);
+    return summary ? `${node.memberCount} nodes · ${summary}` : `${node.memberCount} nodes`;
+  }
+
+  function traceNodeName(nodeId: string | null): string {
+    if (!nodeId) {
+      return 'None';
+    }
+    const node = presentedGraph.nodes.find((candidate) => candidate.id === nodeId);
+    return node ? node.name : nodeId;
+  }
+
+  function toggleValue(values: string[], value: string): string[] {
+    const next = new Set(values);
+    if (next.has(value)) {
+      next.delete(value);
+    } else {
+      next.add(value);
+    }
+    return Array.from(next).sort((left, right) => left.localeCompare(right));
+  }
+
+  function uniquePreservingOrder(values: string[]): string[] {
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const value of values) {
+      if (!value || seen.has(value)) {
+        continue;
+      }
+      seen.add(value);
+      result.push(value);
+    }
+    return result;
+  }
+
   onMount(() => {
+    explorerSettings = readExplorerSettings();
+    const mediaQuery = typeof window !== 'undefined'
+      ? window.matchMedia('(prefers-color-scheme: dark)')
+      : null;
+    systemPrefersDark = mediaQuery?.matches ?? false;
     void boot();
 
     function handleEscape(event: KeyboardEvent): void {
       if (event.key === 'Escape') {
         activePopover = null;
-        nodePopup = null;
+        selectedNodeId = null;
         modeMenuOpen = false;
         densityMenuOpen = false;
+        settingsOpen = false;
       }
     }
 
@@ -865,7 +1603,6 @@
 
       if (
         target.closest('[data-interactive-root]') ||
-        target.closest('[data-node-popup]') ||
         target.closest('.svelte-flow__node') ||
         target.closest('.svelte-flow__edge')
       ) {
@@ -873,17 +1610,36 @@
       }
 
       activePopover = null;
-      nodePopup = null;
+      selectedNodeId = null;
       modeMenuOpen = false;
       densityMenuOpen = false;
+      settingsOpen = false;
+    }
+
+    function handleThemeChange(event: MediaQueryListEvent): void {
+      systemPrefersDark = event.matches;
     }
 
     window.addEventListener('keydown', handleEscape);
     window.addEventListener('click', handleWindowClick);
+    if (mediaQuery) {
+      if ('addEventListener' in mediaQuery) {
+        mediaQuery.addEventListener('change', handleThemeChange);
+      } else {
+        mediaQuery.addListener(handleThemeChange);
+      }
+    }
 
     return () => {
       window.removeEventListener('keydown', handleEscape);
       window.removeEventListener('click', handleWindowClick);
+      if (mediaQuery) {
+        if ('removeEventListener' in mediaQuery) {
+          mediaQuery.removeEventListener('change', handleThemeChange);
+        } else {
+          mediaQuery.removeListener(handleThemeChange);
+        }
+      }
     };
   });
 
@@ -912,22 +1668,67 @@
   });
 </script>
 
-<main class="app-shell" style={paletteStyle}>
+<main class="app-shell" style={paletteStyle} data-theme={resolvedTheme}>
   <header class="page-header">
     <div class="page-header__brand">
       <span class="wordmark">Mapture</span>
-      <span class="header-pill soft-pill">{visible.nodes} nodes</span>
-      <span class="header-pill soft-pill">{visible.edges} edges</span>
+      <TokenBadge label="Nodes" count={visible.nodes} interactive={false} quiet compact className="header-token" />
+      <TokenBadge label="Edges" count={visible.edges} interactive={false} quiet compact className="header-token" />
     </div>
 
     <div class="page-header__actions">
-      <a class="header-pill header-link" href={GITHUB_URL} target="_blank" rel="noreferrer">GitHub</a>
       <span class={['header-pill', 'status-pill', connectionTone()].join(' ')}>
         <span class="status-dot"></span>
         {connectionLabel()}
       </span>
+      <a
+        class="header-pill header-link icon-pill"
+        href={GITHUB_URL}
+        target="_blank"
+        rel="noreferrer"
+        aria-label="Open GitHub repository"
+        title="GitHub"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M9 19c-4 1.2-4-2.1-5.6-2.6M14.6 21v-3.1c0-1 .1-1.5-.4-2.1 2.3-.3 4.7-1.1 4.7-5a3.9 3.9 0 0 0-1-2.7 3.6 3.6 0 0 0-.1-2.7s-.9-.3-2.9 1a10.1 10.1 0 0 0-5.8 0c-2-1.3-2.9-1-2.9-1a3.6 3.6 0 0 0-.1 2.7 3.9 3.9 0 0 0-1 2.7c0 3.9 2.4 4.7 4.7 5-.5.6-.5 1.2-.4 2.1V21"></path>
+        </svg>
+        <span class="sr-only">GitHub</span>
+      </a>
+      <div class="header-control" data-interactive-root>
+        <button
+          type="button"
+          class={['header-pill', 'header-button', 'icon-pill', settingsOpen ? 'active' : ''].join(' ')}
+          onclick={toggleSettingsPanel}
+          aria-label="Open explorer settings"
+          title="Settings"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M10.3 3.3h3.4l.4 2a6.7 6.7 0 0 1 1.7.7l1.7-1 2.4 2.4-1 1.7c.3.5.5 1.1.7 1.7l2 .4v3.4l-2 .4a6.7 6.7 0 0 1-.7 1.7l1 1.7-2.4 2.4-1.7-1a6.7 6.7 0 0 1-1.7.7l-.4 2h-3.4l-.4-2a6.7 6.7 0 0 1-1.7-.7l-1.7 1-2.4-2.4 1-1.7a6.7 6.7 0 0 1-.7-1.7l-2-.4v-3.4l2-.4c.2-.6.4-1.2.7-1.7l-1-1.7L8 4.9l1.7 1c.5-.3 1.1-.5 1.7-.7l.4-2z"></path>
+            <circle cx="12" cy="12" r="3.1"></circle>
+          </svg>
+          <span class="sr-only">Settings</span>
+        </button>
+      </div>
     </div>
   </header>
+
+  <CanvasModal
+    open={settingsOpen}
+    title="Explorer Settings"
+    description="Local preferences and feature toggles for the current browser."
+    width="min(760px, calc(100vw - 2rem))"
+    onclose={() => (settingsOpen = false)}
+  >
+    <div class="settings-modal-grid">
+      {#each settingsSections as section}
+        <SettingsSection title={section.title} description={section.description}>
+          {#each section.fields as field}
+            <SettingsField field={field} onchange={handleSettingsFieldChange} />
+          {/each}
+        </SettingsSection>
+      {/each}
+    </div>
+  </CanvasModal>
 
   <section class="canvas-shell">
     <SvelteFlow
@@ -953,42 +1754,28 @@
     >
       <FlowViewportController request={fitViewRequest} padding={FIT_VIEW_PADDING} maxZoom={1.35} />
       <DomainLanesBackdrop lanes={presentedGraph.lanes} />
-      <Background color="rgba(24, 34, 40, 0.07)" gap={26} />
+      <Background color="var(--canvas-grid)" gap={26} />
       <MiniMap position="bottom-left" pannable zoomable />
       <Controls position="bottom-right" />
 
       <Panel position="top-left" class="canvas-toolbar-shell">
         <div class="canvas-toolbar" data-interactive-root bind:this={toolbarElement}>
           <div class="canvas-rail">
-            {#each railKinds as kind}
-              <button
-                type="button"
-                class={[
+            {#each visibleRailKinds() as kind}
+              <TokenBadge
+                label={railButtonLabel(kind)}
+                icon={iconForKind(kind)}
+                count={popoverHasValue(kind) ? popoverCount(kind) : null}
+                accent={accentForKind(model, kind)}
+                active={activePopover === kind}
+                compact
+                className={[
                   'rail-pill',
                   `rail-pill--${kind}`,
-                  activePopover === kind ? 'active' : '',
-                  (
-                    (kind === 'search' && filterCounts.query > 0) ||
-                    (kind === 'owners' && filterCounts.owners > 0) ||
-                    (kind === 'domains' && filterCounts.domains > 0) ||
-                    (kind === 'nodeTypes' && filterCounts.nodeTypes > 0)
-                  ) ? 'has-value' : '',
+                  popoverHasValue(kind) ? 'has-value' : '',
                 ].join(' ')}
-                style={chipStyle(model, kind)}
                 onclick={() => togglePopover(kind)}
-              >
-                <span class="chip-icon" aria-hidden="true">{iconForKind(kind)}</span>
-                <span>{railButtonLabel(kind)}</span>
-                {#if kind === 'search' && filterCounts.query > 0}
-                  <small class="pill-count">{filterCounts.query}</small>
-                {:else if kind === 'owners' && filterCounts.owners > 0}
-                  <small class="pill-count">{filterCounts.owners}</small>
-                {:else if kind === 'domains' && filterCounts.domains > 0}
-                  <small class="pill-count">{filterCounts.domains}</small>
-                {:else if kind === 'nodeTypes' && filterCounts.nodeTypes > 0}
-                  <small class="pill-count">{filterCounts.nodeTypes}</small>
-                {/if}
-              </button>
+              />
             {/each}
           </div>
 
@@ -1020,6 +1807,131 @@
             </div>
           {/if}
 
+          {#if explorerSettings.experimental.traceTools && activePopover === 'trace'}
+            <div class="toolbar-popover trace-popover" data-interactive-root>
+              <div class="popover-head">
+                <strong>Path Trace</strong>
+                <button type="button" class="mini-action" onclick={clearTrace}>Clear</button>
+              </div>
+              <div class="trace-fields">
+                <label class="trace-field">
+                  <span>From</span>
+                  <input
+                    type="search"
+                    value={traceDraft.sourceQuery}
+                    placeholder="Start node id or name"
+                    oninput={(event) => updateTraceDraft('source', (event.currentTarget as HTMLInputElement).value)}
+                    onblur={applyTraceSelection}
+                  />
+                  {#if traceSourceSuggestions.length > 0}
+                    <div class="trace-suggestions">
+                      {#each traceSourceSuggestions as node}
+                        <button type="button" class="trace-suggestion" onclick={() => assignTraceEndpoint('source', node)}>
+                          <strong>{node.name}</strong>
+                          <small>{node.id}</small>
+                        </button>
+                      {/each}
+                    </div>
+                  {/if}
+                </label>
+                <label class="trace-field">
+                  <span>To</span>
+                  <input
+                    type="search"
+                    value={traceDraft.targetQuery}
+                    placeholder="Target node id or name"
+                    oninput={(event) => updateTraceDraft('target', (event.currentTarget as HTMLInputElement).value)}
+                    onblur={applyTraceSelection}
+                  />
+                  {#if traceTargetSuggestions.length > 0}
+                    <div class="trace-suggestions">
+                      {#each traceTargetSuggestions as node}
+                        <button type="button" class="trace-suggestion" onclick={() => assignTraceEndpoint('target', node)}>
+                          <strong>{node.name}</strong>
+                          <small>{node.id}</small>
+                        </button>
+                      {/each}
+                    </div>
+                  {/if}
+                </label>
+              </div>
+              <div class="trace-actions">
+                <button type="button" class="mini-action" onclick={applyTraceSelection}>Trace</button>
+                <button type="button" class="mini-action" onclick={swapTrace}>Swap</button>
+                <button type="button" class="mini-action" onclick={() => clearTraceEndpoint('source')}>Clear start</button>
+                <button type="button" class="mini-action" onclick={() => clearTraceEndpoint('target')}>Clear end</button>
+              </div>
+              <article class={['trace-status', `trace-status--${traceStatus.tone}`].join(' ')}>
+                <strong>{traceStatus.label}</strong>
+                <small>{traceNodeName(traceSelection.sourceNodeId)} -> {traceNodeName(traceSelection.targetNodeId)}</small>
+              </article>
+            </div>
+          {/if}
+
+          {#if explorerSettings.experimental.structureTools && activePopover === 'structure'}
+            <div class="toolbar-popover structure-popover" data-interactive-root>
+              <div class="popover-head">
+                <strong>Structure</strong>
+                <button type="button" class="mini-action" onclick={resetStructure}>Reset</button>
+              </div>
+              <TokenBadge
+                label="Summarize cross-domain links"
+                icon={iconForKind('structure')}
+                accent={accentForKind(model, 'structure')}
+                active={aggregateCrossDomain}
+                trailingText={aggregateCrossDomain ? 'On' : 'Off'}
+                className="filter-chip structure-toggle"
+                onclick={toggleCrossDomainAggregation}
+              />
+
+              <section class="structure-section">
+                <div class="structure-section__head">
+                  <strong>Collapse Domains</strong>
+                  <button type="button" class="mini-action" onclick={() => (collapsedDomains = [])}>Clear</button>
+                </div>
+                <div class="structure-list">
+                  {#each model.domains as domain}
+                    <button
+                      type="button"
+                      class={['structure-row', collapsedDomains.includes(domain) ? 'active' : ''].join(' ')}
+                      style={chipStyle(model, 'domains')}
+                      onclick={() => toggleCollapsedDomain(domain)}
+                    >
+                      <span class="structure-row__copy">
+                        <strong>{domainName(model, domain)}</strong>
+                        <small>{structureDomainCounts[domain] ?? 0} visible</small>
+                      </span>
+                      <span class="structure-row__state">{collapsedDomains.includes(domain) ? 'Collapsed' : 'Open'}</span>
+                    </button>
+                  {/each}
+                </div>
+              </section>
+
+              <section class="structure-section">
+                <div class="structure-section__head">
+                  <strong>Collapse Teams</strong>
+                  <button type="button" class="mini-action" onclick={() => (collapsedOwners = [])}>Clear</button>
+                </div>
+                <div class="structure-list">
+                  {#each model.owners as owner}
+                    <button
+                      type="button"
+                      class={['structure-row', collapsedOwners.includes(owner) ? 'active' : ''].join(' ')}
+                      style={chipStyle(model, 'owners')}
+                      onclick={() => toggleCollapsedOwner(owner)}
+                    >
+                      <span class="structure-row__copy">
+                        <strong>{teamName(model, owner)}</strong>
+                        <small>{structureOwnerCounts[owner] ?? 0} visible</small>
+                      </span>
+                      <span class="structure-row__state">{collapsedOwners.includes(owner) ? 'Collapsed' : 'Open'}</span>
+                    </button>
+                  {/each}
+                </div>
+              </section>
+            </div>
+          {/if}
+
           {#if activePopover === 'owners'}
             <div class="toolbar-popover" data-interactive-root>
               <div class="popover-head">
@@ -1028,16 +1940,15 @@
               </div>
               <div class="chip-list">
                 {#each model.owners as owner}
-                  <button
-                    type="button"
-                    class={['filter-chip', 'filter-chip--owner', filters.owners.includes(owner) ? 'active' : ''].join(' ')}
-                    style={chipStyle(model, 'owners')}
+                  <TokenBadge
+                    label={teamName(model, owner)}
+                    icon={iconForKind('owners')}
+                    count={visibleOwnerCounts[owner] ?? 0}
+                    accent={accentForKind(model, 'owners')}
+                    active={filters.owners.includes(owner)}
+                    className="filter-chip filter-chip--owner"
                     onclick={() => toggleFilter('owners', owner)}
-                  >
-                    <span class="chip-icon" aria-hidden="true">{iconForKind('owners')}</span>
-                    <span class="chip-label">{teamName(model, owner)}</span>
-                    <small>{visibleOwnerCounts[owner] ?? 0}</small>
-                  </button>
+                  />
                 {/each}
               </div>
             </div>
@@ -1051,16 +1962,15 @@
               </div>
               <div class="chip-list">
                 {#each model.domains as domain}
-                  <button
-                    type="button"
-                    class={['filter-chip', 'filter-chip--domain', filters.domains.includes(domain) ? 'active' : ''].join(' ')}
-                    style={chipStyle(model, 'domains')}
+                  <TokenBadge
+                    label={domainName(model, domain)}
+                    icon={iconForKind('domains')}
+                    count={visibleDomainCounts[domain] ?? 0}
+                    accent={accentForKind(model, 'domains')}
+                    active={filters.domains.includes(domain)}
+                    className="filter-chip filter-chip--domain"
                     onclick={() => toggleFilter('domains', domain)}
-                  >
-                    <span class="chip-icon" aria-hidden="true">{iconForKind('domains')}</span>
-                    <span class="chip-label">{domainName(model, domain)}</span>
-                    <small>{visibleDomainCounts[domain] ?? 0}</small>
-                  </button>
+                  />
                 {/each}
               </div>
             </div>
@@ -1074,16 +1984,15 @@
               </div>
               <div class="chip-list">
                 {#each model.nodeTypes as nodeType}
-                  <button
-                    type="button"
-                    class={['filter-chip', 'filter-chip--node-type', 'kind-chip', filters.nodeTypes.includes(nodeType) ? 'active' : ''].join(' ')}
-                    style={`${chipStyle(model, 'nodeTypes', nodeType)}--pill-color:${nodeColor(model, nodeType)};`}
+                  <TokenBadge
+                    label={capitalize(nodeType)}
+                    icon={iconForKind('nodeTypes', nodeType)}
+                    count={visibleTypeCounts[nodeType] ?? 0}
+                    accent={nodeColor(model, nodeType)}
+                    active={filters.nodeTypes.includes(nodeType)}
+                    className="filter-chip filter-chip--node-type kind-chip"
                     onclick={() => toggleFilter('nodeTypes', nodeType)}
-                  >
-                    <span class="chip-icon" aria-hidden="true">{iconForKind('nodeTypes', nodeType)}</span>
-                    <span class="chip-label">{capitalize(nodeType)}</span>
-                    <small>{visibleTypeCounts[nodeType] ?? 0}</small>
-                  </button>
+                  />
                 {/each}
               </div>
             </div>
@@ -1092,18 +2001,14 @@
           {#if activeFilterBadges.length > 0}
             <div class="active-strip">
               {#each activeFilterBadges as badge}
-                <button
-                  type="button"
-                  class={['active-badge', `active-badge--${badge.kind}`].join(' ')}
-                  style={`--chip-accent:${badge.tone};`}
+                <TokenBadge
+                  label={badge.label}
+                  icon={badge.icon}
+                  accent={badge.tone}
+                  trailingText="x"
+                  className={['active-badge', `active-badge--${badge.kind}`].join(' ')}
                   onclick={() => removeBadge(badge)}
-                >
-                  <span class="active-badge__meta">
-                    <span class="chip-icon" aria-hidden="true">{badge.icon}</span>
-                  </span>
-                  <span class="active-badge__label">{badge.label}</span>
-                  <small aria-hidden="true">x</small>
-                </button>
+                />
               {/each}
               <button type="button" class="active-reset" onclick={resetFilters}>Reset filters</button>
             </div>
@@ -1194,35 +2099,30 @@
         </div>
       </Panel>
 
-      {#if nodePopup && popupNode}
-        <Panel position="top-left" class="node-popup-shell">
-          <article class="node-popup" data-node-popup style={popupStyle()}>
-            <div class="node-popup__head">
-              <strong>{popupNode.name}</strong>
-              <span class="type-badge" style={`--pill-color:${nodeColor(model, popupNode.type)};`}>{popupNode.type}</span>
-            </div>
-            <div class="popup-meta">
-              <span class="meta-label">Domain</span>
-              <span>{popupNode.domain ? domainName(model, popupNode.domain) : 'n/a'}</span>
-            </div>
-            <div class="popup-meta">
-              <span class="meta-label">Owner</span>
-              <span>{popupNode.owner ? teamName(model, popupNode.owner) : 'n/a'}</span>
-            </div>
-            <div class="popup-meta">
-              <span class="meta-label">Source</span>
-              <span class="mono popup-source">
-                {#if popupNode.file}
-                  {popupNode.file}{popupNode.line ? `:${popupNode.line}` : ''}
-                {:else}
-                  n/a
-                {/if}
-              </span>
-            </div>
-            {#if popupNode.summary}
-              <p class="popup-summary">{popupNode.summary}</p>
+      {#if popupNode}
+        <Panel position="bottom-right" class="node-inspector-shell">
+          <div class="node-inspector-stack">
+            <NodeInspector
+              node={popupNode}
+              badgeLabel={popupBadgeLabel(popupNode)}
+              badgeAccent={popupBadgeColor(popupNode)}
+              domainLabel={popupNode.domain ? domainName(model, popupNode.domain) : 'n/a'}
+              ownerLabel={popupNode.owner ? teamName(model, popupNode.owner) : 'n/a'}
+              sourceLabel={popupSourceLabel(popupNode)}
+              compositionLabel={popupCompositionLabel(popupNode)}
+              summary={popupNode.summary}
+              actions={nodeInspectorActions}
+              onaction={handleNodeInspectorAction}
+              onclose={() => (selectedNodeId = null)}
+            />
+
+            {#if explorerSettings.experimental.impactPreview}
+              <ImpactPreviewPanel
+                preview={popupImpact}
+                ontrace={explorerSettings.experimental.traceTools ? assignTraceEndpoint : undefined}
+              />
             {/if}
-          </article>
+          </div>
         </Panel>
       {/if}
     </SvelteFlow>

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/mandotpro/mapture.dev/src/internal/graph"
+	"github.com/mandotpro/mapture.dev/src/internal/schema"
 	"github.com/mandotpro/mapture.dev/src/internal/validator"
 )
 
@@ -40,7 +41,7 @@ func freePort(t *testing.T) string {
 	return addr
 }
 
-func startTestServer(t *testing.T, watch bool) (baseURL string, cancel func()) {
+func startTestServer(t *testing.T, watch bool, scopes ...string) (baseURL string, cancel func()) {
 	t.Helper()
 	addr := freePort(t)
 
@@ -52,6 +53,7 @@ func startTestServer(t *testing.T, watch bool) (baseURL string, cancel func()) {
 		done <- Serve(ctx, Options{
 			ConfigPath: ecommerceConfig(t),
 			Addr:       addr,
+			Scopes:     scopes,
 			Watch:      watch,
 			OnReady: func(url string) {
 				select {
@@ -97,9 +99,23 @@ func TestServeGraphEndpointReturnsGraph(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("unexpected status: %d", resp.StatusCode)
 	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read graph payload: %v", err)
+	}
+	if err := schema.ValidateJSON(schema.GraphDefinition, "graph.json", body); err != nil {
+		t.Fatalf("graph schema validation failed: %v", err)
+	}
+
 	var g graph.Graph
-	if err := json.NewDecoder(resp.Body).Decode(&g); err != nil {
+	if err := json.Unmarshal(body, &g); err != nil {
 		t.Fatalf("decode graph: %v", err)
+	}
+	if g.SchemaVersion != graph.SchemaVersion {
+		t.Fatalf("unexpected graph schema version: %d", g.SchemaVersion)
+	}
+	if g.Metadata.GeneratedAt == "" || g.Metadata.ScannerVersion == "" || g.Metadata.SourceRoot == "" {
+		t.Fatalf("expected graph metadata, got %+v", g.Metadata)
 	}
 	if len(g.Nodes) == 0 {
 		t.Fatal("expected nodes in graph")
@@ -120,13 +136,24 @@ func TestServeExplorerEndpointReturnsCanonicalPayload(t *testing.T) {
 		t.Fatalf("unexpected status: %d", resp.StatusCode)
 	}
 
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read explorer payload: %v", err)
+	}
+	if err := schema.ValidateJSON(schema.ExplorerDefinition, "explorer.json", body); err != nil {
+		t.Fatalf("explorer schema validation failed: %v", err)
+	}
+
 	var payload ExplorerPayload
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+	if err := json.Unmarshal(body, &payload); err != nil {
 		t.Fatalf("decode explorer payload: %v", err)
 	}
 
 	if payload.SchemaVersion != explorerPayloadSchemaVersion {
 		t.Fatalf("unexpected schema version: %d", payload.SchemaVersion)
+	}
+	if payload.Graph.SchemaVersion != graph.SchemaVersion {
+		t.Fatalf("unexpected nested graph schema version: %d", payload.Graph.SchemaVersion)
 	}
 	if len(payload.Graph.Nodes) == 0 {
 		t.Fatal("expected graph nodes in explorer payload")
@@ -137,9 +164,39 @@ func TestServeExplorerEndpointReturnsCanonicalPayload(t *testing.T) {
 	if payload.UI.NodeColors.Service == "" || payload.UI.NodeColors.Event == "" {
 		t.Fatalf("expected ui node colors in explorer payload, got %+v", payload.UI.NodeColors)
 	}
+	if payload.UI.DefaultLayout == "" {
+		t.Fatalf("expected ui default layout in explorer payload, got %+v", payload.UI)
+	}
 	if payload.Meta.ProjectID == "" || payload.Meta.Mode != "live" || payload.Meta.SourceLabel == "" {
 		t.Fatalf("unexpected explorer meta: %+v", payload.Meta)
 	}
+}
+
+func TestServeExplorerEndpointWithScopeReturnsSubsetMetadata(t *testing.T) {
+	baseURL, stop := startTestServer(t, false, "./src/php/orders")
+	defer stop()
+
+	resp, err := http.Get(baseURL + "/api/explorer")
+	if err != nil {
+		t.Fatalf("GET /api/explorer: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var payload ExplorerPayload
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode explorer payload: %v", err)
+	}
+
+	if !strings.Contains(payload.Meta.SourceLabel, "scoped") {
+		t.Fatalf("expected scoped source label, got %+v", payload.Meta)
+	}
+
+	for _, node := range payload.Graph.Nodes {
+		if node.ID == "api:payment-api" && node.File == "" {
+			return
+		}
+	}
+	t.Fatalf("expected scoped explorer graph to include inferred boundary node, got %#v", payload.Graph.Nodes)
 }
 
 func TestServeValidateEndpointReturnsResult(t *testing.T) {
@@ -337,6 +394,62 @@ func TestServeShutsDownCleanlyOnContextCancel(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		cancel()
 		t.Fatal("not ready")
+	}
+
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("expected clean shutdown, got %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("server did not shut down within 5s of cancel")
+	}
+}
+
+func TestServeShutsDownCleanlyWithOpenEventStream(t *testing.T) {
+	addr := freePort(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	ready := make(chan string, 1)
+	done := make(chan error, 1)
+	go func() {
+		done <- Serve(ctx, Options{
+			ConfigPath: ecommerceConfig(t),
+			Addr:       addr,
+			Watch:      false,
+			OnReady: func(url string) {
+				select {
+				case ready <- url:
+				default:
+				}
+			},
+		})
+	}()
+
+	var baseURL string
+	select {
+	case baseURL = <-ready:
+	case <-time.After(5 * time.Second):
+		cancel()
+		t.Fatal("not ready")
+	}
+
+	resp, err := http.Get(baseURL + "/api/events")
+	if err != nil {
+		cancel()
+		t.Fatalf("GET /api/events: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	reader := bufio.NewReader(resp.Body)
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		cancel()
+		t.Fatalf("read sse preface: %v", err)
+	}
+	if strings.TrimSpace(line) != ": connected" {
+		cancel()
+		t.Fatalf("unexpected sse preface: %q", line)
 	}
 
 	cancel()

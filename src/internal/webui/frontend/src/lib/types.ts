@@ -125,9 +125,14 @@ export interface GraphEdge {
 export type LayoutMode = 'freeform' | 'clustered' | 'elk-horizontal';
 export type ViewMode = 'system-map' | 'event-flow' | 'domain-lanes' | 'workbench';
 export type DensityMode = 'overview' | 'standard' | 'detailed';
+export type ThemePreference = 'system' | 'light' | 'dark';
+export type ResolvedTheme = 'light' | 'dark';
 export type NodeTone = 'primary' | 'secondary' | 'muted';
 export type EdgeTone = 'primary' | 'secondary' | 'muted';
 export type NodeStage = 'support' | 'producer' | 'event' | 'consumer';
+export type PresentedNodeKind = 'node' | 'group' | 'bridge';
+export type PresentedGroupKind = 'domain' | 'team' | 'boundary' | null;
+export type ImpactDirection = 'none' | 'focus' | 'incoming' | 'outgoing' | 'mixed';
 
 export interface GraphModel {
   nodes: GraphNode[];
@@ -163,10 +168,31 @@ export interface PresenterFocus {
   hoveredEdgeId: string | null;
 }
 
+export interface TraceSelection {
+  sourceNodeId: string | null;
+  targetNodeId: string | null;
+}
+
+export interface TypeSummary {
+  service: number;
+  api: number;
+  database: number;
+  event: number;
+  total: number;
+}
+
 export interface PresentedNode extends GraphNode {
   stage: NodeStage;
   subtitle: string;
   tone: NodeTone;
+  kind: PresentedNodeKind;
+  groupKind: PresentedGroupKind;
+  eyebrow: string;
+  memberCount: number;
+  typeSummary: TypeSummary;
+  colorHint: string;
+  trace: boolean;
+  impact: ImpactDirection;
 }
 
 export interface PresentedEdge {
@@ -180,6 +206,20 @@ export interface PresentedEdge {
   synthetic: boolean;
   crossDomain: boolean;
   secondary: boolean;
+  aggregated: boolean;
+  weight: number;
+  trace: boolean;
+  impact: ImpactDirection;
+}
+
+export interface TraceResult {
+  active: boolean;
+  sourceId: string | null;
+  targetId: string | null;
+  found: boolean;
+  directed: boolean;
+  nodeIDs: string[];
+  edgeIDs: string[];
 }
 
 export interface LaneOverlay {
@@ -197,12 +237,105 @@ export interface PresentedGraph {
   nodes: PresentedNode[];
   edges: PresentedEdge[];
   lanes: LaneOverlay[];
+  trace: TraceResult;
 }
 
 export interface FlowPresentation {
   graph: PresentedGraph;
   flowNodes: import('@xyflow/svelte').Node[];
   flowEdges: import('@xyflow/svelte').Edge[];
+}
+
+export interface ArchitectureNodeData {
+  label: string;
+  subtitle: string;
+  type: string;
+  domain: string;
+  owner: string;
+  summary: string;
+  color: string;
+  tone: NodeTone;
+  viewMode: ViewMode;
+  stage: NodeStage;
+  kind: PresentedNodeKind;
+  groupKind: PresentedGroupKind;
+  eyebrow: string;
+  memberCount: number;
+  typeSummary: TypeSummary;
+  trace: boolean;
+  impact: ImpactDirection;
+}
+
+export interface ImpactPreview {
+  directUpstream: PresentedNode[];
+  directDownstream: PresentedNode[];
+  upstreamReach: number;
+  downstreamReach: number;
+  crossBoundaryTouches: number;
+}
+
+export interface ExplorerSettings {
+  version: 2;
+  appearance: {
+    themePreference: ThemePreference;
+  };
+  experimental: {
+    traceTools: boolean;
+    structureTools: boolean;
+    impactPreview: boolean;
+  };
+}
+
+export interface SettingsChoiceOption {
+  value: string;
+  label: string;
+  description?: string;
+  glyph?: string;
+}
+
+interface SettingsFieldBase {
+  id: string;
+  label: string;
+  description: string;
+  badge?: string;
+  disabled?: boolean;
+}
+
+export interface SettingsToggleField extends SettingsFieldBase {
+  kind: 'toggle' | 'checkbox';
+  value: boolean;
+}
+
+export interface SettingsChoiceField extends SettingsFieldBase {
+  kind: 'choice';
+  value: string;
+  options: SettingsChoiceOption[];
+}
+
+export interface SettingsInputField extends SettingsFieldBase {
+  kind: 'input';
+  value: string;
+  placeholder?: string;
+  inputType?: string;
+}
+
+export type SettingsFieldConfig =
+  | SettingsToggleField
+  | SettingsChoiceField
+  | SettingsInputField;
+
+export interface SettingsSectionConfig {
+  id: string;
+  title: string;
+  description: string;
+  fields: SettingsFieldConfig[];
+}
+
+export interface NodeInspectorAction {
+  id: string;
+  label: string;
+  tone?: 'default' | 'accent';
+  badge?: string;
 }
 
 export interface WindowWithPayload extends Window {

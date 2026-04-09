@@ -10,14 +10,19 @@ import type {
   GraphEdge,
   GraphModel,
   GraphNode,
+  ImpactDirection,
   LaneOverlay,
   LayoutMode,
   NodeTone,
   NodeStage,
   PresentedEdge,
   PresentedGraph,
+  PresentedGroupKind,
   PresentedNode,
   PresenterFocus,
+  TraceResult,
+  TraceSelection,
+  TypeSummary,
   UIConfig,
   ViewMode,
 } from './types';
@@ -27,8 +32,21 @@ type BuildPresentationOptions = {
   viewMode: ViewMode;
   densityMode: DensityMode;
   focus: PresenterFocus;
+  trace: TraceSelection;
+  collapsedDomains: Set<string>;
+  collapsedOwners: Set<string>;
+  aggregateCrossDomain: boolean;
   manualPositions: Record<string, { x: number; y: number }>;
   reservedInsets: { top: number; left: number };
+};
+
+type WorkingNode = GraphNode & {
+  kind: PresentedNode['kind'];
+  groupKind: PresentedGroupKind;
+  eyebrow: string;
+  memberCount: number;
+  typeSummary: TypeSummary;
+  colorHint: string;
 };
 
 type ModeEdge = {
@@ -39,6 +57,33 @@ type ModeEdge = {
   label: string;
   synthetic: boolean;
   secondary: boolean;
+  aggregated: boolean;
+  weight: number;
+};
+
+type StructureOptions = {
+  collapsedDomains: Set<string>;
+  collapsedOwners: Set<string>;
+  aggregateCrossDomain: boolean;
+};
+
+type AggregateBucket = {
+  from: string;
+  to: string;
+  synthetic: boolean;
+  secondary: boolean;
+  aggregated: boolean;
+  weight: number;
+  typeCounts: Map<string, number>;
+};
+
+type FocusState = {
+  active: boolean;
+  nodeIDs: Set<string>;
+  edgeIDs: Set<string>;
+  traceNodeIDs: Set<string>;
+  traceEdgeIDs: Set<string>;
+  anchorNodeId: string | null;
 };
 
 const DEFAULT_NODE_COLORS: Required<NonNullable<UIConfig['nodeColors']>> = {
@@ -56,6 +101,7 @@ const EDGE_COLORS: Record<string, string> = {
   emits: '#a73f7f',
   consumes: '#cf6e26',
   async: '#9f52cc',
+  aggregate: '#8c6d44',
 };
 
 export function normalizeGraph(payload: ExplorerPayload): GraphModel {
@@ -137,7 +183,6 @@ export async function buildFlowPresentation(
   const filteredEdges = model.edges.filter((edge) => filteredNodeIDs.has(edge.from) && filteredNodeIDs.has(edge.to));
   const directNodeIDs = buildDirectNodeMatches(filteredNodes, filters, options.focus.selectedNodeId);
   const modeGraph = deriveModeGraph(
-    model,
     filteredNodes,
     filteredEdges,
     directNodeIDs,
@@ -145,7 +190,21 @@ export async function buildFlowPresentation(
     options.densityMode,
     options.focus.selectedNodeId,
   );
-  const graph = applyPresentation(model, modeGraph.nodes, modeGraph.edges, options.viewMode, options.densityMode, options.focus);
+  const structuredGraph = applyStructureTransform(model, modeGraph.nodes, modeGraph.edges, {
+    collapsedDomains: options.collapsedDomains,
+    collapsedOwners: options.collapsedOwners,
+    aggregateCrossDomain: options.aggregateCrossDomain,
+  });
+  const trace = buildTraceResult(structuredGraph.nodes, structuredGraph.edges, options.trace);
+  const graph = applyPresentation(
+    model,
+    structuredGraph.nodes,
+    structuredGraph.edges,
+    options.viewMode,
+    options.densityMode,
+    options.focus,
+    trace,
+  );
   const flowNodesInput = graph.nodes.map((node) => toFlowNode(model, node, options.viewMode));
   const layoutEdges = graph.edges.map((edge) => ({
     id: edge.id,
@@ -217,6 +276,7 @@ export function edgeLabel(edgeType: string): string {
     emits: 'emits',
     consumes: 'consumed by',
     async: 'async',
+    aggregate: 'links',
   };
   return labels[edgeType] ?? edgeType;
 }
@@ -226,7 +286,6 @@ export function visibleNodesForFilters(model: GraphModel, filters: Filters): Gra
 }
 
 function deriveModeGraph(
-  model: GraphModel,
   filteredNodes: GraphNode[],
   filteredEdges: GraphEdge[],
   directNodeIDs: Set<string>,
@@ -447,27 +506,244 @@ function buildSyntheticAsyncEdges(
         label: count === 1 ? 'async' : `${count} async`,
         synthetic: true,
         secondary: true,
+        aggregated: count > 1,
+        weight: count,
       };
     });
 }
 
-function applyPresentation(
+function applyStructureTransform(
   model: GraphModel,
   nodes: GraphNode[],
+  edges: ModeEdge[],
+  options: StructureOptions,
+): { nodes: WorkingNode[]; edges: ModeEdge[] } {
+  const workingNodes = nodes.map(toWorkingNode);
+  const nodeMap = new Map(workingNodes.map((node) => [node.id, node]));
+  const replacements = new Map<string, string>();
+  const syntheticNodes = new Map<string, WorkingNode>();
+  const groupMembers = new Map<string, WorkingNode[]>();
+
+  for (const node of workingNodes) {
+    const domainKey = node.domain || 'unassigned';
+    let groupID = '';
+
+    if (node.domain && options.collapsedDomains.has(node.domain)) {
+      groupID = `group:domain:${domainKey}`;
+    } else if (node.owner && options.collapsedOwners.has(node.owner)) {
+      groupID = `group:team:${node.owner}:${domainKey}`;
+    }
+
+    if (!groupID) {
+      continue;
+    }
+
+    replacements.set(node.id, groupID);
+    const current = groupMembers.get(groupID) ?? [];
+    current.push(node);
+    groupMembers.set(groupID, current);
+  }
+
+  for (const [groupID, members] of groupMembers.entries()) {
+    const first = members[0];
+    if (!first) {
+      continue;
+    }
+
+    if (groupID.startsWith('group:domain:')) {
+      syntheticNodes.set(groupID, createDomainGroupNode(model, first.domain || 'unassigned', members));
+      continue;
+    }
+
+    syntheticNodes.set(groupID, createTeamGroupNode(model, first.owner, first.domain || 'unassigned', members));
+  }
+
+  const edgeBuckets = new Map<string, AggregateBucket>();
+  const boundaryDomains = new Set<string>();
+
+  for (const edge of edges) {
+    const source = nodeMap.get(edge.from);
+    const target = nodeMap.get(edge.to);
+    if (!source || !target) {
+      continue;
+    }
+
+    const crossDomain = Boolean(
+      source.domain &&
+      target.domain &&
+      source.domain !== target.domain,
+    );
+
+    let from = replacements.get(edge.from) ?? edge.from;
+    let to = replacements.get(edge.to) ?? edge.to;
+
+    if (options.aggregateCrossDomain && crossDomain) {
+      from = remapCrossDomainEndpoint(from, source);
+      to = remapCrossDomainEndpoint(to, target);
+      if (from.startsWith('bridge:domain:')) {
+        boundaryDomains.add(source.domain || 'unassigned');
+      }
+      if (to.startsWith('bridge:domain:')) {
+        boundaryDomains.add(target.domain || 'unassigned');
+      }
+    }
+
+    if (from === to) {
+      continue;
+    }
+
+    const aggregated = from !== edge.from || to !== edge.to || (options.aggregateCrossDomain && crossDomain);
+    const key = aggregated ? `${from}|${to}` : `${from}|${to}|${edge.type}`;
+    const bucket = edgeBuckets.get(key) ?? {
+      from,
+      to,
+      synthetic: edge.synthetic,
+      secondary: edge.secondary,
+      aggregated,
+      weight: 0,
+      typeCounts: new Map<string, number>(),
+    };
+    bucket.synthetic = bucket.synthetic || edge.synthetic;
+    bucket.secondary = bucket.secondary && edge.secondary;
+    bucket.aggregated = bucket.aggregated || aggregated;
+    bucket.weight += edge.weight;
+    bucket.typeCounts.set(edge.type, (bucket.typeCounts.get(edge.type) ?? 0) + edge.weight);
+    edgeBuckets.set(key, bucket);
+  }
+
+  for (const domain of boundaryDomains) {
+    const bridgeID = `bridge:domain:${domain}`;
+    if (syntheticNodes.has(bridgeID)) {
+      continue;
+    }
+    const members = workingNodes.filter((node) => (node.domain || 'unassigned') === domain);
+    syntheticNodes.set(bridgeID, createBoundaryNode(model, domain, members));
+  }
+
+  const visibleNodes = workingNodes.filter((node) => !replacements.has(node.id));
+  const structuredNodes = [
+    ...visibleNodes,
+    ...Array.from(syntheticNodes.values()),
+  ].sort(compareWorkingNodes);
+  const structuredEdges = Array.from(edgeBuckets.values())
+    .map(finalizeAggregateBucket)
+    .sort((left, right) => left.id.localeCompare(right.id));
+
+  return {
+    nodes: structuredNodes,
+    edges: structuredEdges,
+  };
+}
+
+function buildTraceResult(
+  nodes: WorkingNode[],
+  edges: ModeEdge[],
+  trace: TraceSelection,
+): TraceResult {
+  if (!trace.sourceNodeId || !trace.targetNodeId) {
+    return {
+      active: false,
+      sourceId: trace.sourceNodeId,
+      targetId: trace.targetNodeId,
+      found: false,
+      directed: true,
+      nodeIDs: [],
+      edgeIDs: [],
+    };
+  }
+
+  const visibleNodeIDs = new Set(nodes.map((node) => node.id));
+  const sourceVisible = visibleNodeIDs.has(trace.sourceNodeId);
+  const targetVisible = visibleNodeIDs.has(trace.targetNodeId);
+
+  if (!sourceVisible || !targetVisible) {
+    return {
+      active: true,
+      sourceId: sourceVisible ? trace.sourceNodeId : null,
+      targetId: targetVisible ? trace.targetNodeId : null,
+      found: false,
+      directed: true,
+      nodeIDs: [trace.sourceNodeId, trace.targetNodeId].filter((value, index, list) => list.indexOf(value) === index),
+      edgeIDs: [],
+    };
+  }
+
+  if (trace.sourceNodeId === trace.targetNodeId) {
+    return {
+      active: true,
+      sourceId: trace.sourceNodeId,
+      targetId: trace.targetNodeId,
+      found: true,
+      directed: true,
+      nodeIDs: [trace.sourceNodeId],
+      edgeIDs: [],
+    };
+  }
+
+  const directed = findShortestPath(trace.sourceNodeId, trace.targetNodeId, edges, true);
+  if (directed) {
+    return {
+      active: true,
+      sourceId: trace.sourceNodeId,
+      targetId: trace.targetNodeId,
+      found: true,
+      directed: true,
+      nodeIDs: directed.nodeIDs,
+      edgeIDs: directed.edgeIDs,
+    };
+  }
+
+  const undirected = findShortestPath(trace.sourceNodeId, trace.targetNodeId, edges, false);
+  if (undirected) {
+    return {
+      active: true,
+      sourceId: trace.sourceNodeId,
+      targetId: trace.targetNodeId,
+      found: true,
+      directed: false,
+      nodeIDs: undirected.nodeIDs,
+      edgeIDs: undirected.edgeIDs,
+    };
+  }
+
+  return {
+    active: true,
+    sourceId: trace.sourceNodeId,
+    targetId: trace.targetNodeId,
+    found: false,
+    directed: true,
+    nodeIDs: [trace.sourceNodeId, trace.targetNodeId],
+    edgeIDs: [],
+  };
+}
+
+function applyPresentation(
+  model: GraphModel,
+  nodes: WorkingNode[],
   edges: ModeEdge[],
   viewMode: ViewMode,
   densityMode: DensityMode,
   focus: PresenterFocus,
+  trace: TraceResult,
 ): PresentedGraph {
   const nodeStages = buildNodeStages(nodes, edges, viewMode);
   const nodeMap = new Map(nodes.map((node) => [node.id, node]));
-  const focusState = buildFocusState(edges, focus, new Set(nodes.map((node) => node.id)));
+  const focusState = buildFocusState(edges, focus, new Set(nodes.map((node) => node.id)), trace);
+  const impactState = buildImpactState(edges, focusState.anchorNodeId, trace.active);
 
   const presentedNodes: PresentedNode[] = nodes.map((node) => ({
     ...node,
     stage: nodeStages.get(node.id) ?? 'support',
-    subtitle: node.domain || node.owner || '',
+    subtitle: resolveNodeSubtitle(model, node),
     tone: resolveNodeTone(node, viewMode, densityMode, focusState),
+    kind: node.kind,
+    groupKind: node.groupKind,
+    eyebrow: node.eyebrow,
+    memberCount: node.memberCount,
+    typeSummary: node.typeSummary,
+    colorHint: node.colorHint,
+    trace: focusState.traceNodeIDs.has(node.id),
+    impact: impactState.nodeDirections.get(node.id) ?? 'none',
   }));
 
   const presentedEdges: PresentedEdge[] = edges.map((edge) => {
@@ -483,6 +759,10 @@ function applyPresentation(
       tone: resolveEdgeTone(edge, viewMode, crossDomain, focusState),
       showLabel: shouldShowEdgeLabel(edge, densityMode, focusState),
       crossDomain,
+      aggregated: edge.aggregated,
+      weight: edge.weight,
+      trace: focusState.traceEdgeIDs.has(edge.id),
+      impact: impactState.edgeDirections.get(edge.id) ?? 'none',
     };
   });
 
@@ -490,11 +770,12 @@ function applyPresentation(
     nodes: presentedNodes,
     edges: presentedEdges,
     lanes: [],
+    trace,
   };
 }
 
 function buildNodeStages(
-  nodes: GraphNode[],
+  nodes: WorkingNode[],
   edges: ModeEdge[],
   viewMode: ViewMode,
 ): Map<string, NodeStage> {
@@ -531,12 +812,21 @@ function buildFocusState(
   edges: ModeEdge[],
   focus: PresenterFocus,
   visibleNodeIDs: Set<string>,
-): {
-  active: boolean;
-  nodeIDs: Set<string>;
-  edgeIDs: Set<string>;
-  anchorNodeId: string | null;
-} {
+  trace: TraceResult,
+): FocusState {
+  if (trace.active) {
+    const nodeIDs = new Set(trace.nodeIDs.filter((nodeID) => visibleNodeIDs.has(nodeID)));
+    const edgeIDs = new Set(trace.edgeIDs);
+    return {
+      active: nodeIDs.size > 0 || edgeIDs.size > 0,
+      nodeIDs,
+      edgeIDs,
+      traceNodeIDs: new Set(nodeIDs),
+      traceEdgeIDs: new Set(edgeIDs),
+      anchorNodeId: null,
+    };
+  }
+
   const hoveredEdge = focus.hoveredEdgeId
     ? edges.find((edge) => edge.id === focus.hoveredEdgeId) ?? null
     : null;
@@ -546,6 +836,8 @@ function buildFocusState(
       active: true,
       nodeIDs: new Set([hoveredEdge.from, hoveredEdge.to]),
       edgeIDs: new Set([hoveredEdge.id]),
+      traceNodeIDs: new Set(),
+      traceEdgeIDs: new Set(),
       anchorNodeId: null,
     };
   }
@@ -561,6 +853,8 @@ function buildFocusState(
       active: false,
       nodeIDs: new Set(),
       edgeIDs: new Set(),
+      traceNodeIDs: new Set(),
+      traceEdgeIDs: new Set(),
       anchorNodeId: null,
     };
   }
@@ -580,15 +874,58 @@ function buildFocusState(
     active: true,
     nodeIDs,
     edgeIDs,
+    traceNodeIDs: new Set(),
+    traceEdgeIDs: new Set(),
     anchorNodeId,
   };
 }
 
+function buildImpactState(
+  edges: ModeEdge[],
+  anchorNodeId: string | null,
+  traceActive: boolean,
+): {
+  nodeDirections: Map<string, ImpactDirection>;
+  edgeDirections: Map<string, ImpactDirection>;
+} {
+  const nodeDirections = new Map<string, ImpactDirection>();
+  const edgeDirections = new Map<string, ImpactDirection>();
+
+  if (!anchorNodeId || traceActive) {
+    return {
+      nodeDirections,
+      edgeDirections,
+    };
+  }
+
+  nodeDirections.set(anchorNodeId, 'focus');
+  for (const edge of edges) {
+    if (edge.from === anchorNodeId && edge.to === anchorNodeId) {
+      nodeDirections.set(anchorNodeId, 'mixed');
+      edgeDirections.set(edge.id, 'mixed');
+      continue;
+    }
+    if (edge.from === anchorNodeId) {
+      edgeDirections.set(edge.id, 'outgoing');
+      nodeDirections.set(edge.to, mergeImpactDirection(nodeDirections.get(edge.to), 'outgoing'));
+    }
+    if (edge.to === anchorNodeId) {
+      edgeDirections.set(edge.id, 'incoming');
+      nodeDirections.set(edge.from, mergeImpactDirection(nodeDirections.get(edge.from), 'incoming'));
+    }
+  }
+
+  return {
+    nodeDirections,
+    edgeDirections,
+  };
+}
+
 function resolveNodeTone(
-  node: GraphNode,
+  node: WorkingNode,
   viewMode: ViewMode,
   densityMode: DensityMode,
-  focusState: { active: boolean; nodeIDs: Set<string> },
+  focusState: FocusState,
 ): NodeTone {
   const baseTone = baseNodeTone(node, viewMode, densityMode);
 
@@ -611,8 +948,8 @@ function resolveEdgeTone(
   edge: ModeEdge,
   viewMode: ViewMode,
   crossDomain: boolean,
-  focusState: { active: boolean; nodeIDs: Set<string>; edgeIDs: Set<string> },
-): 'primary' | 'secondary' | 'muted' {
+  focusState: FocusState,
+): NodeTone {
   const baseTone = baseEdgeTone(edge, viewMode, crossDomain);
 
   if (!focusState.active) {
@@ -633,12 +970,12 @@ function resolveEdgeTone(
 function shouldShowEdgeLabel(
   edge: ModeEdge,
   densityMode: DensityMode,
-  focusState: { active: boolean; edgeIDs: Set<string>; anchorNodeId: string | null },
+  focusState: FocusState,
 ): boolean {
   if (densityMode === 'detailed') {
     return true;
   }
-  if (focusState.edgeIDs.has(edge.id)) {
+  if (focusState.traceEdgeIDs.has(edge.id) || focusState.edgeIDs.has(edge.id)) {
     return true;
   }
   if (!focusState.anchorNodeId) {
@@ -647,7 +984,11 @@ function shouldShowEdgeLabel(
   return edge.from === focusState.anchorNodeId || edge.to === focusState.anchorNodeId;
 }
 
-function baseNodeTone(node: GraphNode, viewMode: ViewMode, densityMode: DensityMode): NodeTone {
+function baseNodeTone(node: WorkingNode, viewMode: ViewMode, densityMode: DensityMode): NodeTone {
+  if (node.kind === 'group' || node.kind === 'bridge') {
+    return node.kind === 'bridge' ? 'secondary' : 'primary';
+  }
+
   if (viewMode === 'event-flow') {
     if (node.type === 'event') {
       return 'primary';
@@ -684,8 +1025,8 @@ function baseNodeTone(node: GraphNode, viewMode: ViewMode, densityMode: DensityM
   return 'secondary';
 }
 
-function baseEdgeTone(edge: ModeEdge, viewMode: ViewMode, crossDomain: boolean): 'primary' | 'secondary' | 'muted' {
-  if (edge.synthetic) {
+function baseEdgeTone(edge: ModeEdge, viewMode: ViewMode, crossDomain: boolean): NodeTone {
+  if (edge.synthetic || edge.aggregated) {
     return 'secondary';
   }
 
@@ -713,13 +1054,20 @@ function toModeEdge(edge: GraphEdge, secondary = false): ModeEdge {
     label: edgeLabel(edge.type),
     synthetic: false,
     secondary,
+    aggregated: false,
+    weight: 1,
   };
 }
 
 function toFlowNode(model: GraphModel, node: PresentedNode, viewMode: ViewMode): Node {
+  const componentType = node.kind === 'group'
+    ? 'group'
+    : node.kind === 'bridge'
+      ? 'bridge'
+      : node.type;
   return {
     id: node.id,
-    type: 'architecture',
+    type: componentType,
     position: { x: 0, y: 0 },
     width: NODE_WIDTH,
     height: NODE_HEIGHT,
@@ -730,10 +1078,17 @@ function toFlowNode(model: GraphModel, node: PresentedNode, viewMode: ViewMode):
       domain: node.domain,
       owner: node.owner,
       summary: node.summary,
-      color: nodeColor(model, node.type),
+      color: node.colorHint || nodeColor(model, node.type),
       tone: node.tone,
       viewMode,
       stage: node.stage,
+      kind: node.kind,
+      groupKind: node.groupKind,
+      eyebrow: node.eyebrow,
+      memberCount: node.memberCount,
+      typeSummary: node.typeSummary,
+      trace: node.trace,
+      impact: node.impact,
     },
     sourcePosition: Position.Right,
     targetPosition: Position.Left,
@@ -744,8 +1099,24 @@ function toFlowNode(model: GraphModel, node: PresentedNode, viewMode: ViewMode):
 }
 
 function toFlowEdge(edge: PresentedEdge): Edge {
-  const opacity = edge.tone === 'muted' ? 0.11 : edge.tone === 'secondary' ? 0.34 : 0.8;
-  const strokeWidth = edge.synthetic ? 1.6 : edge.crossDomain ? 1.9 : edge.tone === 'primary' ? 1.7 : 1.4;
+  const opacity = edge.trace
+    ? 0.92
+    : edge.tone === 'muted'
+      ? 0.11
+      : edge.tone === 'secondary'
+        ? 0.34
+        : 0.8;
+  const strokeWidth = edge.trace
+    ? 2.6
+    : edge.aggregated
+      ? 2.2
+      : edge.synthetic
+        ? 1.6
+        : edge.crossDomain
+          ? 1.9
+          : edge.tone === 'primary'
+            ? 1.7
+            : 1.4;
   const dash = edge.synthetic
     ? 'stroke-dasharray:11 6;'
     : edge.type === 'depends_on'
@@ -754,7 +1125,9 @@ function toFlowEdge(edge: PresentedEdge): Edge {
         ? 'stroke-dasharray:4 4;'
         : edge.type === 'consumes'
           ? 'stroke-dasharray:7 5;'
-          : '';
+          : edge.aggregated
+            ? 'stroke-dasharray:2 0;'
+            : '';
 
   return {
     id: edge.id,
@@ -762,12 +1135,15 @@ function toFlowEdge(edge: PresentedEdge): Edge {
     target: edge.to,
     type: 'smoothstep',
     label: edge.showLabel ? edge.label : '',
+    animated: edge.trace,
     markerEnd: {
       type: MarkerType.ArrowClosed,
       color: edgeColor(edge.type),
     },
     style: `stroke:${edgeColor(edge.type)};stroke-width:${strokeWidth};opacity:${opacity};${dash}`,
-    labelStyle: 'font-size:11px;font-weight:600;color:#4f5b66;background:rgba(255,252,246,0.96);border:1px solid rgba(23,32,39,0.08);border-radius:999px;padding:3px 8px;box-shadow:0 8px 20px rgba(58,39,14,0.08);',
+    labelStyle: edge.trace
+      ? 'font-size:11px;font-weight:700;color:#1b2730;background:rgba(255,250,242,0.98);border:1px solid rgba(13,118,97,0.18);border-radius:999px;padding:3px 8px;box-shadow:0 10px 24px rgba(13,118,97,0.12);'
+      : 'font-size:11px;font-weight:600;color:#4f5b66;background:rgba(255,252,246,0.96);border:1px solid rgba(23,32,39,0.08);border-radius:999px;padding:3px 8px;box-shadow:0 8px 20px rgba(58,39,14,0.08);',
   };
 }
 
@@ -863,6 +1239,333 @@ function matchesQuery(node: GraphNode, query: string): boolean {
     node.file,
     node.summary,
   ].join(' ').toLowerCase().includes(normalizedQuery);
+}
+
+function toWorkingNode(node: GraphNode): WorkingNode {
+  return {
+    ...node,
+    kind: 'node',
+    groupKind: null,
+    eyebrow: typeLabel(node.type),
+    memberCount: 1,
+    typeSummary: singleTypeSummary(node.type),
+    colorHint: '',
+  };
+}
+
+function createDomainGroupNode(model: GraphModel, domainID: string, members: WorkingNode[]): WorkingNode {
+  const summary = buildTypeSummary(members);
+  const label = domainID === 'unassigned' ? 'Unassigned Domain' : domainName(model, domainID);
+  const owner = mostCommonValue(members.map((member) => member.owner)) ?? '';
+
+  return {
+    id: `group:domain:${domainID}`,
+    type: 'service',
+    name: label,
+    domain: domainID === 'unassigned' ? '' : domainID,
+    owner,
+    file: '',
+    line: 0,
+    symbol: '',
+    summary: `Collapsed ${summary.total} nodes across ${formatTypeSummary(summary)}.`,
+    kind: 'group',
+    groupKind: 'domain',
+    eyebrow: 'Domain Group',
+    memberCount: summary.total,
+    typeSummary: summary,
+    colorHint: domainAccent(domainID),
+  };
+}
+
+function createTeamGroupNode(
+  model: GraphModel,
+  ownerID: string,
+  domainID: string,
+  members: WorkingNode[],
+): WorkingNode {
+  const summary = buildTypeSummary(members);
+  const label = teamName(model, ownerID);
+  const domainLabel = domainID === 'unassigned' ? 'Unassigned' : domainName(model, domainID);
+
+  return {
+    id: `group:team:${ownerID}:${domainID}`,
+    type: 'service',
+    name: label,
+    domain: domainID === 'unassigned' ? '' : domainID,
+    owner: ownerID,
+    file: '',
+    line: 0,
+    symbol: '',
+    summary: `Collapsed ${summary.total} nodes for ${label} in ${domainLabel}.`,
+    kind: 'group',
+    groupKind: 'team',
+    eyebrow: 'Team Group',
+    memberCount: summary.total,
+    typeSummary: summary,
+    colorHint: ownerAccent(ownerID),
+  };
+}
+
+function createBoundaryNode(model: GraphModel, domainID: string, members: WorkingNode[]): WorkingNode {
+  const summary = buildTypeSummary(members);
+  const label = domainID === 'unassigned' ? 'Unassigned Boundary' : domainName(model, domainID);
+  const owner = mostCommonValue(members.map((member) => member.owner)) ?? '';
+
+  return {
+    id: `bridge:domain:${domainID}`,
+    type: 'api',
+    name: label,
+    domain: domainID === 'unassigned' ? '' : domainID,
+    owner,
+    file: '',
+    line: 0,
+    symbol: '',
+    summary: `Aggregated cross-domain traffic touching ${summary.total} visible nodes in ${label}.`,
+    kind: 'bridge',
+    groupKind: 'boundary',
+    eyebrow: 'Boundary',
+    memberCount: summary.total,
+    typeSummary: summary,
+    colorHint: domainAccent(domainID),
+  };
+}
+
+function remapCrossDomainEndpoint(currentID: string, node: WorkingNode): string {
+  if (currentID.startsWith('group:')) {
+    return currentID;
+  }
+  return `bridge:domain:${node.domain || 'unassigned'}`;
+}
+
+function finalizeAggregateBucket(bucket: AggregateBucket): ModeEdge {
+  const topTypes = Array.from(bucket.typeCounts.entries()).sort((left, right) => {
+    if (right[1] !== left[1]) {
+      return right[1] - left[1];
+    }
+    return left[0].localeCompare(right[0]);
+  });
+  const primaryType = topTypes[0]?.[0] ?? 'aggregate';
+  const mixed = topTypes.length > 1;
+
+  return {
+    id: bucket.aggregated
+      ? `aggregate:${bucket.from}->${bucket.to}|${mixed ? 'mixed' : primaryType}`
+      : `${bucket.from}->${bucket.to}|${primaryType}`,
+    from: bucket.from,
+    to: bucket.to,
+    type: mixed ? 'aggregate' : primaryType,
+    label: mixed
+      ? `${bucket.weight} links`
+      : bucket.weight === 1
+        ? edgeLabel(primaryType)
+        : `${bucket.weight} ${edgeLabel(primaryType)}`,
+    synthetic: bucket.synthetic,
+    secondary: bucket.secondary,
+    aggregated: bucket.aggregated,
+    weight: bucket.weight,
+  };
+}
+
+function resolveNodeSubtitle(model: GraphModel, node: WorkingNode): string {
+  if (node.kind === 'group') {
+    if (node.groupKind === 'domain') {
+      const ownerLabel = node.owner ? teamName(model, node.owner) : 'no owner';
+      return `${node.memberCount} nodes · ${ownerLabel}`;
+    }
+    const domainLabel = node.domain ? domainName(model, node.domain) : 'Mixed';
+    return `${domainLabel} · ${node.memberCount} nodes`;
+  }
+
+  if (node.kind === 'bridge') {
+    const domainLabel = node.domain ? domainName(model, node.domain) : 'Unassigned';
+    return `${domainLabel} boundary · ${node.memberCount} nodes`;
+  }
+
+  return node.domain || node.owner || '';
+}
+
+function findShortestPath(
+  sourceID: string,
+  targetID: string,
+  edges: ModeEdge[],
+  directed: boolean,
+): { nodeIDs: string[]; edgeIDs: string[] } | null {
+  type PathStep = { viaNode: string | null; viaEdge: string | null };
+
+  const queue = [sourceID];
+  const seen = new Set<string>([sourceID]);
+  const parents = new Map<string, PathStep>();
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) {
+      break;
+    }
+
+    if (current === targetID) {
+      break;
+    }
+
+    for (const edge of edges) {
+      const candidates: Array<{ next: string; edgeID: string }> = [];
+      if (edge.from === current) {
+        candidates.push({ next: edge.to, edgeID: edge.id });
+      }
+      if (!directed && edge.to === current) {
+        candidates.push({ next: edge.from, edgeID: edge.id });
+      }
+
+      for (const candidate of candidates) {
+        if (seen.has(candidate.next)) {
+          continue;
+        }
+        seen.add(candidate.next);
+        parents.set(candidate.next, {
+          viaNode: current,
+          viaEdge: candidate.edgeID,
+        });
+        queue.push(candidate.next);
+      }
+    }
+  }
+
+  if (!seen.has(targetID)) {
+    return null;
+  }
+
+  const nodeIDs: string[] = [targetID];
+  const edgeIDs: string[] = [];
+  let cursor = targetID;
+  while (cursor !== sourceID) {
+    const parent = parents.get(cursor);
+    if (!parent?.viaNode || !parent.viaEdge) {
+      break;
+    }
+    edgeIDs.unshift(parent.viaEdge);
+    nodeIDs.unshift(parent.viaNode);
+    cursor = parent.viaNode;
+  }
+
+  return {
+    nodeIDs,
+    edgeIDs,
+  };
+}
+
+function mergeImpactDirection(
+  current: ImpactDirection | undefined,
+  next: ImpactDirection,
+): ImpactDirection {
+  if (!current || current === 'none') {
+    return next;
+  }
+  if (current === next) {
+    return current;
+  }
+  if (current === 'focus') {
+    return 'focus';
+  }
+  return 'mixed';
+}
+
+function singleTypeSummary(type: string): TypeSummary {
+  return {
+    service: type === 'service' ? 1 : 0,
+    api: type === 'api' ? 1 : 0,
+    database: type === 'database' ? 1 : 0,
+    event: type === 'event' ? 1 : 0,
+    total: 1,
+  };
+}
+
+function buildTypeSummary(nodes: Array<{ type: string }>): TypeSummary {
+  return nodes.reduce<TypeSummary>(
+    (summary, node) => {
+      if (node.type === 'service') {
+        summary.service += 1;
+      } else if (node.type === 'api') {
+        summary.api += 1;
+      } else if (node.type === 'database') {
+        summary.database += 1;
+      } else if (node.type === 'event') {
+        summary.event += 1;
+      }
+      summary.total += 1;
+      return summary;
+    },
+    {
+      service: 0,
+      api: 0,
+      database: 0,
+      event: 0,
+      total: 0,
+    },
+  );
+}
+
+function formatTypeSummary(summary: TypeSummary): string {
+  const parts: string[] = [];
+  if (summary.service > 0) {
+    parts.push(`${summary.service} services`);
+  }
+  if (summary.api > 0) {
+    parts.push(`${summary.api} apis`);
+  }
+  if (summary.database > 0) {
+    parts.push(`${summary.database} databases`);
+  }
+  if (summary.event > 0) {
+    parts.push(`${summary.event} events`);
+  }
+  return parts.join(', ') || '0 nodes';
+}
+
+function typeLabel(type: string): string {
+  return type.replaceAll('_', ' ');
+}
+
+function ownerAccent(ownerID: string): string {
+  const palette = [
+    'hsl(168 66% 41%)',
+    'hsl(212 78% 62%)',
+    'hsl(33 74% 52%)',
+    'hsl(334 61% 58%)',
+    'hsl(194 63% 50%)',
+  ];
+  return palette[hashSeed(ownerID) % palette.length];
+}
+
+function mostCommonValue(values: string[]): string | null {
+  const counts = new Map<string, number>();
+  for (const value of values) {
+    if (!value) {
+      continue;
+    }
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+
+  let best: string | null = null;
+  let bestCount = 0;
+  for (const [value, count] of counts.entries()) {
+    if (count > bestCount) {
+      best = value;
+      bestCount = count;
+    }
+  }
+
+  return best;
+}
+
+function compareWorkingNodes(left: WorkingNode, right: WorkingNode): number {
+  const kindOrder = {
+    bridge: 0,
+    group: 1,
+    node: 2,
+  } satisfies Record<WorkingNode['kind'], number>;
+  if (kindOrder[left.kind] !== kindOrder[right.kind]) {
+    return kindOrder[left.kind] - kindOrder[right.kind];
+  }
+  return left.id.localeCompare(right.id);
 }
 
 function unique(values: string[]): string[] {

@@ -1,18 +1,73 @@
-.PHONY: help build test test-go lint vet fmt web cli-help install-dev-tools install-git-hooks init-hooks \
-	playground-init testing-help testing-build testing-init \
-	testing-demo-validate testing-demo-scan testing-demo-graph testing-demo-web \
-	testing-ecommerce-validate testing-ecommerce-scan testing-ecommerce-graph testing-ecommerce-web \
-	testing-playground-validate testing-playground-scan testing-playground-graph testing-playground-web \
-	validate-demo validate-ecommerce run-demo run-playground
+EXAMPLE_FIXTURES := $(sort $(shell find examples -mindepth 2 -maxdepth 2 -name mapture.yaml -exec dirname {} \; | xargs -n1 basename))
+FIXTURES := $(EXAMPLE_FIXTURES) playground
+FIXTURE ?= demo
+PRIMARY_GOAL := $(firstword $(MAKECMDGOALS))
+SECOND_GOAL := $(word 2,$(MAKECMDGOALS))
+POSITIONAL_FIXTURE_COMMANDS := validate scan graph serve
 
-help: ## Show available development commands
-	@awk 'BEGIN {FS = ": ## "}; /^[a-zA-Z0-9_.-]+: ## / {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+ifneq ($(filter $(PRIMARY_GOAL),$(POSITIONAL_FIXTURE_COMMANDS)),)
+ifneq ($(filter $(SECOND_GOAL),$(FIXTURES)),)
+override FIXTURE := $(SECOND_GOAL)
+.PHONY: $(SECOND_GOAL)
+$(SECOND_GOAL):
+	@:
+endif
+endif
+
+.PHONY: help fixtures build web install-dev-tools install-git-hooks init-hooks \
+	test-go test lint vet fmt cli-help \
+	testing-help testing-build testing-init playground-init \
+	validate scan graph serve run
+
+help: ## Show grouped development, verification, and fixture commands
+	@printf '\n%s\n' "Repo Development Commands"
+	@printf '  \033[36m%-18s\033[0m %s\n' "install-dev-tools" "Install local Go dev tools into testing/tools/bin"
+	@printf '  \033[36m%-18s\033[0m %s\n' "install-git-hooks" "Configure git to use the repo-managed hooks"
+	@printf '  \033[36m%-18s\033[0m %s\n' "init-hooks" "Configure git to use the repo-managed hooks"
+	@printf '  \033[36m%-18s\033[0m %s\n' "build" "Build the local mapture binary into build/"
+	@printf '  \033[36m%-18s\033[0m %s\n' "web" "Rebuild the frontend bundle under src/internal/webui/dist/"
+	@printf '\n%s\n' "Repo Verification Commands"
+	@printf '  \033[36m%-18s\033[0m %s\n' "test-go" "Run Go tests through gotestsum"
+	@printf '  \033[36m%-18s\033[0m %s\n' "test" "Run the full local verification suite"
+	@printf '  \033[36m%-18s\033[0m %s\n' "lint" "Run golangci-lint against src/"
+	@printf '  \033[36m%-18s\033[0m %s\n' "vet" "Run go vet against src/"
+	@printf '  \033[36m%-18s\033[0m %s\n' "fmt" "Format Go source files under src/"
+	@printf '  \033[36m%-18s\033[0m %s\n' "cli-help" "Show CLI help from the current source tree"
+	@printf '\n%s\n' "Local Verification With Fixtures"
+	@printf '  \033[36m%-18s\033[0m %s\n' "fixtures" "List discovered fixtures"
+	@printf '  \033[36m%-18s\033[0m %s\n' "testing-help" "Show the testing-first wrapper commands and fixture paths"
+	@printf '  \033[36m%-18s\033[0m %s\n' "testing-build" "Build the current source into testing/bin/mapture"
+	@printf '  \033[36m%-18s\033[0m %s\n' "testing-init" "Run init against testing/playground"
+	@printf '  \033[36m%-18s\033[0m %s\n' "playground-init" "Run init against the gitignored testing playground"
+	@printf '  \033[36m%-18s\033[0m %s\n' "validate" "Validate a fixture: make validate FIXTURE=<fixture|all>"
+	@printf '  \033[36m%-18s\033[0m %s\n' "scan" "Scan a fixture: make scan FIXTURE=<fixture|all>"
+	@printf '  \033[36m%-18s\033[0m %s\n' "graph" "Export Mermaid for a fixture: make graph FIXTURE=<fixture|all>"
+	@printf '  \033[36m%-18s\033[0m %s\n' "serve" "Run the local server against a fixture: make serve FIXTURE=<fixture>"
+	@printf '  \033[36m%-18s\033[0m %s\n' "run" "Run any CLI command for a fixture: make run FIXTURE=<fixture> CMD=<cli-command>"
+	@printf '\n%s\n' "Fixtures"
+	@for fixture in $(FIXTURES); do printf '  %s\n' "$$fixture"; done
+	@printf '\n%s\n' "Fixture Aliases"
+	@for fixture in $(FIXTURES); do \
+		printf '  validate.%s  scan.%s  graph.%s  serve.%s\n' "$$fixture" "$$fixture" "$$fixture" "$$fixture"; \
+	done
+
+fixtures: ## List discovered fixtures
+	@for fixture in $(FIXTURES); do echo "$$fixture"; done
 
 build: ## Build the local mapture binary into build/
 	@./scripts/build.sh
 
 web: ## Rebuild the frontend bundle under src/internal/webui/dist/
 	@go run ./scripts/build-web
+
+install-dev-tools: ## Install local Go dev tools into testing/tools/bin
+	@./scripts/test-go.sh --install-only
+
+install-git-hooks: ## Configure git to use the repo-managed hooks
+	@./scripts/install-git-hooks.sh
+
+init-hooks: ## Configure git to use the repo-managed hooks
+	@./scripts/init-hooks.sh
 
 test-go: ## Run Go tests through gotestsum
 	@./scripts/test-go.sh
@@ -41,64 +96,39 @@ testing-build: ## Build the current source into testing/bin/mapture
 testing-init: ## Run init against testing/playground
 	@./scripts/go.sh init
 
-testing-demo-validate: ## Validate examples/demo through testing/
-	@./scripts/go.sh validate demo
-
-testing-demo-scan: ## Scan examples/demo and write testing/outputs/demo.scan.json
-	@./scripts/go.sh scan demo
-
-testing-demo-graph: ## Export Mermaid for examples/demo into testing/outputs/demo.mmd
-	@./scripts/go.sh graph demo
-
-testing-demo-web: ## Run the web UI for examples/demo on http://127.0.0.1:8766
-	@./scripts/go.sh web demo
-
-testing-ecommerce-validate: ## Validate examples/ecommerce through testing/
-	@./scripts/go.sh validate ecommerce
-
-testing-ecommerce-scan: ## Scan examples/ecommerce and write testing/outputs/ecommerce.scan.json
-	@./scripts/go.sh scan ecommerce
-
-testing-ecommerce-graph: ## Export Mermaid for examples/ecommerce into testing/outputs/ecommerce.mmd
-	@./scripts/go.sh graph ecommerce
-
-testing-ecommerce-web: ## Run the web UI for examples/ecommerce on http://127.0.0.1:8765
-	@./scripts/go.sh web ecommerce
-
-testing-playground-validate: ## Validate testing/playground through testing/
-	@./scripts/go.sh validate playground
-
-testing-playground-scan: ## Scan testing/playground and write testing/outputs/playground.scan.json
-	@./scripts/go.sh scan playground
-
-testing-playground-graph: ## Export Mermaid for testing/playground into testing/outputs/playground.mmd
-	@./scripts/go.sh graph playground
-
-testing-playground-web: ## Run the web UI for testing/playground on http://127.0.0.1:8767
-	@./scripts/go.sh web playground
-
-validate-demo: ## Validate the canonical demo fixture
-	@$(MAKE) --no-print-directory testing-demo-validate
-
-validate-ecommerce: ## Validate the polyglot ecommerce fixture
-	@$(MAKE) --no-print-directory testing-ecommerce-validate
-
-install-dev-tools: ## Install local Go dev tools into testing/tools/bin
-	@./scripts/test-go.sh --install-only
-
-install-git-hooks: ## Configure git to use the repo-managed hooks
-	@./scripts/install-git-hooks.sh
-
-init-hooks: ## Configure git to use the repo-managed hooks
-	@./scripts/init-hooks.sh
-
 playground-init: ## Run init against the gitignored testing playground
 	@$(MAKE) --no-print-directory testing-init
 
-run-demo: ## Run the CLI against examples/demo: make run-demo CMD="validate"
-	@if [ -z "$(CMD)" ]; then echo 'Usage: make run-demo CMD="validate"'; exit 1; fi
-	@./scripts/go.sh demo $(CMD)
+validate: ## Validate a fixture through testing/: make validate FIXTURE=<fixture|all>
+	@./scripts/go.sh validate "$(FIXTURE)"
 
-run-playground: ## Run the CLI against testing/playground: make run-playground CMD="validate"
-	@if [ -z "$(CMD)" ]; then echo 'Usage: make run-playground CMD="validate"'; exit 1; fi
-	@./scripts/go.sh playground $(CMD)
+scan: ## Scan a fixture and write testing/outputs/<fixture>.scan.json; FIXTURE=all scans all examples
+	@./scripts/go.sh scan "$(FIXTURE)"
+
+graph: ## Export Mermaid for a fixture into testing/outputs/<fixture>.mmd; FIXTURE=all graphs all examples
+	@./scripts/go.sh graph "$(FIXTURE)"
+
+serve: ## Rebuild testing/bin/mapture and run the local server against a fixture
+	@./scripts/go.sh serve "$(FIXTURE)"
+
+run: ## Run any CLI command for a fixture: make run FIXTURE=<fixture> CMD=<cli-command>
+	@if [ -z "$(CMD)" ]; then echo 'Usage: make run FIXTURE=<fixture> CMD="<cli-command>"'; exit 1; fi
+	@./scripts/go.sh fixture "$(FIXTURE)" $(CMD)
+
+define MAKE_FIXTURE_TARGETS
+.PHONY: validate.$(1) scan.$(1) graph.$(1) serve.$(1)
+
+validate.$(1):
+	@$(MAKE) --no-print-directory validate FIXTURE=$(1)
+
+scan.$(1):
+	@$(MAKE) --no-print-directory scan FIXTURE=$(1)
+
+graph.$(1):
+	@$(MAKE) --no-print-directory graph FIXTURE=$(1)
+
+serve.$(1):
+	@$(MAKE) --no-print-directory serve FIXTURE=$(1)
+endef
+
+$(foreach fixture,$(FIXTURES),$(eval $(call MAKE_FIXTURE_TARGETS,$(fixture))))

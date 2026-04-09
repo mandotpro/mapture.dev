@@ -153,6 +153,86 @@ func TestBuildRejectsUnknownNodeTarget(t *testing.T) {
 	}
 }
 
+func TestBuildScopedSynthesizesBoundaryNodeForMissingTarget(t *testing.T) {
+	t.Parallel()
+
+	cfg := strictConfig()
+	cat := minimalCatalog()
+	blocks := []scanner.RawBlock{
+		{
+			Kind: "arch",
+			File: "src/app.go",
+			Line: 1,
+			Fields: map[string]string{
+				"node":   "service checkout-service",
+				"name":   "Checkout Service",
+				"domain": "orders",
+				"owner":  "team-commerce",
+			},
+			Relations: map[string][]scanner.TargetRef{
+				"calls": {{Type: "api", ID: "payment-api"}},
+			},
+		},
+	}
+
+	result, err := Build(cfg, cat, blocks, BuildOptions{Scoped: true})
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	if !hasEdge(result.Graph, graph.Edge{
+		From: "service:checkout-service",
+		To:   "api:payment-api",
+		Type: graph.EdgeCalls,
+	}) {
+		t.Fatalf("expected scoped edge to survive, got %#v", result.Graph.Edges)
+	}
+
+	for _, node := range result.Graph.Nodes {
+		if node.ID != "api:payment-api" {
+			continue
+		}
+		if node.File != "" {
+			t.Fatalf("expected synthesized node to have no file, got %#v", node)
+		}
+		if !strings.Contains(node.Summary, "out-of-scope") {
+			t.Fatalf("expected synthesized node summary marker, got %#v", node)
+		}
+		return
+	}
+
+	t.Fatalf("expected synthesized api:payment-api node, got %#v", result.Graph.Nodes)
+}
+
+func TestBuildScopedOnlyMaterializesReferencedCatalogEvents(t *testing.T) {
+	t.Parallel()
+
+	root, cfg, cat, _ := loadFixture(t, "../../../examples/ecommerce")
+	scopedCfg := *cfg
+	scopedCfg.Scan.Include = []string{"./src/php/orders"}
+
+	blocks, err := scanner.Scan(root, &scopedCfg)
+	if err != nil {
+		t.Fatalf("scanner.Scan: %v", err)
+	}
+
+	result, err := Build(cfg, cat, blocks, BuildOptions{Scoped: true})
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+
+	nodeIDs := make(map[string]struct{}, len(result.Graph.Nodes))
+	for _, node := range result.Graph.Nodes {
+		nodeIDs[node.ID] = struct{}{}
+	}
+
+	if _, ok := nodeIDs["event:order.placed"]; !ok {
+		t.Fatalf("expected referenced event node in scoped graph, got %#v", result.Graph.Nodes)
+	}
+	if _, ok := nodeIDs["event:inventory.reserved"]; ok {
+		t.Fatalf("did not expect unrelated catalog event in scoped graph, got %#v", result.Graph.Nodes)
+	}
+}
+
 func TestBuildWarnsOnDeprecatedEvent(t *testing.T) {
 	t.Parallel()
 
@@ -194,6 +274,32 @@ func TestBuildWarnsOnDeprecatedEvent(t *testing.T) {
 	}
 	if len(result.Diagnostics) == 0 || result.Diagnostics[0].Severity != severityWarning {
 		t.Fatalf("expected deprecation warning, got %#v", result.Diagnostics)
+	}
+}
+
+func TestBuildMigrationFixtureWarnsOnlyOnDeprecatedLegacyEvent(t *testing.T) {
+	t.Parallel()
+
+	_, cfg, cat, blocks := loadFixture(t, "../../../examples/migration")
+
+	result, err := Build(cfg, cat, blocks)
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	if len(result.Diagnostics) == 0 {
+		t.Fatal("expected deprecated event warnings for migration fixture")
+	}
+
+	for _, diagnostic := range result.Diagnostics {
+		if diagnostic.Severity != severityWarning {
+			t.Fatalf("expected warnings only, got %#v", result.Diagnostics)
+		}
+		if diagnostic.Code != "deprecated_event" {
+			t.Fatalf("expected deprecated_event warnings only, got %#v", result.Diagnostics)
+		}
+		if !strings.Contains(diagnostic.Message, "legacy.order.created") {
+			t.Fatalf("expected warning message to mention legacy.order.created, got %#v", result.Diagnostics)
+		}
 	}
 }
 

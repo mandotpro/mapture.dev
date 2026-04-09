@@ -291,12 +291,22 @@ function layoutWithDomainLanes(
     );
   });
 
-  const grouped = new Map<string, { primary: Node[]; events: Node[]; databases: Node[] }>();
+  const grouped = new Map<string, { boundary: Node[]; primary: Node[]; events: Node[]; databases: Node[] }>();
   for (const domain of domains) {
     const inDomain = nodes.filter((node) => readString(node, 'domain') === domain).sort(compareNodes);
     grouped.set(domain, {
+      boundary: inDomain.filter((node) => {
+        const kind = readString(node, 'kind');
+        const groupKind = readString(node, 'groupKind');
+        return kind === 'bridge' || groupKind === 'domain';
+      }),
       primary: inDomain.filter((node) => {
+        const kind = readString(node, 'kind');
+        const groupKind = readString(node, 'groupKind');
         const type = readString(node, 'type');
+        if (kind === 'bridge' || groupKind === 'domain') {
+          return false;
+        }
         return type === 'service' || type === 'api';
       }),
       events: inDomain.filter((node) => readString(node, 'type') === 'event'),
@@ -308,27 +318,35 @@ function layoutWithDomainLanes(
     nodes: nodes.map((node) => {
       const domain = readString(node, 'domain') || 'unassigned';
       const laneStart = laneX.get(domain) ?? options.reservedInsets.left + VIEWPORT_MARGIN;
-      const domainGroups = grouped.get(domain) ?? { primary: [], events: [], databases: [] };
+      const domainGroups = grouped.get(domain) ?? { boundary: [], primary: [], events: [], databases: [] };
+      const kind = readString(node, 'kind');
+      const groupKind = readString(node, 'groupKind');
       const type = readString(node, 'type');
       const top = options.reservedInsets.top + VIEWPORT_MARGIN + 46;
+      const boundaryHeight = domainGroups.boundary.length * (NODE_HEIGHT + LANE_NODE_GAP);
+      const contentTop = top + (boundaryHeight > 0 ? boundaryHeight + 34 : 0);
       let x = laneStart + 24;
       let y = top;
 
-      if (type === 'event') {
+      if (kind === 'bridge' || groupKind === 'domain') {
+        const index = domainGroups.boundary.findIndex((candidate) => candidate.id === node.id);
+        x = laneStart + Math.round((LANE_WIDTH - NODE_WIDTH) / 2);
+        y = top + index * (NODE_HEIGHT + LANE_NODE_GAP);
+      } else if (type === 'event') {
         const index = domainGroups.events.findIndex((candidate) => candidate.id === node.id);
         x = laneStart + LANE_WIDTH - NODE_WIDTH - 24;
-        y = top + index * (NODE_HEIGHT + LANE_NODE_GAP);
+        y = contentTop + index * (NODE_HEIGHT + LANE_NODE_GAP);
       } else if (type === 'database') {
         const primaryHeight = domainGroups.primary.length * (NODE_HEIGHT + LANE_NODE_GAP);
         const eventHeight = domainGroups.events.length * (NODE_HEIGHT + LANE_NODE_GAP);
-        const databaseTop = top + Math.max(primaryHeight, eventHeight) + 60;
+        const databaseTop = contentTop + Math.max(primaryHeight, eventHeight) + 60;
         const index = domainGroups.databases.findIndex((candidate) => candidate.id === node.id);
         x = laneStart + Math.round((LANE_WIDTH - NODE_WIDTH) / 2);
         y = databaseTop + index * (NODE_HEIGHT + LANE_NODE_GAP);
       } else {
         const index = domainGroups.primary.findIndex((candidate) => candidate.id === node.id);
         x = laneStart + 24;
-        y = top + index * (NODE_HEIGHT + LANE_NODE_GAP);
+        y = contentTop + index * (NODE_HEIGHT + LANE_NODE_GAP);
       }
 
       return {

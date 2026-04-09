@@ -46,6 +46,9 @@ languages:
 	if cfg.UI.NodeColors.Service != "#1664d9" || cfg.UI.NodeColors.API != "#0f8f78" || cfg.UI.NodeColors.Database != "#a56614" || cfg.UI.NodeColors.Event != "#a73f7f" {
 		t.Fatalf("expected default UI node colors, got %+v", cfg.UI.NodeColors)
 	}
+	if cfg.UI.DefaultLayout != DefaultLayoutELKHorizontal {
+		t.Fatalf("expected default UI layout %q, got %q", DefaultLayoutELKHorizontal, cfg.UI.DefaultLayout)
+	}
 }
 
 func TestLoadRejectsInvalidRequireMetadataRole(t *testing.T) {
@@ -127,6 +130,34 @@ ui:
 
 	if cfg.UI.NodeColors.Service != "#112233" || cfg.UI.NodeColors.API != "#223344" || cfg.UI.NodeColors.Database != "#334455" || cfg.UI.NodeColors.Event != "#445566" {
 		t.Fatalf("expected custom UI node colors, got %+v", cfg.UI.NodeColors)
+	}
+}
+
+func TestLoadAcceptsCustomDefaultLayout(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	path := filepath.Join(root, "mapture.yaml")
+	content := `version: 1
+scan:
+  include:
+    - ./src
+languages:
+  go: true
+ui:
+  defaultLayout: clustered
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	if cfg.UI.DefaultLayout != "clustered" {
+		t.Fatalf("expected custom UI defaultLayout, got %q", cfg.UI.DefaultLayout)
 	}
 }
 

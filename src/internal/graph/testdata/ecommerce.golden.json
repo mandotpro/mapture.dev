@@ -1,0 +1,435 @@
+{
+  "schemaVersion": 1,
+  "metadata": {
+    "generatedAt": "2026-01-02T03:04:05Z",
+    "scannerVersion": "dev",
+    "sourceRoot": "/repo/examples/ecommerce"
+  },
+  "nodes": [
+    {
+      "id": "api:carrier-api",
+      "type": "api",
+      "name": "Carrier API",
+      "domain": "shipping",
+      "owner": "team-operations",
+      "file": "src/ts/shipping/CarrierApiClient.ts",
+      "line": 1,
+      "summary": "Outbound carrier integration used to buy labels and fetch tracking numbers."
+    },
+    {
+      "id": "api:email-api",
+      "type": "api",
+      "name": "Email API",
+      "domain": "notifications",
+      "owner": "team-engagement",
+      "file": "src/ts/notifications/EmailApiClient.ts",
+      "line": 1,
+      "summary": "Outbound transactional email provider client used by notifications."
+    },
+    {
+      "id": "api:payment-api",
+      "type": "api",
+      "name": "Payment API",
+      "domain": "billing",
+      "owner": "team-commerce",
+      "file": "src/go/billing/paymentapi/payment_api.go",
+      "line": 3,
+      "summary": "Internal billing API used by checkout to authorize and capture payment."
+    },
+    {
+      "id": "api:stripe-webhook-api",
+      "type": "api",
+      "name": "Stripe Webhook API",
+      "domain": "billing",
+      "owner": "team-commerce",
+      "file": "src/go/billing/stripebridge/stripe_bridge.go",
+      "line": 3,
+      "summary": "Receives Stripe webhooks and normalizes them before payment-service handles them."
+    },
+    {
+      "id": "database:billing-db",
+      "type": "database",
+      "name": "Billing Database",
+      "domain": "billing",
+      "owner": "team-commerce",
+      "file": "src/go/billing/billingdb/billing_db.go",
+      "line": 3,
+      "summary": "Stores payment intents, capture attempts, and gateway reconciliation metadata."
+    },
+    {
+      "id": "database:inventory-db",
+      "type": "database",
+      "name": "Inventory Database",
+      "domain": "inventory",
+      "owner": "team-operations",
+      "file": "src/ts/inventory/InventoryDatabase.ts",
+      "line": 1,
+      "summary": "Stores reservation counters and per-sku availability snapshots."
+    },
+    {
+      "id": "database:orders-db",
+      "type": "database",
+      "name": "Orders Database",
+      "domain": "orders",
+      "owner": "team-commerce",
+      "file": "src/php/orders/OrdersDatabase.php",
+      "line": 5,
+      "summary": "Primary relational store for customer orders and their lifecycle state."
+    },
+    {
+      "id": "event:inventory.released",
+      "type": "event",
+      "name": "Inventory Released",
+      "domain": "inventory",
+      "owner": "team-operations",
+      "summary": "Reserved inventory was released after an order change."
+    },
+    {
+      "id": "event:inventory.reserved",
+      "type": "event",
+      "name": "Inventory Reserved",
+      "domain": "inventory",
+      "owner": "team-operations",
+      "summary": "Inventory was reserved for a newly placed order."
+    },
+    {
+      "id": "event:notification-sent-event",
+      "type": "event",
+      "name": "Notification Sent Event",
+      "domain": "notifications",
+      "owner": "team-engagement",
+      "file": "src/ts/contracts/DomainEvents.ts",
+      "line": 59,
+      "summary": "Internal delivery contract used by notification telemetry consumers."
+    },
+    {
+      "id": "event:notification.sent",
+      "type": "event",
+      "name": "Notification Sent",
+      "domain": "notifications",
+      "owner": "team-engagement",
+      "summary": "Internal delivery event emitted after a customer notification is sent."
+    },
+    {
+      "id": "event:order-placed-event",
+      "type": "event",
+      "name": "Order Placed Event",
+      "domain": "orders",
+      "owner": "team-commerce",
+      "file": "src/ts/contracts/DomainEvents.ts",
+      "line": 5,
+      "summary": "Canonical contract for a newly placed order."
+    },
+    {
+      "id": "event:order.cancelled",
+      "type": "event",
+      "name": "Order Cancelled",
+      "domain": "orders",
+      "owner": "team-commerce",
+      "summary": "An order was cancelled before shipment."
+    },
+    {
+      "id": "event:order.placed",
+      "type": "event",
+      "name": "Order Placed",
+      "domain": "orders",
+      "owner": "team-commerce",
+      "summary": "A customer successfully placed an order."
+    },
+    {
+      "id": "event:payment-captured-event",
+      "type": "event",
+      "name": "Payment Captured Event",
+      "domain": "billing",
+      "owner": "team-commerce",
+      "file": "src/ts/contracts/DomainEvents.ts",
+      "line": 23,
+      "summary": "Contract used by shipping and notifications after a successful payment capture."
+    },
+    {
+      "id": "event:payment.captured",
+      "type": "event",
+      "name": "Payment Captured",
+      "domain": "billing",
+      "owner": "team-commerce",
+      "summary": "Payment was successfully captured for an order."
+    },
+    {
+      "id": "event:payment.failed",
+      "type": "event",
+      "name": "Payment Failed",
+      "domain": "billing",
+      "owner": "team-commerce",
+      "summary": "Payment could not be captured."
+    },
+    {
+      "id": "event:shipment-created-event",
+      "type": "event",
+      "name": "Shipment Created Event",
+      "domain": "shipping",
+      "owner": "team-operations",
+      "file": "src/ts/contracts/DomainEvents.ts",
+      "line": 41,
+      "summary": "Contract sent when a carrier label is created."
+    },
+    {
+      "id": "event:shipment.created",
+      "type": "event",
+      "name": "Shipment Created",
+      "domain": "shipping",
+      "owner": "team-operations",
+      "summary": "A shipment and carrier label were created."
+    },
+    {
+      "id": "event:stripe.webhook.received",
+      "type": "event",
+      "name": "Stripe Webhook Received",
+      "domain": "billing",
+      "owner": "team-commerce",
+      "summary": "Raw webhook received from Stripe before internal normalization."
+    },
+    {
+      "id": "service:checkout-service",
+      "type": "service",
+      "name": "Checkout Service",
+      "domain": "orders",
+      "owner": "team-commerce",
+      "file": "src/php/orders/CheckoutService.php",
+      "line": 5,
+      "summary": "Accepts a cart, places the order, and orchestrates downstream commerce workflows."
+    },
+    {
+      "id": "service:inventory-service",
+      "type": "service",
+      "name": "Inventory Service",
+      "domain": "inventory",
+      "owner": "team-operations",
+      "file": "src/ts/inventory/InventoryService.ts",
+      "line": 1,
+      "summary": "Reserves and releases stock in response to order lifecycle changes."
+    },
+    {
+      "id": "service:notification-audit-projector",
+      "type": "service",
+      "name": "Notification Audit Projector",
+      "domain": "notifications",
+      "owner": "team-engagement",
+      "file": "src/ts/notifications/NotificationAuditProjector.ts",
+      "line": 1,
+      "summary": "Subscribes to delivery events and builds internal notification audit views."
+    },
+    {
+      "id": "service:notification-service",
+      "type": "service",
+      "name": "Notification Service",
+      "domain": "notifications",
+      "owner": "team-engagement",
+      "file": "src/ts/notifications/NotificationService.ts",
+      "line": 1,
+      "summary": "Builds transactional email payloads from commerce and operations events."
+    },
+    {
+      "id": "service:payment-service",
+      "type": "service",
+      "name": "Payment Service",
+      "domain": "billing",
+      "owner": "team-commerce",
+      "file": "src/go/billing/paymentservice/payment_service.go",
+      "line": 3,
+      "summary": "Captures customer payments and turns gateway outcomes into internal commerce events."
+    },
+    {
+      "id": "service:shipping-service",
+      "type": "service",
+      "name": "Shipping Service",
+      "domain": "shipping",
+      "owner": "team-operations",
+      "file": "src/ts/shipping/ShippingService.ts",
+      "line": 1,
+      "summary": "Creates shipments after payment succeeds and requests carrier labels."
+    }
+  ],
+  "edges": [
+    {
+      "from": "api:payment-api",
+      "to": "service:payment-service",
+      "type": "calls"
+    },
+    {
+      "from": "api:stripe-webhook-api",
+      "to": "service:payment-service",
+      "type": "calls"
+    },
+    {
+      "from": "event:notification.sent",
+      "to": "service:notification-audit-projector",
+      "type": "consumes"
+    },
+    {
+      "from": "event:order.cancelled",
+      "to": "service:inventory-service",
+      "type": "consumes"
+    },
+    {
+      "from": "event:order.placed",
+      "to": "service:inventory-service",
+      "type": "consumes"
+    },
+    {
+      "from": "event:order.placed",
+      "to": "service:notification-service",
+      "type": "consumes"
+    },
+    {
+      "from": "event:order.placed",
+      "to": "service:payment-service",
+      "type": "consumes"
+    },
+    {
+      "from": "event:payment.captured",
+      "to": "service:shipping-service",
+      "type": "consumes"
+    },
+    {
+      "from": "event:payment.failed",
+      "to": "service:notification-service",
+      "type": "consumes"
+    },
+    {
+      "from": "event:shipment.created",
+      "to": "service:notification-service",
+      "type": "consumes"
+    },
+    {
+      "from": "event:stripe.webhook.received",
+      "to": "api:stripe-webhook-api",
+      "type": "consumes"
+    },
+    {
+      "from": "service:checkout-service",
+      "to": "api:payment-api",
+      "type": "calls"
+    },
+    {
+      "from": "service:checkout-service",
+      "to": "database:orders-db",
+      "type": "stores_in"
+    },
+    {
+      "from": "service:checkout-service",
+      "to": "event:order-placed-event",
+      "type": "depends_on"
+    },
+    {
+      "from": "service:checkout-service",
+      "to": "event:order.cancelled",
+      "type": "emits"
+    },
+    {
+      "from": "service:checkout-service",
+      "to": "event:order.placed",
+      "type": "emits"
+    },
+    {
+      "from": "service:checkout-service",
+      "to": "service:inventory-service",
+      "type": "calls"
+    },
+    {
+      "from": "service:checkout-service",
+      "to": "service:notification-service",
+      "type": "calls"
+    },
+    {
+      "from": "service:inventory-service",
+      "to": "database:inventory-db",
+      "type": "reads_from"
+    },
+    {
+      "from": "service:inventory-service",
+      "to": "database:inventory-db",
+      "type": "stores_in"
+    },
+    {
+      "from": "service:inventory-service",
+      "to": "event:inventory.released",
+      "type": "emits"
+    },
+    {
+      "from": "service:inventory-service",
+      "to": "event:inventory.reserved",
+      "type": "emits"
+    },
+    {
+      "from": "service:inventory-service",
+      "to": "event:order-placed-event",
+      "type": "depends_on"
+    },
+    {
+      "from": "service:notification-audit-projector",
+      "to": "service:notification-service",
+      "type": "depends_on"
+    },
+    {
+      "from": "service:notification-service",
+      "to": "api:email-api",
+      "type": "calls"
+    },
+    {
+      "from": "service:notification-service",
+      "to": "event:notification-sent-event",
+      "type": "depends_on"
+    },
+    {
+      "from": "service:notification-service",
+      "to": "event:notification.sent",
+      "type": "emits"
+    },
+    {
+      "from": "service:payment-service",
+      "to": "database:billing-db",
+      "type": "reads_from"
+    },
+    {
+      "from": "service:payment-service",
+      "to": "database:billing-db",
+      "type": "stores_in"
+    },
+    {
+      "from": "service:payment-service",
+      "to": "event:payment-captured-event",
+      "type": "depends_on"
+    },
+    {
+      "from": "service:payment-service",
+      "to": "event:payment.captured",
+      "type": "emits"
+    },
+    {
+      "from": "service:payment-service",
+      "to": "event:payment.captured",
+      "type": "emits"
+    },
+    {
+      "from": "service:payment-service",
+      "to": "event:payment.failed",
+      "type": "emits"
+    },
+    {
+      "from": "service:shipping-service",
+      "to": "api:carrier-api",
+      "type": "calls"
+    },
+    {
+      "from": "service:shipping-service",
+      "to": "event:shipment-created-event",
+      "type": "depends_on"
+    },
+    {
+      "from": "service:shipping-service",
+      "to": "event:shipment.created",
+      "type": "emits"
+    }
+  ]
+}
+

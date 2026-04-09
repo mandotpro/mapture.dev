@@ -2,9 +2,11 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/mandotpro/mapture.dev/src/internal/config"
@@ -85,7 +87,7 @@ func TestValidateProjectRejectsValidationFixtures(t *testing.T) {
 				t.Fatalf("loadProject returned error: %v", err)
 			}
 
-			_, _, err = validateProject(filepath.Dir(configPath), cfg, cat)
+			_, _, err = validateProject(filepath.Dir(configPath), cfg, cat, nil)
 			if err == nil {
 				t.Fatalf("expected validateProject error for %s", tc.path)
 			}
@@ -109,7 +111,7 @@ func TestValidateProjectSuccess(t *testing.T) {
 		t.Fatalf("config.Load returned error: %v", err)
 	}
 
-	blocks, result, err := validateProject("../../examples/demo", cfg, cat)
+	blocks, result, err := validateProject("../../examples/demo", cfg, cat, nil)
 	if err != nil {
 		t.Fatalf("validateProject returned error: %v", err)
 	}
@@ -118,6 +120,51 @@ func TestValidateProjectSuccess(t *testing.T) {
 	}
 	if len(result.Graph.Nodes) == 0 || len(result.Graph.Edges) == 0 {
 		t.Fatalf("expected non-empty graph, got %#v", result.Graph)
+	}
+}
+
+func TestValidateProjectScopedSuccessWithBoundaryNodes(t *testing.T) {
+	t.Parallel()
+
+	configPath, cfg, cat, err := loadProject("../../examples/ecommerce")
+	if err != nil {
+		t.Fatalf("loadProject returned error: %v", err)
+	}
+
+	_, result, err := validateProject(filepath.Dir(configPath), cfg, cat, []string{"./src/php/orders"})
+	if err != nil {
+		t.Fatalf("validateProject returned error: %v", err)
+	}
+
+	foundBoundary := false
+	for _, node := range result.Graph.Nodes {
+		if node.ID == "api:payment-api" && node.File == "" && strings.Contains(node.Summary, "out-of-scope") {
+			foundBoundary = true
+		}
+	}
+	if !foundBoundary {
+		t.Fatalf("expected scoped graph to synthesize api:payment-api boundary node, got %#v", result.Graph.Nodes)
+	}
+}
+
+func TestScanCommandRespectsScope(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+
+	cmd := newScanCmd()
+	cmd.SetOut(&stdout)
+	cmd.SetArgs([]string{"../../examples/ecommerce", "--scope", "./src/php/orders"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "src/php/orders/CheckoutService.php") {
+		t.Fatalf("expected scoped scan output to include php orders file, got %q", output)
+	}
+	if strings.Contains(output, "src/ts/shipping/ShippingService.ts") {
+		t.Fatalf("expected scoped scan output to exclude unrelated files, got %q", output)
 	}
 }
 
@@ -218,6 +265,27 @@ func TestGraphCommandWritesMermaidFile(t *testing.T) {
 	for _, want := range []string{"flowchart LR", "Billing", "Payment Service"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("expected %q in file output, got %q", want, output)
+		}
+	}
+}
+
+func TestReportServeErrorIncludesPortBusyHint(t *testing.T) {
+	t.Parallel()
+
+	var stderr bytes.Buffer
+	err := fmt.Errorf("listen %s: %w", "127.0.0.1:8765", syscall.EADDRINUSE)
+
+	reportServeError(&stderr, "127.0.0.1:8765", err)
+
+	output := stderr.String()
+	for _, want := range []string{
+		"mapture serve: listen 127.0.0.1:8765",
+		"already in use",
+		"Ctrl-Z",
+		"kill %<job>",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("expected %q in output, got %q", want, output)
 		}
 	}
 }

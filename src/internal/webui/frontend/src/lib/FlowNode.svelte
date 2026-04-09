@@ -18,6 +18,10 @@
   class={[
     'mapture-node',
     `mapture-node--${data.type}`,
+    `mapture-node--kind-${data.kind ?? 'node'}`,
+    data.groupKind ? `mapture-node--group-${data.groupKind}` : '',
+    data.trace ? 'mapture-node--trace' : '',
+    data.impact && data.impact !== 'none' ? `mapture-node--impact-${data.impact}` : '',
     `mapture-node--tone-${data.tone ?? 'primary'}`,
     `mapture-node--mode-${data.viewMode ?? 'system-map'}`,
     selected ? 'selected' : '',
@@ -28,7 +32,19 @@
     <header class="mapture-node__header">
       <div class="mapture-node__eyebrow">
         <span class="mapture-node__glyph" aria-hidden="true">
-          {#if data.type === 'service'}
+          {#if data.kind === 'group'}
+            <svg viewBox="0 0 24 24" focusable="false">
+              <rect x="4" y="6" width="7" height="6" rx="2"></rect>
+              <rect x="13" y="6" width="7" height="6" rx="2"></rect>
+              <rect x="8.5" y="13" width="7" height="6" rx="2"></rect>
+            </svg>
+          {:else if data.kind === 'bridge'}
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M5 12h14"></path>
+              <path d="M8 8l-4 4 4 4"></path>
+              <path d="M16 8l4 4-4 4"></path>
+            </svg>
+          {:else if data.type === 'service'}
             <svg viewBox="0 0 24 24" focusable="false">
               <rect x="5" y="6" width="14" height="12" rx="3"></rect>
               <path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M18 9h3M3 15h3M18 15h3"></path>
@@ -53,11 +69,15 @@
             </svg>
           {/if}
         </span>
-        <span>{typeLabel(data.type)}</span>
+        <span>{data.eyebrow ?? typeLabel(data.type)}</span>
       </div>
 
       <span class="mapture-node__stamp" aria-hidden="true">
-        {#if data.type === 'service'}
+        {#if data.kind === 'group'}
+          <span></span><span></span><span></span>
+        {:else if data.kind === 'bridge'}
+          <span></span><span></span>
+        {:else if data.type === 'service'}
           <span></span><span></span><span></span>
         {:else if data.type === 'api'}
           <span></span><span></span>
@@ -73,6 +93,10 @@
 
     {#if data.subtitle}
       <p>{data.subtitle}</p>
+    {/if}
+
+    {#if data.kind !== 'node'}
+      <span class="mapture-node__metric">{data.memberCount} nodes</span>
     {/if}
   </div>
 </article>

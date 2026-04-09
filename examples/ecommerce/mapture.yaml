@@ -39,6 +39,7 @@ validation:
     - bridge-in
 
 ui:
+  defaultLayout: elk-horizontal
   nodeColors:
     service: "#1d4ed8"
     api: "#0f766e"
