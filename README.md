@@ -1,55 +1,108 @@
 # Mapture
 
-> Catalog your architecture. Validate it in code. Explore it as a graph.
+> Repo-native architecture mapping that stays close to the code.
 
-Mapture is an MIT-licensed, single-binary, repo-native architecture graph
-tool. It turns a small YAML catalog plus lightweight code comments into
-validated dependency maps, interactive diagrams, and AI-ready
-architecture context.
+[![CI](https://github.com/mandotpro/mapture.dev/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/mandotpro/mapture.dev/actions/workflows/ci.yml)
+[![Nightly](https://github.com/mandotpro/mapture.dev/actions/workflows/nightly.yml/badge.svg?branch=main)](https://github.com/mandotpro/mapture.dev/actions/workflows/nightly.yml)
+[![Release](https://img.shields.io/github/v/release/mandotpro/mapture.dev?display_name=tag)](https://github.com/mandotpro/mapture.dev/releases)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/mandotpro/mapture.dev)](https://github.com/mandotpro/mapture.dev/blob/main/go.mod)
+[![License](https://img.shields.io/github/license/mandotpro/mapture.dev)](./LICENSE)
 
-**Status:** early scaffolding — not yet usable. See
-[`_docs/mapture-dev-prd-v1.md`](./_docs/mapture-dev-prd-v1.md) for the
-full product spec.
+Mapture is an experimental architecture graph tool for repositories that want a lightweight, reviewable source of truth for system structure. It combines a small YAML catalog with flat `@arch.*` and `@event.*` code comments, validates the result, and renders it as CLI output, Mermaid diagrams, and an interactive explorer.
 
-## Idea in 30 seconds
+> Status: early preview. Mapture is under active development and not production-ready yet, but the validator, graph pipeline, examples, and local explorer are ready for evaluation and feedback.
 
-1. Declare a tiny central catalog in `architecture/` (`teams.yaml`,
-   `domains.yaml`, `events.yaml`).
-2. Annotate code with flat `@arch.*` / `@event.*` tag comments.
-3. Run `mapture` to validate, visualize, and export the graph.
+![Mapture explorer on the ecommerce example](./.github/assets/explorer-ecommerce-hero.png)
+
+## 3-minute quickstart
+
+Clone the repo and run the current examples locally:
 
 ```bash
-mapture init .
-mapture validate .
-mapture serve .
-mapture export-html . -o architecture-report.html
-mapture export-ai .
+git clone https://github.com/mandotpro/mapture.dev.git
+cd mapture.dev
+
+go run src/main.go validate examples/demo
+go run src/main.go serve examples/ecommerce
 ```
 
-A minimal end-to-end example lives in [`examples/demo/`](./examples/demo/).
+Then open the local explorer and inspect the bundled example graph.
 
 ## Install
+
+### Stable releases
+
+Download a prebuilt binary from [GitHub Releases](https://github.com/mandotpro/mapture.dev/releases).
+
+### Nightly builds
+
+Nightly prereleases from `main` are published at [the rolling nightly release](https://github.com/mandotpro/mapture.dev/releases/tag/nightly).
+
+### Build from source
 
 ```bash
 go install github.com/mandotpro/mapture.dev@latest
 ```
 
+## What Mapture does today
+
+- Validates catalog ownership, domains, events, and architecture references
+- Scans Go, PHP, TypeScript, and JavaScript comment blocks for `@arch.*` and `@event.*` tags
+- Builds a normalized graph with deterministic node and edge identities
+- Exports Mermaid diagrams for filtered graph views
+- Serves an interactive local explorer UI for browsing the graph
+- Ships example fixtures for demo, ecommerce, migration, and invalid validation cases
+
+## Current limitations
+
+- Comments-first only. No AST or Tree-sitter source analysis yet.
+- The public graph and UI are still evolving under pre-`v1.0.0` versioning.
+- HTML export and AI bundle export are planned, but not yet implemented.
+- Release channels are early: nightly builds are convenient for evaluation, not stability guarantees.
+
 ## Why comments-first
 
-Comments are language-agnostic, portable across PHP / Go / TypeScript,
-close to the code, and reviewable in pull requests. Mapture parses them
-into data and validates them against the catalog.
+Mapture is designed for teams that want architecture metadata to live close to the code and stay reviewable in pull requests.
 
-## Roadmap
+That means:
 
-- **v0.1** — comments → normalized graph + Mermaid + static HTML
-- **v0.2** — validation + CI integration
-- **v0.3** — interactive explorer UI
-- **v0.4** — stronger source attachment per language
-- **v0.5** — event / workflow views
-- **v1.0** — stable formats, docs, polish
+- no heavy source instrumentation
+- no separate modeling tool to keep in sync
+- one small catalog for ownership and canonical event/domain references
+- portable annotations that work across mixed-language repos
 
-Full breakdown lives in the product spec under [`_docs/mapture-dev-prd-v1.md`](./_docs/mapture-dev-prd-v1.md).
+## Supported source languages
+
+- Go
+- PHP
+- TypeScript
+- JavaScript
+
+## Examples
+
+- [`examples/demo/`](./examples/demo/) — smallest end-to-end example
+- [`examples/ecommerce/`](./examples/ecommerce/) — richer multi-language flow with services, APIs, databases, and events
+- [`examples/migration/`](./examples/migration/) — incremental modernization scenario
+- [`examples/invalid/`](./examples/invalid/) — intentionally broken fixtures used by validation tests
+
+## Release channels
+
+- Stable releases use semver tags and are published through the automated release flow.
+- Nightly builds are rolling prereleases from the latest successful `main` build.
+- Stable version bumps are driven by Conventional Commit style squash-merge titles.
+
+## Contributing and support
+
+- [Contributing guide](./CONTRIBUTING.md)
+- [Support guide](./SUPPORT.md)
+- [Security policy](./SECURITY.md)
+- [Code of Conduct](./CODE_OF_CONDUCT.md)
+
+## Further reading
+
+- [Product spec](./_docs/mapture-dev-prd-v1.md)
+- [Type and schema docs](./_docs/types/)
+- [Task history and roadmap notes](./_docs/tasks/)
 
 ## License
 

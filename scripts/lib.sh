@@ -64,8 +64,15 @@ ensure_golangci_lint() {
 build_binary() {
   local output="$1"
   local repo
+  local version
   repo="$(root_dir)"
+  version="${MAPTURE_VERSION:-0.0.0-dev}"
 
   mkdir -p "$(dirname "$output")"
-  go build -o "$output" "$repo/src"
+  CGO_ENABLED="${CGO_ENABLED:-0}" \
+  go build \
+    -trimpath \
+    -ldflags "-X github.com/mandotpro/mapture.dev/src/cmd.version=$version" \
+    -o "$output" \
+    "$repo/src"
 }

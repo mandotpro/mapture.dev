@@ -17,9 +17,18 @@ go run src/main.go scan examples/ecommerce >/dev/null
 go run src/main.go graph examples/demo >/dev/null
 
 graph_output="$(mktemp)"
-trap 'rm -f "$graph_output"' EXIT
+release_output_dir="$(mktemp -d)"
+trap 'rm -f "$graph_output"; rm -rf "$release_output_dir"' EXIT
 go run src/main.go graph examples/ecommerce --domain billing -o "$graph_output"
 test -s "$graph_output"
+
+./scripts/build.sh >/dev/null
+./build/mapture --version | grep -q "0.0.0-dev"
+
+./scripts/release-build.sh "v0.0.0-test" "linux" "amd64" "$release_output_dir" >/dev/null
+test -f "$release_output_dir/mapture_v0.0.0-test_linux_amd64.tar.gz"
+./scripts/release-build.sh "v0.0.0-test" "windows" "amd64" "$release_output_dir" >/dev/null
+test -f "$release_output_dir/mapture_v0.0.0-test_windows_amd64.zip"
 
 expect_failure() {
   local path="$1"

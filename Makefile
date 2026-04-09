@@ -16,7 +16,7 @@ endif
 
 .PHONY: help fixtures build web install-dev-tools install-git-hooks init-hooks \
 	test-go test lint vet fmt cli-help \
-	testing-help testing-build testing-init playground-init \
+	testing-help testing-build testing-init playground-init audit-public \
 	validate scan graph serve run
 
 help: ## Show grouped development, verification, and fixture commands
@@ -32,6 +32,7 @@ help: ## Show grouped development, verification, and fixture commands
 	@printf '  \033[36m%-18s\033[0m %s\n' "lint" "Run golangci-lint against src/"
 	@printf '  \033[36m%-18s\033[0m %s\n' "vet" "Run go vet against src/"
 	@printf '  \033[36m%-18s\033[0m %s\n' "fmt" "Format Go source files under src/"
+	@printf '  \033[36m%-18s\033[0m %s\n' "audit-public" "Run public-release hygiene checks against tracked files"
 	@printf '  \033[36m%-18s\033[0m %s\n' "cli-help" "Show CLI help from the current source tree"
 	@printf '\n%s\n' "Local Verification With Fixtures"
 	@printf '  \033[36m%-18s\033[0m %s\n' "fixtures" "List discovered fixtures"
@@ -83,6 +84,9 @@ vet: ## Run go vet against src/
 
 fmt: ## Format Go source files under src/
 	@find ./src -name '*.go' -print0 | xargs -0 gofmt -w
+
+audit-public: ## Run public-release hygiene checks against tracked files
+	@./scripts/audit-public.sh
 
 cli-help: ## Show CLI help from the current source tree
 	@go run src/main.go --help

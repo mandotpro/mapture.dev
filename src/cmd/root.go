@@ -401,7 +401,7 @@ func newServeCmd() *cobra.Command {
 				return err
 			}
 
-			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM, syscall.SIGTSTP)
+			ctx, stop := signal.NotifyContext(cmd.Context(), serveSignals()...)
 			defer stop()
 
 			opts := server.Options{

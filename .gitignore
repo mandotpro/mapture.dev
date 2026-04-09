@@ -10,9 +10,10 @@
 # Mapture-generated artifacts
 .mapture/
 
-# Local agent / tool settings (user-specific, not shared)
+# Local AI / tool settings (user-specific, not shared)
 .agents/
-.claude/settings.local.json
+.claude/
+.codex/
 
 # Editor / OS
 .DS_Store
