@@ -30,6 +30,23 @@ Then open the local explorer and inspect the bundled example graph.
 
 ## Install
 
+### Homebrew
+
+Tap the dedicated Homebrew repository once:
+
+```bash
+brew tap mandotpro/mapture
+```
+
+Install the rolling canary channel today:
+
+```bash
+brew install mandotpro/mapture/mapture-canary
+```
+
+The stable `mapture` formula will be published to the same tap after the first semver release lands.
+Both channels install the same `mapture` binary, so switch channels by uninstalling the other formula first.
+
 ### Stable releases
 
 Download a prebuilt binary from [GitHub Releases](https://github.com/mandotpro/mapture.dev/releases).
@@ -89,6 +106,7 @@ That means:
 
 - Stable releases use semver tags and are published through the automated release flow.
 - Canary builds are rolling prereleases from the latest successful `main` build.
+- Homebrew canary installs are synced to `mandotpro/mapture` from the canary workflow.
 - Stable version bumps are driven by Conventional Commit style squash-merge titles.
 
 ## Contributing and support

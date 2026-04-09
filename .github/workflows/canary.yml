@@ -118,3 +118,57 @@ jobs:
               --title "canary" \
               --notes-file canary-notes.md
           fi
+
+  sync-homebrew-tap:
+    needs:
+      - prepare
+      - publish
+    if: ${{ vars.HOMEBREW_TAP_REPO != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+      - name: Sync canary formula to Homebrew tap
+        env:
+          GH_REPO: ${{ github.repository }}
+          HOMEBREW_TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          CANARY_SHA: ${{ needs.prepare.outputs.sha }}
+          CANARY_VERSION: ${{ needs.prepare.outputs.version }}
+          CANARY_BUILT_AT: ${{ needs.prepare.outputs.built_at }}
+        run: |
+          if [[ -z "$HOMEBREW_TAP_TOKEN" ]]; then
+            echo "HOMEBREW_TAP_TOKEN is not configured; skipping tap sync."
+            exit 0
+          fi
+
+          built_stamp="$(printf '%s' "$CANARY_BUILT_AT" | tr -d ':-TZ')"
+          formula_version="0.0.0-canary.${built_stamp}.${CANARY_SHA:0:7}"
+          source_url="https://github.com/${GH_REPO}/archive/${CANARY_SHA}.tar.gz"
+          curl -fsSL "$source_url" -o "$RUNNER_TEMP/mapture-canary-source.tar.gz"
+          source_sha256="$(sha256sum "$RUNNER_TEMP/mapture-canary-source.tar.gz" | awk '{print $1}')"
+
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/${HOMEBREW_TAP_REPO}.git" "$RUNNER_TEMP/homebrew-tap"
+
+          ./scripts/sync-homebrew-tap.sh \
+            --tap-dir "$RUNNER_TEMP/homebrew-tap" \
+            --tap-repo "$HOMEBREW_TAP_REPO" \
+            --formula-name mapture-canary \
+            --class-name MaptureCanary \
+            --formula-version "$formula_version" \
+            --binary-version "$CANARY_VERSION" \
+            --source-url "$source_url" \
+            --source-sha256 "$source_sha256"
+
+          cd "$RUNNER_TEMP/homebrew-tap"
+          if git diff --quiet; then
+            echo "Homebrew tap already up to date."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/mapture-canary.rb README.md
+          git commit -m "Update mapture-canary to ${CANARY_VERSION}"
+          git push origin HEAD:main
