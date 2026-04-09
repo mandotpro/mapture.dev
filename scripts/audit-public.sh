@@ -28,7 +28,7 @@ check_grep() {
   local label="$1"
   local pattern="$2"
   local matches
-  matches="$(git grep -nE "$pattern" -- . ':!src/internal/webui/dist/*' || true)"
+  matches="$(git grep -nE "$pattern" -- . ':!src/internal/webui/dist/*' ':!scripts/audit-public.sh' || true)"
   if [[ -n "$matches" ]]; then
     echo "public-audit: potential $label found:" >&2
     printf '%s\n' "$matches" >&2
