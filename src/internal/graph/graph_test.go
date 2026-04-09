@@ -80,11 +80,7 @@ func marshalFixtureGraph(t *testing.T, rel string, sourceRoot string) []byte {
 	if err != nil {
 		t.Fatalf("config.Load: %v", err)
 	}
-	catalogDir, err := cfg.CatalogDir(filepath.Join(root, "mapture.yaml"))
-	if err != nil {
-		t.Fatalf("CatalogDir: %v", err)
-	}
-	cat, err := catalog.Load(catalogDir)
+	cat, err := catalog.Load(filepath.Join(root, "mapture.yaml"), cfg)
 	if err != nil {
 		t.Fatalf("catalog.Load: %v", err)
 	}

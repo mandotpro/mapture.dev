@@ -49,15 +49,6 @@ export interface CatalogDomain {
   owner_team: string;
 }
 
-export interface CatalogEvent {
-  id: string;
-  name: string;
-  domain: string;
-  owner_team: string;
-  status?: string;
-  description?: string;
-}
-
 export interface UINodeColors {
   service?: string;
   api?: string;
@@ -79,7 +70,6 @@ export interface ExplorerMeta {
 export interface CatalogPayload {
   teams: CatalogTeam[];
   domains: CatalogDomain[];
-  events: CatalogEvent[];
 }
 
 export interface ValidationPayload {
@@ -144,7 +134,6 @@ export interface GraphModel {
   edgeTypes: string[];
   teams: Map<string, string>;
   domainNames: Map<string, string>;
-  events: Map<string, CatalogEvent>;
   ui: {
     defaultLayout: LayoutMode;
     nodeColors: Required<NonNullable<UIConfig['nodeColors']>>;

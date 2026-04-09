@@ -82,7 +82,9 @@
       "name": "Inventory Released",
       "domain": "inventory",
       "owner": "team-operations",
-      "summary": "Reserved inventory was released after an order change."
+      "file": "src/ts/inventory/InventoryService.ts",
+      "line": 51,
+      "summary": "This release event makes the stock correction visible to any future consumers after inventory finishes the asynchronous unwind."
     },
     {
       "id": "event:inventory.reserved",
@@ -90,10 +92,12 @@
       "name": "Inventory Reserved",
       "domain": "inventory",
       "owner": "team-operations",
-      "summary": "Inventory was reserved for a newly placed order."
+      "file": "src/ts/inventory/InventoryService.ts",
+      "line": 28,
+      "summary": "Inventory emits this reservation signal so downstream consumers can react without reading reservation state directly from the database."
     },
     {
-      "id": "event:notification-sent-event",
+      "id": "event:notification.sent",
       "type": "event",
       "name": "Notification Sent Event",
       "domain": "notifications",
@@ -103,15 +107,17 @@
       "summary": "Internal delivery contract published after notification-service hands work to the messaging pipeline. Subscribers use it for telemetry and support timelines, and delivery payload drift is the failure mode this shared definition prevents."
     },
     {
-      "id": "event:notification.sent",
+      "id": "event:order.cancelled",
       "type": "event",
-      "name": "Notification Sent",
-      "domain": "notifications",
-      "owner": "team-engagement",
-      "summary": "Internal delivery event emitted after a customer notification is sent."
+      "name": "Order Cancelled",
+      "domain": "orders",
+      "owner": "team-commerce",
+      "file": "src/php/orders/CheckoutService.php",
+      "line": 38,
+      "summary": "Checkout publishes cancellations so inventory can release held stock and downstream customer messaging can stop before fulfillment advances."
     },
     {
-      "id": "event:order-placed-event",
+      "id": "event:order.placed",
       "type": "event",
       "name": "Order Placed Event",
       "domain": "orders",
@@ -121,23 +127,7 @@
       "summary": "Shared contract emitted when checkout commits a new order and downstream commerce workflows should begin. Billing, inventory, and notifications all depend on it, and version drift is the failure mode this contract keeps visible."
     },
     {
-      "id": "event:order.cancelled",
-      "type": "event",
-      "name": "Order Cancelled",
-      "domain": "orders",
-      "owner": "team-commerce",
-      "summary": "An order was cancelled before shipment."
-    },
-    {
-      "id": "event:order.placed",
-      "type": "event",
-      "name": "Order Placed",
-      "domain": "orders",
-      "owner": "team-commerce",
-      "summary": "A customer successfully placed an order."
-    },
-    {
-      "id": "event:payment-captured-event",
+      "id": "event:payment.captured",
       "type": "event",
       "name": "Payment Captured Event",
       "domain": "billing",
@@ -147,23 +137,17 @@
       "summary": "Shared contract for a successfully captured payment after billing durably records the gateway result. Shipping and notifications consume it next, and schema drift would create duplicate shipment or messaging side effects."
     },
     {
-      "id": "event:payment.captured",
-      "type": "event",
-      "name": "Payment Captured",
-      "domain": "billing",
-      "owner": "team-commerce",
-      "summary": "Payment was successfully captured for an order."
-    },
-    {
       "id": "event:payment.failed",
       "type": "event",
       "name": "Payment Failed",
       "domain": "billing",
       "owner": "team-commerce",
-      "summary": "Payment could not be captured."
+      "file": "src/go/billing/paymentservice/payment_service.go",
+      "line": 41,
+      "summary": "Payment failures are published so notification-service can prompt the customer to retry without coupling email rendering into billing code."
     },
     {
-      "id": "event:shipment-created-event",
+      "id": "event:shipment.created",
       "type": "event",
       "name": "Shipment Created Event",
       "domain": "shipping",
@@ -173,20 +157,14 @@
       "summary": "Shared shipment contract emitted once shipping stores a carrier label and tracking number. Notifications rely on it for customer updates, and missing tracking fields are the failure mode this contract makes explicit."
     },
     {
-      "id": "event:shipment.created",
-      "type": "event",
-      "name": "Shipment Created",
-      "domain": "shipping",
-      "owner": "team-operations",
-      "summary": "A shipment and carrier label were created."
-    },
-    {
       "id": "event:stripe.webhook.received",
       "type": "event",
       "name": "Stripe Webhook Received",
       "domain": "billing",
       "owner": "team-commerce",
-      "summary": "Raw webhook received from Stripe before internal normalization."
+      "file": "src/go/billing/stripebridge/stripe_bridge.go",
+      "line": 15,
+      "summary": "This bridge-in marks the exact point where external Stripe traffic becomes an internal billing signal that payment-service can validate and reconcile."
     },
     {
       "id": "service:checkout-service",
@@ -317,13 +295,13 @@
     },
     {
       "from": "service:checkout-service",
-      "to": "event:order-placed-event",
-      "type": "depends_on"
+      "to": "event:order.cancelled",
+      "type": "emits"
     },
     {
       "from": "service:checkout-service",
-      "to": "event:order.cancelled",
-      "type": "emits"
+      "to": "event:order.placed",
+      "type": "depends_on"
     },
     {
       "from": "service:checkout-service",
@@ -362,7 +340,7 @@
     },
     {
       "from": "service:inventory-service",
-      "to": "event:order-placed-event",
+      "to": "event:order.placed",
       "type": "depends_on"
     },
     {
@@ -377,7 +355,7 @@
     },
     {
       "from": "service:notification-service",
-      "to": "event:notification-sent-event",
+      "to": "event:notification.sent",
       "type": "depends_on"
     },
     {
@@ -397,7 +375,7 @@
     },
     {
       "from": "service:payment-service",
-      "to": "event:payment-captured-event",
+      "to": "event:payment.captured",
       "type": "depends_on"
     },
     {
@@ -422,7 +400,7 @@
     },
     {
       "from": "service:shipping-service",
-      "to": "event:shipment-created-event",
+      "to": "event:shipment.created",
       "type": "depends_on"
     },
     {

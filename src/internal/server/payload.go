@@ -23,7 +23,6 @@ type ExplorerPayload struct {
 type ExplorerCatalog struct {
 	Teams   []catalog.Team   `json:"teams"`
 	Domains []catalog.Domain `json:"domains"`
-	Events  []catalog.Event  `json:"events"`
 }
 
 // ExplorerValidation carries diagnostics plus summary metadata.

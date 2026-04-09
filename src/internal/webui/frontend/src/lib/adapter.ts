@@ -1,7 +1,6 @@
 import { MarkerType, Position, type Edge, type Node } from '@xyflow/svelte';
 import type {
   BackendGraph,
-  CatalogEvent,
   DensityMode,
   Diagnostic,
   ExplorerPayload,
@@ -122,7 +121,6 @@ export function normalizeGraph(payload: ExplorerPayload): GraphModel {
   }));
   const teams = new Map((payload.catalog.teams ?? []).map((team) => [team.id, team.name]));
   const domainNames = new Map((payload.catalog.domains ?? []).map((domain) => [domain.id, domain.name]));
-  const events = new Map<string, CatalogEvent>((payload.catalog.events ?? []).map((event) => [event.id, event]));
 
   return {
     nodes,
@@ -134,7 +132,6 @@ export function normalizeGraph(payload: ExplorerPayload): GraphModel {
     edgeTypes: unique(edges.map((edge) => edge.type).filter(Boolean)),
     teams,
     domainNames,
-    events,
     ui: {
       defaultLayout: resolveDefaultLayout(payload.ui),
       nodeColors: resolveNodeColors(payload.ui),

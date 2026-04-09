@@ -160,11 +160,7 @@ func (e *explorer) loadProject() (*config.Config, *catalog.Catalog, string, erro
 	if err != nil {
 		return nil, nil, "", err
 	}
-	catalogDir, err := cfg.CatalogDir(e.configPath)
-	if err != nil {
-		return nil, nil, "", err
-	}
-	cat, err := catalog.Load(catalogDir)
+	cat, err := catalog.Load(e.configPath, cfg)
 	if err != nil {
 		return nil, nil, "", err
 	}
@@ -229,7 +225,6 @@ func (e *explorer) buildExplorerPayload() (*ExplorerPayload, error) {
 		Catalog: ExplorerCatalog{
 			Teams:   cat.Teams,
 			Domains: cat.Domains,
-			Events:  cat.Events,
 		},
 		Validation: ExplorerValidation{
 			Diagnostics: result.Diagnostics,
@@ -308,7 +303,6 @@ func (e *explorer) handleCatalog(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, ExplorerCatalog{
 		Teams:   cat.Teams,
 		Domains: cat.Domains,
-		Events:  cat.Events,
 	})
 }
 

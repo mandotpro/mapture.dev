@@ -1,7 +1,22 @@
 version: 1
 
-catalog:
-  dir: ./architecture
+teams:
+  - id: team-commerce
+    name: Commerce Team
+    email: commerce@example.com
+
+  - id: team-billing
+    name: Billing Team
+    email: billing@example.com
+
+domains:
+  - id: orders
+    name: Orders
+    ownerTeams: [team-commerce]
+
+  - id: billing
+    name: Billing
+    ownerTeams: [team-billing]
 
 scan:
   include:
@@ -23,10 +38,11 @@ comments:
 validation:
   failOnUnknownDomain: true
   failOnUnknownTeam: true
-  failOnUnknownEvent: true
+  failOnUnknownNode: true
   requireMetadataOn:
     - trigger
     - listener
+  warnOnDeprecatedEvents: true
 
 ui:
   defaultLayout: elk-horizontal

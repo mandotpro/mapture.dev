@@ -15,18 +15,15 @@ import (
 func TestLoadProjectSuccess(t *testing.T) {
 	t.Parallel()
 
-	configPath, cfg, cat, err := loadProject("../../examples/demo")
+	configPath, _, cat, err := loadProject("../../examples/demo")
 	if err != nil {
 		t.Fatalf("loadProject returned error: %v", err)
 	}
 	if !strings.HasSuffix(configPath, "examples/demo/mapture.yaml") {
 		t.Fatalf("unexpected config path: %s", configPath)
 	}
-	if cfg.Catalog.Dir != "./architecture" {
-		t.Fatalf("unexpected catalog dir: %s", cfg.Catalog.Dir)
-	}
-	if len(cat.Teams) != 2 || len(cat.Domains) != 2 || len(cat.Events) != 1 {
-		t.Fatalf("unexpected catalog sizes: teams=%d domains=%d events=%d", len(cat.Teams), len(cat.Domains), len(cat.Events))
+	if len(cat.Teams) != 2 || len(cat.Domains) != 2 {
+		t.Fatalf("unexpected catalog sizes: teams=%d domains=%d", len(cat.Teams), len(cat.Domains))
 	}
 }
 
@@ -41,7 +38,6 @@ func TestLoadProjectRejectsBrokenFixtures(t *testing.T) {
 		{name: "bad config role", path: "../../examples/invalid/bad-config-role", wantErr: "random"},
 		{name: "duplicate team", path: "../../examples/invalid/duplicate-team", wantErr: "duplicate team id"},
 		{name: "unknown domain owner", path: "../../examples/invalid/unknown-domain-owner", wantErr: "unknown team"},
-		{name: "invalid event status", path: "../../examples/invalid/invalid-event-status", wantErr: "random"},
 		{name: "missing teams file", path: "../../examples/invalid/missing-teams-file", wantErr: "read"},
 	}
 
@@ -183,7 +179,7 @@ func TestRunValidateOutputsRichSummary(t *testing.T) {
 	for _, want := range []string{
 		"Resolving project",
 		"Loading config",
-		"Loading catalogs",
+		"Loading catalog metadata",
 		"Scanning sources",
 		"Building graph",
 		"Validation Succeeded:",

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/mandotpro/mapture.dev/src/internal/schema"
 )
@@ -16,6 +17,8 @@ const filename = "mapture.yaml"
 type Config struct {
 	Version    int        `json:"version"`
 	Catalog    Catalog    `json:"catalog"`
+	Teams      []Team     `json:"teams,omitempty"`
+	Domains    []Domain   `json:"domains,omitempty"`
 	Scan       Scan       `json:"scan"`
 	Languages  Languages  `json:"languages"`
 	Comments   Comments   `json:"comments"`
@@ -26,6 +29,27 @@ type Config struct {
 // Catalog configures where catalog YAML files live.
 type Catalog struct {
 	Dir string `json:"dir"`
+}
+
+// Team is an inline team catalog entry defined in mapture.yaml.
+type Team struct {
+	ID      string   `json:"id"`
+	Name    string   `json:"name"`
+	Contact string   `json:"contact,omitempty"`
+	Slack   string   `json:"slack,omitempty"`
+	Email   string   `json:"email,omitempty"`
+	Tags    []string `json:"tags,omitempty"`
+}
+
+// Domain is an inline domain catalog entry defined in mapture.yaml.
+type Domain struct {
+	ID                     string   `json:"id"`
+	Name                   string   `json:"name"`
+	Description            string   `json:"description,omitempty"`
+	OwnerTeams             []string `json:"ownerTeams"`
+	AllowedOutboundDomains []string `json:"allowedOutboundDomains,omitempty"`
+	AllowedInboundDomains  []string `json:"allowedInboundDomains,omitempty"`
+	Tags                   []string `json:"tags,omitempty"`
 }
 
 // Scan configures which repository paths should be scanned or skipped.
@@ -51,7 +75,6 @@ type Comments struct {
 type Validation struct {
 	FailOnUnknownDomain    bool     `json:"failOnUnknownDomain"`
 	FailOnUnknownTeam      bool     `json:"failOnUnknownTeam"`
-	FailOnUnknownEvent     bool     `json:"failOnUnknownEvent"`
 	FailOnUnknownNode      bool     `json:"failOnUnknownNode"`
 	RequireMetadataOn      []string `json:"requireMetadataOn"`
 	WarnOnOrphanedNodes    bool     `json:"warnOnOrphanedNodes"`
@@ -131,10 +154,13 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-// CatalogDir returns the absolute path to the configured catalog directory.
+// CatalogDir returns the absolute path to the configured legacy catalog directory.
 func (c *Config) CatalogDir(configPath string) (string, error) {
 	if c == nil {
 		return "", errors.New("config is nil")
+	}
+	if strings.TrimSpace(c.Catalog.Dir) == "" {
+		return "", nil
 	}
 	if filepath.IsAbs(c.Catalog.Dir) {
 		return c.Catalog.Dir, nil

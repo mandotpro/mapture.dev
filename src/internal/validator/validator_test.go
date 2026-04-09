@@ -55,6 +55,33 @@ func TestBuildUsesProducerToEventToConsumerFlow(t *testing.T) {
 	}
 }
 
+func TestBuildCanonicalizesPairedEventDefinitionNodes(t *testing.T) {
+	t.Parallel()
+
+	_, cfg, cat, blocks := loadFixture(t, "../../../examples/ecommerce")
+
+	result, err := Build(cfg, cat, blocks)
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+
+	for _, node := range result.Graph.Nodes {
+		if node.ID == "event:order-placed-event" {
+			t.Fatalf("expected aliased event node id to be removed, got %#v", result.Graph.Nodes)
+		}
+	}
+	if !hasNode(result.Graph, "event:order.placed") {
+		t.Fatalf("expected canonical event node event:order.placed, got %#v", result.Graph.Nodes)
+	}
+	if !hasEdge(result.Graph, graph.Edge{
+		From: "service:checkout-service",
+		To:   "event:order.placed",
+		Type: graph.EdgeDependsOn,
+	}) {
+		t.Fatalf("expected relation to use canonical event id, got %#v", result.Graph.Edges)
+	}
+}
+
 func TestBuildRejectsUnknownArchDomain(t *testing.T) {
 	t.Parallel()
 
@@ -96,7 +123,7 @@ func TestBuildRejectsEventDomainMismatch(t *testing.T) {
 			Fields: map[string]string{
 				"node":   "event order-placed-event",
 				"name":   "Order Placed Event",
-				"domain": "billing",
+				"domain": "orders",
 				"owner":  "team-commerce",
 			},
 		},
@@ -203,7 +230,7 @@ func TestBuildScopedSynthesizesBoundaryNodeForMissingTarget(t *testing.T) {
 	t.Fatalf("expected synthesized api:payment-api node, got %#v", result.Graph.Nodes)
 }
 
-func TestBuildScopedOnlyMaterializesReferencedCatalogEvents(t *testing.T) {
+func TestBuildScopedKeepsOnlyReferencedEvents(t *testing.T) {
 	t.Parallel()
 
 	root, cfg, cat, _ := loadFixture(t, "../../../examples/ecommerce")
@@ -220,50 +247,43 @@ func TestBuildScopedOnlyMaterializesReferencedCatalogEvents(t *testing.T) {
 		t.Fatalf("Build returned error: %v", err)
 	}
 
-	nodeIDs := make(map[string]struct{}, len(result.Graph.Nodes))
-	for _, node := range result.Graph.Nodes {
-		nodeIDs[node.ID] = struct{}{}
-	}
-
-	if _, ok := nodeIDs["event:order.placed"]; !ok {
+	if !hasNode(result.Graph, "event:order.placed") {
 		t.Fatalf("expected referenced event node in scoped graph, got %#v", result.Graph.Nodes)
 	}
-	if _, ok := nodeIDs["event:inventory.reserved"]; ok {
-		t.Fatalf("did not expect unrelated catalog event in scoped graph, got %#v", result.Graph.Nodes)
+	if hasNode(result.Graph, "event:inventory.reserved") {
+		t.Fatalf("did not expect unrelated event in scoped graph, got %#v", result.Graph.Nodes)
 	}
 }
 
-func TestBuildWarnsOnDeprecatedEvent(t *testing.T) {
+func TestBuildWarnsOnDeprecatedEventDefinition(t *testing.T) {
 	t.Parallel()
 
 	cfg := strictConfig()
 	cfg.Validation.WarnOnDeprecatedEvents = true
 	cat := minimalCatalog()
-	event := cat.EventsByID["order.placed"]
-	event.Status = "deprecated"
-	cat.EventsByID["order.placed"] = event
-	cat.Events[0] = event
 	blocks := []scanner.RawBlock{
 		{
 			Kind: "arch",
-			File: "src/app.go",
+			File: "src/contracts.go",
 			Line: 1,
 			Fields: map[string]string{
-				"node":   "service checkout-service",
-				"name":   "Checkout Service",
-				"domain": "orders",
-				"owner":  "team-commerce",
+				"node":        "event order-placed-event",
+				"name":        "Order Placed Event",
+				"domain":      "orders",
+				"owner":       "team-commerce",
+				"status":      "deprecated",
+				"description": "Legacy order event definition.",
 			},
 		},
 		{
 			Kind: "event",
-			File: "src/app.go",
-			Line: 8,
+			File: "src/contracts.go",
+			Line: 1,
 			Fields: map[string]string{
-				"id":       "order.placed",
-				"role":     "trigger",
-				"domain":   "orders",
-				"producer": "CheckoutService::placeOrder",
+				"id":     "order.placed",
+				"role":   "definition",
+				"domain": "orders",
+				"owner":  "team-commerce",
 			},
 		},
 	}
@@ -272,8 +292,8 @@ func TestBuildWarnsOnDeprecatedEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build returned error: %v", err)
 	}
-	if len(result.Diagnostics) == 0 || result.Diagnostics[0].Severity != severityWarning {
-		t.Fatalf("expected deprecation warning, got %#v", result.Diagnostics)
+	if !hasDiagnostic(result.Diagnostics, severityWarning, "deprecated_event") {
+		t.Fatalf("expected deprecated_event warning, got %#v", result.Diagnostics)
 	}
 }
 
@@ -311,15 +331,12 @@ func loadFixture(t *testing.T, rel string) (string, *config.Config, *catalog.Cat
 		t.Fatalf("Abs(%q): %v", rel, err)
 	}
 
-	cfg, err := config.Load(filepath.Join(root, "mapture.yaml"))
+	configPath := filepath.Join(root, "mapture.yaml")
+	cfg, err := config.Load(configPath)
 	if err != nil {
 		t.Fatalf("config.Load: %v", err)
 	}
-	catalogDir, err := cfg.CatalogDir(filepath.Join(root, "mapture.yaml"))
-	if err != nil {
-		t.Fatalf("CatalogDir: %v", err)
-	}
-	cat, err := catalog.Load(catalogDir)
+	cat, err := catalog.Load(configPath, cfg)
 	if err != nil {
 		t.Fatalf("catalog.Load: %v", err)
 	}
@@ -336,7 +353,6 @@ func strictConfig() *config.Config {
 		Validation: config.Validation{
 			FailOnUnknownDomain: true,
 			FailOnUnknownTeam:   true,
-			FailOnUnknownEvent:  true,
 			FailOnUnknownNode:   true,
 		},
 	}
@@ -345,26 +361,35 @@ func strictConfig() *config.Config {
 func minimalCatalog() *catalog.Catalog {
 	team := catalog.Team{ID: "team-commerce", Name: "Commerce"}
 	domain := catalog.Domain{ID: "orders", Name: "Orders", OwnerTeams: []string{"team-commerce"}}
-	event := catalog.Event{
-		ID:        "order.placed",
-		Name:      "Order Placed",
-		Domain:    "orders",
-		OwnerTeam: "team-commerce",
-		Status:    "active",
-	}
 	return &catalog.Catalog{
 		Teams:       []catalog.Team{team},
 		Domains:     []catalog.Domain{domain},
-		Events:      []catalog.Event{event},
 		TeamsByID:   map[string]catalog.Team{team.ID: team},
 		DomainsByID: map[string]catalog.Domain{domain.ID: domain},
-		EventsByID:  map[string]catalog.Event{event.ID: event},
 	}
 }
 
 func hasEdge(g graph.Graph, want graph.Edge) bool {
 	for _, edge := range g.Edges {
 		if edge == want {
+			return true
+		}
+	}
+	return false
+}
+
+func hasNode(g graph.Graph, nodeID string) bool {
+	for _, node := range g.Nodes {
+		if node.ID == nodeID {
+			return true
+		}
+	}
+	return false
+}
+
+func hasDiagnostic(diagnostics []Diagnostic, severity string, code string) bool {
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Severity == severity && diagnostic.Code == code {
 			return true
 		}
 	}

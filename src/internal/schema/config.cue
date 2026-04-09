@@ -10,9 +10,12 @@ package schema
 #Config: {
 	version: 1
 
-	catalog: {
-		dir: *"./architecture" | string
+	catalog?: {
+		dir?: string
 	}
+
+	teams?: [...#Team]
+	domains?: [...#Domain]
 
 	scan: {
 		include: [string, ...string]
@@ -33,11 +36,10 @@ package schema
 	validation: {
 		failOnUnknownDomain:     *true | bool
 		failOnUnknownTeam:       *true | bool
-		failOnUnknownEvent:      *true | bool
 		failOnUnknownNode:       *true | bool
 		requireMetadataOn:       *[] | [...#EventRole]
 		warnOnOrphanedNodes:     *false | bool
-		warnOnDeprecatedEvents: *true | bool
+		warnOnDeprecatedEvents:  *true | bool
 	}
 
 	ui?: {

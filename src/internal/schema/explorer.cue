@@ -33,7 +33,6 @@ package schema
 	catalog: close({
 		teams:   [...#Team]
 		domains: [...#Domain]
-		events:  [...#Event]
 	})
 	validation: #ExplorerValidation
 	ui?: close({
