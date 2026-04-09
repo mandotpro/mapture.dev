@@ -1,4 +1,4 @@
-name: Nightly
+name: Canary
 
 on:
   workflow_run:
@@ -11,6 +11,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: canary-main
+  cancel-in-progress: true
+
 jobs:
   prepare:
     if: ${{ (github.event_name == 'workflow_dispatch' && github.ref_name == 'main') || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') }}
@@ -18,6 +22,7 @@ jobs:
     outputs:
       version: ${{ steps.meta.outputs.version }}
       sha: ${{ steps.meta.outputs.sha }}
+      built_at: ${{ steps.meta.outputs.built_at }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -25,9 +30,11 @@ jobs:
       - id: meta
         run: |
           short_sha="$(git rev-parse --short HEAD)"
-          version="0.0.0-nightly.$(date -u +%Y%m%d)+sha.${short_sha}"
+          built_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          version="0.0.0-canary.$(date -u +%Y%m%d)+sha.${short_sha}"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "built_at=$built_at" >> "$GITHUB_OUTPUT"
 
   build:
     needs: prepare
@@ -59,7 +66,7 @@ jobs:
           ./scripts/release-build.sh "${{ needs.prepare.outputs.version }}" "${{ matrix.goos }}" "${{ matrix.goarch }}" dist
       - uses: actions/upload-artifact@v7
         with:
-          name: nightly-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: canary-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/*
 
   publish:
@@ -71,20 +78,43 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           path: dist
-          pattern: nightly-*
+          pattern: canary-*
           merge-multiple: true
       - name: Generate checksums
         run: |
           cd dist
           sha256sum * > SHA256SUMS
-      - name: Publish rolling nightly prerelease
+      - name: Publish rolling canary prerelease
         env:
           GH_TOKEN: ${{ github.token }}
-          NIGHTLY_SHA: ${{ needs.prepare.outputs.sha }}
+          GH_REPO: ${{ github.repository }}
+          CANARY_SHA: ${{ needs.prepare.outputs.sha }}
+          CANARY_VERSION: ${{ needs.prepare.outputs.version }}
+          CANARY_BUILT_AT: ${{ needs.prepare.outputs.built_at }}
         run: |
-          gh release delete nightly --yes --cleanup-tag || true
-          gh release create nightly dist/* \
-            --prerelease \
-            --target "$NIGHTLY_SHA" \
-            --title "nightly" \
-            --notes "Rolling nightly build from main at commit $NIGHTLY_SHA."
+          cat > canary-notes.md <<EOF
+          Rolling canary build from \`main\`.
+
+          - Commit: \`$CANARY_SHA\`
+          - Version: \`$CANARY_VERSION\`
+          - Built at (UTC): \`$CANARY_BUILT_AT\`
+          EOF
+
+          if gh release view canary >/dev/null 2>&1; then
+            mapfile -t assets < <(gh release view canary --json assets --jq '.assets[].name')
+            for asset in "${assets[@]}"; do
+              gh release delete-asset canary "$asset" --yes
+            done
+            gh release edit canary \
+              --prerelease \
+              --target "$CANARY_SHA" \
+              --title "canary" \
+              --notes-file canary-notes.md
+            gh release upload canary dist/*
+          else
+            gh release create canary dist/* \
+              --prerelease \
+              --target "$CANARY_SHA" \
+              --title "canary" \
+              --notes-file canary-notes.md
+          fi

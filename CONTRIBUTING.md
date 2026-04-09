@@ -61,7 +61,7 @@ The committed bundle is part of the shipped single-binary experience.
 
 ## Release notes and versioning
 
-Stable releases are managed through an automated release PR flow. Nightly builds are published separately from `main`.
+Stable releases are managed through an automated release PR flow. Canary builds are published separately from `main`.
 
 If your change is user-visible, make sure the PR description explains:
 

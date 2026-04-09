@@ -7,7 +7,7 @@ Mapture is still pre-`v1.0.0`.
 The project currently supports:
 
 - the latest stable release
-- the rolling `nightly` prerelease
+- the rolling `canary` prerelease
 - the current `main` branch for development only
 
 Older prereleases may not receive fixes.
@@ -36,4 +36,4 @@ The project aims to:
 - reproduce and assess the issue
 - coordinate a fix before public disclosure when possible
 
-Because Mapture is pre-1.0, fixes may ship as either a stable release or a nightly build first, depending on severity and scope.
+Because Mapture is pre-1.0, fixes may ship as either a stable release or a canary build first, depending on severity and scope.
