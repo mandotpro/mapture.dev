@@ -58,7 +58,13 @@ Rolling canary prereleases from the latest successful `main` build are published
 ### Build from source
 
 ```bash
-go install github.com/mandotpro/mapture.dev@latest
+go install github.com/mandotpro/mapture.dev/cmd/mapture@latest
+```
+
+Install the current canary from source:
+
+```bash
+go install github.com/mandotpro/mapture.dev/cmd/mapture@canary
 ```
 
 ## What Mapture does today

@@ -20,12 +20,15 @@ graph_output="$(mktemp)"
 release_output_dir="$(mktemp -d)"
 formula_output="$(mktemp)"
 tap_output_dir="$(mktemp -d)"
-trap 'rm -f "$graph_output" "$formula_output"; rm -rf "$release_output_dir" "$tap_output_dir"' EXIT
+install_output_dir="$(mktemp -d)"
+trap 'rm -f "$graph_output" "$formula_output"; rm -rf "$release_output_dir" "$tap_output_dir" "$install_output_dir"' EXIT
 go run src/main.go graph examples/ecommerce --domain billing -o "$graph_output"
 test -s "$graph_output"
 
 ./scripts/build.sh >/dev/null
 ./build/mapture --version | grep -q "0.0.0-dev"
+GOBIN="$install_output_dir" go install ./cmd/mapture
+test -x "$install_output_dir/mapture"
 
 ./scripts/release-build.sh "v0.0.0-test" "linux" "amd64" "$release_output_dir" >/dev/null
 test -f "$release_output_dir/mapture_v0.0.0-test_linux_amd64.tar.gz"
