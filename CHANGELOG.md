@@ -9,3 +9,4 @@ Canary prereleases are rolling builds from `main` and are not listed here as sta
 ## Unreleased
 
 - Initial public launch preparation
+- Homebrew tap automation for canary and stable releases

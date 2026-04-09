@@ -66,3 +66,52 @@ jobs:
           else
             gh release create "$TAG" dist/* --title "$TAG" --generate-notes --latest
           fi
+
+  sync-homebrew-tap:
+    needs: publish
+    if: ${{ vars.HOMEBREW_TAP_REPO != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref }}
+      - name: Sync stable formula to Homebrew tap
+        env:
+          GH_REPO: ${{ github.repository }}
+          HOMEBREW_TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [[ -z "$HOMEBREW_TAP_TOKEN" ]]; then
+            echo "HOMEBREW_TAP_TOKEN is not configured; skipping tap sync."
+            exit 0
+          fi
+
+          formula_version="${TAG#v}"
+          source_url="https://github.com/${GH_REPO}/archive/refs/tags/${TAG}.tar.gz"
+          curl -fsSL "$source_url" -o "$RUNNER_TEMP/mapture-release-source.tar.gz"
+          source_sha256="$(sha256sum "$RUNNER_TEMP/mapture-release-source.tar.gz" | awk '{print $1}')"
+
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/${HOMEBREW_TAP_REPO}.git" "$RUNNER_TEMP/homebrew-tap"
+
+          ./scripts/sync-homebrew-tap.sh \
+            --tap-dir "$RUNNER_TEMP/homebrew-tap" \
+            --tap-repo "$HOMEBREW_TAP_REPO" \
+            --formula-name mapture \
+            --class-name Mapture \
+            --formula-version "$formula_version" \
+            --binary-version "$TAG" \
+            --source-url "$source_url" \
+            --source-sha256 "$source_sha256"
+
+          cd "$RUNNER_TEMP/homebrew-tap"
+          if git diff --quiet; then
+            echo "Homebrew tap already up to date."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/mapture.rb README.md
+          git commit -m "Update mapture to ${TAG}"
+          git push origin HEAD:main
