@@ -1,12 +1,20 @@
 import ELK from 'elkjs/lib/elk.bundled.js';
 import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation, forceX, forceY } from 'd3-force';
 import type { Edge, Node } from '@xyflow/svelte';
-import type { LayoutMode } from './types';
+import type { ViewMode } from './types';
 
-const NODE_WIDTH = 156;
-const NODE_HEIGHT = 82;
-const TICKS = 220;
+export const NODE_WIDTH = 156;
+export const NODE_HEIGHT = 82;
+
 const VIEWPORT_MARGIN = 56;
+const WORKBENCH_TICKS = 220;
+const EVENT_FLOW_STAGE_GAP = 244;
+const EVENT_FLOW_DOMAIN_GAP = 56;
+const EVENT_FLOW_NODE_GAP = 26;
+const LANE_WIDTH = 368;
+const LANE_GAP = 72;
+const LANE_COLUMN_GAP = 18;
+const LANE_NODE_GAP = 24;
 
 type SimNode = {
   id: string;
@@ -19,7 +27,7 @@ type SimNode = {
 };
 
 type LayoutOptions = {
-  mode: LayoutMode;
+  viewMode: ViewMode;
   manualPositions: Record<string, { x: number; y: number }>;
   reservedInsets: { top: number; left: number };
 };
@@ -48,33 +56,22 @@ type CollisionNode = {
 
 const elk = new ELK();
 
-const layoutTuning: Record<LayoutMode, {
-  clusterStrength: number;
-  linkStrength: number;
-  linkDistance: number;
-  collisionMargin: number;
-  collisionIterations: number;
-}> = {
-  freeform: {
-    clusterStrength: 0.1,
-    linkStrength: 0.12,
-    linkDistance: 118,
-    collisionMargin: 28,
-    collisionIterations: 160,
+const collisionTuning: Record<ViewMode, { margin: number; maxIterations: number }> = {
+  'system-map': {
+    margin: 34,
+    maxIterations: 180,
   },
-  clustered: {
-    clusterStrength: 0.19,
-    linkStrength: 0.22,
-    linkDistance: 96,
-    collisionMargin: 34,
-    collisionIterations: 220,
+  'event-flow': {
+    margin: 20,
+    maxIterations: 80,
   },
-  'elk-horizontal': {
-    clusterStrength: 0.18,
-    linkStrength: 0.2,
-    linkDistance: 110,
-    collisionMargin: 34,
-    collisionIterations: 180,
+  'domain-lanes': {
+    margin: 16,
+    maxIterations: 60,
+  },
+  workbench: {
+    margin: 28,
+    maxIterations: 160,
   },
 };
 
@@ -87,31 +84,39 @@ export async function layoutGraph(
     return { nodes, edges };
   }
 
-  const baseLayout = options.mode === 'elk-horizontal'
-    ? await layoutWithELK(nodes, edges, options)
-    : layoutWithForce(nodes, edges, options);
+  if (options.viewMode === 'system-map') {
+    return layoutWithSystemMap(nodes, edges, options);
+  }
 
-  const mergedNodes = applyManualPositions(baseLayout.nodes, options.manualPositions);
-  const resolved = resolvePositions(mergedNodes, options.mode, {
-    lockedNodeIds: new Set(Object.keys(options.manualPositions)),
-    reservedInsets: options.reservedInsets,
-  });
+  if (options.viewMode === 'event-flow') {
+    return layoutWithEventFlow(nodes, edges, options);
+  }
 
-  return {
-    nodes: mergedNodes.map((node) => ({
-      ...node,
-      position: resolved[node.id] ?? node.position,
-    })),
-    edges: baseLayout.edges,
-  };
+  if (options.viewMode === 'domain-lanes') {
+    return layoutWithDomainLanes(nodes, edges, options);
+  }
+
+  return layoutWithWorkbench(nodes, edges, options);
 }
 
 export function resolvePositions(
   nodes: Node[],
-  mode: LayoutMode,
+  viewMode: ViewMode,
   options: ResolvePositionOptions = {},
 ): Record<string, { x: number; y: number }> {
-  const tuning = layoutTuning[mode];
+  if (viewMode !== 'workbench') {
+    return Object.fromEntries(
+      nodes.map((node) => [
+        node.id,
+        {
+          x: node.position.x,
+          y: node.position.y,
+        },
+      ]),
+    );
+  }
+
+  const tuning = collisionTuning.workbench;
   const resolved = resolveNodeCollisions(
     nodes.map((node) => ({
       id: node.id,
@@ -121,8 +126,8 @@ export function resolvePositions(
       height: typeof node.height === 'number' ? node.height : NODE_HEIGHT,
     })),
     {
-      margin: tuning.collisionMargin,
-      maxIterations: tuning.collisionIterations,
+      margin: tuning.margin,
+      maxIterations: tuning.maxIterations,
       lockIDs: options.lockedNodeIds,
       priorityIDs: options.priorityNodeIds,
       reservedInsets: options.reservedInsets,
@@ -140,80 +145,7 @@ export function resolvePositions(
   );
 }
 
-function layoutWithForce(nodes: Node[], edges: Edge[], options: LayoutOptions): { nodes: Node[]; edges: Edge[] } {
-  const tuning = layoutTuning[options.mode];
-  const domainCenters = buildDomainCenters(nodes, options.reservedInsets);
-  const random = mulberry32(hashSeed(nodes.map((node) => node.id).join('|')));
-
-  const simNodes: SimNode[] = nodes.map((node) => {
-    const domain = readString(node, 'domain');
-    const owner = readString(node, 'owner');
-    const center = domainCenters.get(domain) ?? {
-      x: options.reservedInsets.left + 340,
-      y: options.reservedInsets.top + 240,
-    };
-    const ownerOffset = hashSeed(owner || node.id) % 40;
-
-    return {
-      id: node.id,
-      domain,
-      owner,
-      x: center.x + (random() - 0.5) * 140 + ownerOffset - 20,
-      y: center.y + (random() - 0.5) * 140 - ownerOffset + 20,
-      vx: 0,
-      vy: 0,
-    };
-  });
-
-  const simulation = forceSimulation(simNodes)
-    .force('charge', forceManyBody<SimNode>().strength(-95))
-    .force('collide', forceCollide<SimNode>().radius(62).strength(0.95))
-    .force('link', forceLink<SimNode, { source: string; target: string }>(
-      edges.map((edge) => ({ source: edge.source, target: edge.target })),
-    ).id((node) => node.id).distance(tuning.linkDistance).strength(tuning.linkStrength))
-    .force('center', forceCenter(0, 0))
-    .force('cluster-x', forceX<SimNode>((node) => (domainCenters.get(node.domain) ?? { x: 0 }).x).strength(tuning.clusterStrength))
-    .force('cluster-y', forceY<SimNode>((node) => (domainCenters.get(node.domain) ?? { y: 0 }).y).strength(tuning.clusterStrength))
-    .stop();
-
-  for (let tick = 0; tick < TICKS; tick += 1) {
-    simulation.tick();
-  }
-
-  const resolved = resolveNodeCollisions(
-    simNodes.map((node) => ({
-      id: node.id,
-      x: node.x,
-      y: node.y,
-      width: NODE_WIDTH,
-      height: NODE_HEIGHT,
-    })),
-    {
-      margin: tuning.collisionMargin,
-      maxIterations: tuning.collisionIterations,
-      reservedInsets: options.reservedInsets,
-    },
-  );
-
-  const byID = new Map(resolved.map((node) => [node.id, node]));
-  return {
-    nodes: nodes.map((node) => {
-      const position = byID.get(node.id);
-      return {
-        ...node,
-        width: NODE_WIDTH,
-        height: NODE_HEIGHT,
-        position: {
-          x: position?.x ?? 180,
-          y: position?.y ?? 140,
-        },
-      };
-    }),
-    edges,
-  };
-}
-
-async function layoutWithELK(
+async function layoutWithSystemMap(
   nodes: Node[],
   edges: Edge[],
   options: LayoutOptions,
@@ -223,10 +155,11 @@ async function layoutWithELK(
     layoutOptions: {
       'elk.algorithm': 'layered',
       'elk.direction': 'RIGHT',
-      'elk.layered.spacing.nodeNodeBetweenLayers': '110',
-      'elk.spacing.nodeNode': '54',
+      'elk.layered.spacing.nodeNodeBetweenLayers': '132',
+      'elk.spacing.nodeNode': '62',
       'elk.edgeRouting': 'ORTHOGONAL',
       'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
+      'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
     },
     children: nodes.map((node) => ({
       id: node.id,
@@ -257,18 +190,240 @@ async function layoutWithELK(
     position: byID.get(node.id) ?? { x: 180, y: 140 },
   }));
 
-  const resolved = resolvePositions(
-    laidOutNodes,
-    'elk-horizontal',
+  const tuning = collisionTuning['system-map'];
+  const resolved = resolveNodeCollisions(
+    laidOutNodes.map((node) => ({
+      id: node.id,
+      x: node.position.x,
+      y: node.position.y,
+      width: NODE_WIDTH,
+      height: NODE_HEIGHT,
+    })),
     {
+      margin: tuning.margin,
+      maxIterations: tuning.maxIterations,
       reservedInsets: options.reservedInsets,
     },
   );
+  const positions = new Map(resolved.map((node) => [node.id, node]));
 
   return {
     nodes: laidOutNodes.map((node) => ({
       ...node,
-      position: resolved[node.id] ?? node.position,
+      position: {
+        x: positions.get(node.id)?.x ?? node.position.x,
+        y: positions.get(node.id)?.y ?? node.position.y,
+      },
+    })),
+    edges,
+  };
+}
+
+function layoutWithEventFlow(
+  nodes: Node[],
+  edges: Edge[],
+  options: LayoutOptions,
+): { nodes: Node[]; edges: Edge[] } {
+  const stageOrder = ['support', 'producer', 'event', 'consumer'] as const;
+  const domains = sortedDomains(nodes);
+  const domainStartY = new Map<string, number>();
+  let cursorY = options.reservedInsets.top + VIEWPORT_MARGIN;
+
+  for (const domain of domains) {
+    const stageCounts = stageOrder.map((stage) => (
+      nodes.filter((node) => readString(node, 'domain') === domain && readString(node, 'stage') === stage).length
+    ));
+    const domainRows = Math.max(1, ...stageCounts);
+    domainStartY.set(domain, cursorY);
+    cursorY += domainRows * (NODE_HEIGHT + EVENT_FLOW_NODE_GAP) + EVENT_FLOW_DOMAIN_GAP;
+  }
+
+  const stageX = new Map<string, number>();
+  stageOrder.forEach((stage, index) => {
+    stageX.set(stage, options.reservedInsets.left + VIEWPORT_MARGIN + 48 + index * EVENT_FLOW_STAGE_GAP);
+  });
+
+  const nodesByStageDomain = new Map<string, Node[]>();
+  for (const stage of stageOrder) {
+    for (const domain of domains) {
+      const key = `${stage}:${domain}`;
+      nodesByStageDomain.set(
+        key,
+        nodes
+          .filter((node) => readString(node, 'stage') === stage && readString(node, 'domain') === domain)
+          .sort(compareNodes),
+      );
+    }
+  }
+
+  return {
+    nodes: nodes.map((node) => {
+      const stage = readString(node, 'stage') || 'support';
+      const domain = readString(node, 'domain') || 'unassigned';
+      const key = `${stage}:${domain}`;
+      const siblings = nodesByStageDomain.get(key) ?? [];
+      const index = siblings.findIndex((candidate) => candidate.id === node.id);
+      return {
+        ...node,
+        width: NODE_WIDTH,
+        height: NODE_HEIGHT,
+        position: {
+          x: stageX.get(stage) ?? stageX.get('support') ?? 180,
+          y: (domainStartY.get(domain) ?? options.reservedInsets.top + VIEWPORT_MARGIN) + index * (NODE_HEIGHT + EVENT_FLOW_NODE_GAP),
+        },
+      };
+    }),
+    edges,
+  };
+}
+
+function layoutWithDomainLanes(
+  nodes: Node[],
+  edges: Edge[],
+  options: LayoutOptions,
+): { nodes: Node[]; edges: Edge[] } {
+  const domains = sortedDomains(nodes);
+  const laneX = new Map<string, number>();
+  domains.forEach((domain, index) => {
+    laneX.set(
+      domain,
+      options.reservedInsets.left + VIEWPORT_MARGIN + 24 + index * (LANE_WIDTH + LANE_GAP),
+    );
+  });
+
+  const grouped = new Map<string, { primary: Node[]; events: Node[]; databases: Node[] }>();
+  for (const domain of domains) {
+    const inDomain = nodes.filter((node) => readString(node, 'domain') === domain).sort(compareNodes);
+    grouped.set(domain, {
+      primary: inDomain.filter((node) => {
+        const type = readString(node, 'type');
+        return type === 'service' || type === 'api';
+      }),
+      events: inDomain.filter((node) => readString(node, 'type') === 'event'),
+      databases: inDomain.filter((node) => readString(node, 'type') === 'database'),
+    });
+  }
+
+  return {
+    nodes: nodes.map((node) => {
+      const domain = readString(node, 'domain') || 'unassigned';
+      const laneStart = laneX.get(domain) ?? options.reservedInsets.left + VIEWPORT_MARGIN;
+      const domainGroups = grouped.get(domain) ?? { primary: [], events: [], databases: [] };
+      const type = readString(node, 'type');
+      const top = options.reservedInsets.top + VIEWPORT_MARGIN + 46;
+      let x = laneStart + 24;
+      let y = top;
+
+      if (type === 'event') {
+        const index = domainGroups.events.findIndex((candidate) => candidate.id === node.id);
+        x = laneStart + LANE_WIDTH - NODE_WIDTH - 24;
+        y = top + index * (NODE_HEIGHT + LANE_NODE_GAP);
+      } else if (type === 'database') {
+        const primaryHeight = domainGroups.primary.length * (NODE_HEIGHT + LANE_NODE_GAP);
+        const eventHeight = domainGroups.events.length * (NODE_HEIGHT + LANE_NODE_GAP);
+        const databaseTop = top + Math.max(primaryHeight, eventHeight) + 60;
+        const index = domainGroups.databases.findIndex((candidate) => candidate.id === node.id);
+        x = laneStart + Math.round((LANE_WIDTH - NODE_WIDTH) / 2);
+        y = databaseTop + index * (NODE_HEIGHT + LANE_NODE_GAP);
+      } else {
+        const index = domainGroups.primary.findIndex((candidate) => candidate.id === node.id);
+        x = laneStart + 24;
+        y = top + index * (NODE_HEIGHT + LANE_NODE_GAP);
+      }
+
+      return {
+        ...node,
+        width: NODE_WIDTH,
+        height: NODE_HEIGHT,
+        position: { x, y },
+      };
+    }),
+    edges,
+  };
+}
+
+function layoutWithWorkbench(
+  nodes: Node[],
+  edges: Edge[],
+  options: LayoutOptions,
+): { nodes: Node[]; edges: Edge[] } {
+  const domainCenters = buildDomainCenters(nodes, options.reservedInsets);
+  const random = mulberry32(hashSeed(nodes.map((node) => node.id).join('|')));
+
+  const simNodes: SimNode[] = nodes.map((node) => {
+    const domain = readString(node, 'domain');
+    const owner = readString(node, 'owner');
+    const center = domainCenters.get(domain) ?? {
+      x: options.reservedInsets.left + 340,
+      y: options.reservedInsets.top + 240,
+    };
+    const ownerOffset = hashSeed(owner || node.id) % 40;
+
+    return {
+      id: node.id,
+      domain,
+      owner,
+      x: center.x + (random() - 0.5) * 140 + ownerOffset - 20,
+      y: center.y + (random() - 0.5) * 140 - ownerOffset + 20,
+      vx: 0,
+      vy: 0,
+    };
+  });
+
+  const simulation = forceSimulation(simNodes)
+    .force('charge', forceManyBody<SimNode>().strength(-95))
+    .force('collide', forceCollide<SimNode>().radius(62).strength(0.95))
+    .force('link', forceLink<SimNode, { source: string; target: string }>(
+      edges.map((edge) => ({ source: edge.source, target: edge.target })),
+    ).id((node) => node.id).distance(118).strength(0.12))
+    .force('center', forceCenter(0, 0))
+    .force('cluster-x', forceX<SimNode>((node) => (domainCenters.get(node.domain) ?? { x: 0 }).x).strength(0.1))
+    .force('cluster-y', forceY<SimNode>((node) => (domainCenters.get(node.domain) ?? { y: 0 }).y).strength(0.1))
+    .stop();
+
+  for (let tick = 0; tick < WORKBENCH_TICKS; tick += 1) {
+    simulation.tick();
+  }
+
+  const resolved = resolveNodeCollisions(
+    simNodes.map((node) => ({
+      id: node.id,
+      x: node.x,
+      y: node.y,
+      width: NODE_WIDTH,
+      height: NODE_HEIGHT,
+    })),
+    {
+      margin: collisionTuning.workbench.margin,
+      maxIterations: collisionTuning.workbench.maxIterations,
+      reservedInsets: options.reservedInsets,
+    },
+  );
+
+  const byID = new Map(resolved.map((node) => [node.id, node]));
+  const laidOutNodes = nodes.map((node) => {
+    const position = byID.get(node.id);
+    return {
+      ...node,
+      width: NODE_WIDTH,
+      height: NODE_HEIGHT,
+      position: {
+        x: position?.x ?? 180,
+        y: position?.y ?? 140,
+      },
+    };
+  });
+
+  const mergedNodes = applyManualPositions(laidOutNodes, options.manualPositions);
+  const positions = resolvePositions(mergedNodes, 'workbench', {
+    lockedNodeIds: new Set(Object.keys(options.manualPositions)),
+    reservedInsets: options.reservedInsets,
+  });
+
+  return {
+    nodes: mergedNodes.map((node) => ({
+      ...node,
+      position: positions[node.id] ?? node.position,
     })),
     edges,
   };
@@ -384,12 +539,9 @@ function nudge(node: CollisionNode, dx: number, dy: number, primary: 'x' | 'y'):
 }
 
 function applyViewportBounds(nodes: CollisionNode[]): void {
-  const safeLeft = VIEWPORT_MARGIN;
-  const safeTop = VIEWPORT_MARGIN;
-
   for (const node of nodes) {
-    node.x = Math.max(node.x, safeLeft);
-    node.y = Math.max(node.y, safeTop);
+    node.x = Math.max(node.x, VIEWPORT_MARGIN);
+    node.y = Math.max(node.y, VIEWPORT_MARGIN);
   }
 }
 
@@ -429,7 +581,7 @@ function centerY(node: CollisionNode): number {
 }
 
 function buildDomainCenters(nodes: Node[], reservedInsets: { top: number; left: number }): Map<string, { x: number; y: number }> {
-  const domains = Array.from(new Set(nodes.map((node) => readString(node, 'domain') || 'unassigned'))).sort();
+  const domains = sortedDomains(nodes);
   const centers = new Map<string, { x: number; y: number }>();
   const centerX = reservedInsets.left + 420;
   const centerY = reservedInsets.top + 280;
@@ -449,6 +601,24 @@ function buildDomainCenters(nodes: Node[], reservedInsets: { top: number; left: 
   });
 
   return centers;
+}
+
+function sortedDomains(nodes: Node[]): string[] {
+  return Array.from(new Set(nodes.map((node) => readString(node, 'domain') || 'unassigned'))).sort();
+}
+
+function compareNodes(left: Node, right: Node): number {
+  const typeCompare = readString(left, 'type').localeCompare(readString(right, 'type'));
+  if (typeCompare !== 0) {
+    return typeCompare;
+  }
+
+  const labelCompare = readString(left, 'label').localeCompare(readString(right, 'label'));
+  if (labelCompare !== 0) {
+    return labelCompare;
+  }
+
+  return left.id.localeCompare(right.id);
 }
 
 function readString(node: Node, key: string): string {

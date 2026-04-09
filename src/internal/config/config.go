@@ -60,7 +60,8 @@ type Validation struct {
 
 // UI configures optional web explorer presentation settings.
 type UI struct {
-	NodeColors NodeColors `json:"nodeColors"`
+	DefaultLayout string     `json:"defaultLayout"`
+	NodeColors    NodeColors `json:"nodeColors"`
 }
 
 // NodeColors controls node-type colors used by the web explorer.
@@ -77,6 +78,9 @@ var defaultNodeColors = NodeColors{
 	Database: "#a56614",
 	Event:    "#a73f7f",
 }
+
+// DefaultLayoutELKHorizontal is the default explorer layout written into UI config defaults.
+const DefaultLayoutELKHorizontal = "elk-horizontal"
 
 // Discover walks up from start until it finds mapture.yaml.
 func Discover(start string) (string, error) {
@@ -139,6 +143,9 @@ func (c *Config) CatalogDir(configPath string) (string, error) {
 }
 
 func (c *Config) applyDefaults() {
+	if c.UI.DefaultLayout == "" {
+		c.UI.DefaultLayout = DefaultLayoutELKHorizontal
+	}
 	if c.UI.NodeColors.Service == "" {
 		c.UI.NodeColors.Service = defaultNodeColors.Service
 	}

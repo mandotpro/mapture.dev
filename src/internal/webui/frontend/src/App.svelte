@@ -14,25 +14,29 @@
   } from '@xyflow/svelte';
   import { loadGraphFromApi } from './lib/api';
   import {
-    applyPreset,
+    buildFlowPresentation,
     domainName,
-    edgeColor,
-    edgeLabel,
     findNode,
     nodeColor,
     normalizeGraph,
     severitySummary,
     teamName,
-    toSvelteFlowEdges,
-    toSvelteFlowNodes,
-    visibleNodesForFilters,
-    visibleStats,
+    viewModeFromLayout,
   } from './lib/adapter';
   import { resolvePositions } from './lib/layout';
+  import DomainLanesBackdrop from './lib/DomainLanesBackdrop.svelte';
+  import FlowViewportController from './lib/FlowViewportController.svelte';
   import FlowNode from './lib/FlowNode.svelte';
-  import type { FilterPreset, Filters, GraphModel, LayoutMode, WindowWithPayload } from './lib/types';
+  import type {
+    DensityMode,
+    Filters,
+    GraphModel,
+    PresentedGraph,
+    ViewMode,
+    WindowWithPayload,
+  } from './lib/types';
 
-  type PopoverKind = 'search' | 'presets' | 'owners' | 'domains' | 'nodeTypes' | 'layout' | null;
+  type PopoverKind = 'search' | 'owners' | 'domains' | 'nodeTypes' | null;
   type NodePopup = {
     nodeId: string;
     x: number;
@@ -44,16 +48,17 @@
     manualPositions: ManualPositions;
   };
   type ActiveFilterBadge = {
-    kind: 'preset' | 'query' | 'owners' | 'domains' | 'nodeTypes' | 'relationTypes';
+    kind: 'query' | 'owners' | 'domains' | 'nodeTypes';
     value: string;
     label: string;
-    category: string;
     icon: string;
     tone: string;
   };
 
   const GITHUB_URL = 'https://github.com/mandotpro/mapture.dev';
   const STORAGE_PREFIX = 'mapture-layout';
+  const FIT_VIEW_PADDING = 0.72;
+
   const emptyModel: GraphModel = {
     nodes: [],
     edges: [],
@@ -66,6 +71,7 @@
     domainNames: new Map(),
     events: new Map(),
     ui: {
+      defaultLayout: 'elk-horizontal',
       nodeColors: {
         service: '#1664d9',
         api: '#0f8f78',
@@ -84,18 +90,43 @@
     },
   };
 
+  const emptyGraph: PresentedGraph = {
+    nodes: [],
+    edges: [],
+    lanes: [],
+  };
+
   const nodeTypes = {
     architecture: FlowNode,
   } satisfies NodeTypes;
-  const presetOptions: Array<{ id: FilterPreset; label: string }> = [
-    { id: 'service-map', label: 'Service map' },
-    { id: 'event-map', label: 'Event map' },
-    { id: 'producer-consumer', label: 'Producer to consumer flow' },
-    { id: 'api-dependencies', label: 'APIs and dependencies' },
+
+  const viewModeOptions: Array<{
+    value: ViewMode;
+    label: string;
+    summary: string;
+    glyph: string;
+  }> = [
+    { value: 'system-map', label: 'System Map', summary: 'Cleanest overview', glyph: 'SM' },
+    { value: 'event-flow', label: 'Event Flow', summary: 'Producer to consumer', glyph: 'EF' },
+    { value: 'domain-lanes', label: 'Domain Lanes', summary: 'Boundaries first', glyph: 'DL' },
+    { value: 'workbench', label: 'Workbench', summary: 'Manual placement', glyph: 'WB' },
   ];
-  const railKinds = ['search', 'presets', 'owners', 'domains', 'nodeTypes', 'layout'] as const;
+
+  const densityOptions: Array<{
+    value: DensityMode;
+    label: string;
+    summary: string;
+    glyph: string;
+  }> = [
+    { value: 'overview', label: 'Overview', summary: 'Low noise', glyph: 'OV' },
+    { value: 'standard', label: 'Standard', summary: 'Balanced detail', glyph: 'ST' },
+    { value: 'detailed', label: 'Detailed', summary: 'All labels', glyph: 'DT' },
+  ];
+
+  const railKinds = ['search', 'owners', 'domains', 'nodeTypes'] as const;
 
   let model = $state.raw<GraphModel>(emptyModel);
+  let presentedGraph = $state.raw<PresentedGraph>(emptyGraph);
   let flowNodes = $state.raw<Node[]>([]);
   let flowEdges = $state.raw<Edge[]>([]);
   let loading = $state(true);
@@ -104,36 +135,51 @@
   let sourceLabel = $state('api');
   let activePopover = $state<PopoverKind>(null);
   let nodePopup = $state<NodePopup>(null);
-  let layoutMode = $state<LayoutMode>('freeform');
-  let activePreset = $state<FilterPreset | null>(null);
+  let viewMode = $state<ViewMode>(viewModeFromLayout(emptyModel.ui.defaultLayout));
+  let densityMode = $state<DensityMode>('standard');
+  let modeMenuOpen = $state(false);
+  let densityMenuOpen = $state(false);
+  let hoveredNodeId = $state<string | null>(null);
+  let hoveredEdgeId = $state<string | null>(null);
   let toolbarElement = $state<HTMLElement | null>(null);
   let toolbarSize = $state.raw({ width: 420, height: 52 });
   let manualPositions = $state.raw<ManualPositions>({});
   let lastStorageKey = '';
   let refreshVersion = 0;
+  let refocusVersion = $state(0);
+  let fitViewRequest = $state(0);
   let filters = $state.raw<Filters>({
     query: '',
     nodeTypes: [],
     domains: [],
     owners: [],
-    relationTypes: [],
   });
 
   const popupNode = $derived(findNode(model, nodePopup?.nodeId ?? null));
-  const visible = $derived(visibleStats(model, filters));
+  const activeViewOption = $derived(
+    viewModeOptions.find((option) => option.value === viewMode) ?? viewModeOptions[0],
+  );
+  const activeDensityOption = $derived(
+    densityOptions.find((option) => option.value === densityMode) ?? densityOptions[1],
+  );
+  const visible = $derived({
+    nodes: presentedGraph.nodes.length,
+    edges: presentedGraph.edges.length,
+  });
   const summary = $derived(severitySummary(model.diagnostics));
   const activeFilterBadges = $derived(buildActiveFilterBadges(model, filters));
   const graphFingerprintKey = $derived(graphFingerprint(model));
   const projectIdentity = $derived(model.projectId || sourceLabel || 'default');
-  const storageKey = $derived(`${STORAGE_PREFIX}:${projectIdentity}:${graphFingerprintKey}:${layoutMode}`);
+  const storageKey = $derived(
+    viewMode === 'workbench' ? `${STORAGE_PREFIX}:${projectIdentity}:${graphFingerprintKey}:workbench` : '',
+  );
   const paletteStyle = $derived(buildPaletteStyle(model));
-  const visibleTypeCounts = $derived(countBy(visibleNodesForFilters(model, filters), (node) => node.type));
-  const visibleOwnerCounts = $derived(countBy(visibleNodesForFilters(model, filters), (node) => node.owner));
-  const visibleDomainCounts = $derived(countBy(visibleNodesForFilters(model, filters), (node) => node.domain));
-  const relationCounts = $derived(countRelationTypes(model, filters));
+  const visibleTypeCounts = $derived(countBy(presentedGraph.nodes, (node) => node.type));
+  const visibleOwnerCounts = $derived(countBy(presentedGraph.nodes, (node) => node.owner));
+  const visibleDomainCounts = $derived(countBy(presentedGraph.nodes, (node) => node.domain));
+  const searchSuggestions = $derived(buildSearchSuggestions(model, filters.query));
   const filterCounts = $derived({
     query: filters.query ? 1 : 0,
-    presets: (activePreset ? 1 : 0) + filters.relationTypes.length,
     owners: filters.owners.length,
     domains: filters.domains.length,
     nodeTypes: filters.nodeTypes.length,
@@ -144,8 +190,12 @@
   });
 
   $effect(() => {
-    const nodeIDs = model.nodes.map((node) => node.id);
+    const nodeIDs = presentedGraph.nodes.map((node) => node.id);
     if (!storageKey) {
+      lastStorageKey = '';
+      if (Object.keys(manualPositions).length > 0) {
+        manualPositions = {};
+      }
       return;
     }
 
@@ -163,20 +213,28 @@
   });
 
   $effect(() => {
-    const currentModel = model;
-    const currentFilters = filters;
-    const currentSelectedNodeID = nodePopup?.nodeId ?? null;
-    const currentLayoutMode = layoutMode;
-    const currentManualPositions = manualPositions;
-    const currentReservedInsets = reservedCanvasInsets;
+    const selectedNodeId = nodePopup?.nodeId ?? null;
     void refreshFlowGraph(
-      currentModel,
-      currentFilters,
-      currentSelectedNodeID,
-      currentLayoutMode,
-      currentManualPositions,
-      currentReservedInsets,
+      model,
+      filters,
+      selectedNodeId,
+      hoveredNodeId,
+      hoveredEdgeId,
+      viewMode,
+      densityMode,
+      manualPositions,
+      reservedCanvasInsets,
     );
+  });
+
+  $effect(() => {
+    const currentRefocusVersion = refocusVersion;
+    if (currentRefocusVersion === 0 || flowNodes.length === 0) {
+      return;
+    }
+
+    fitViewRequest = currentRefocusVersion;
+    refocusVersion = 0;
   });
 
   async function boot(): Promise<void> {
@@ -187,10 +245,12 @@
       const injected = (window as WindowWithPayload).__MAPTURE_DATA__;
       if (injected) {
         model = normalizeGraph(injected);
+        viewMode = viewModeFromLayout(model.ui.defaultLayout);
         sourceLabel = injected.meta.sourceLabel;
       } else {
         const payload = await loadGraphFromApi();
         model = normalizeGraph(payload);
+        viewMode = viewModeFromLayout(model.ui.defaultLayout);
         sourceLabel = payload.meta.sourceLabel;
         bindLiveReload();
       }
@@ -256,44 +316,57 @@
       nodeTypes: [],
       domains: [],
       owners: [],
-      relationTypes: [],
     };
-    activePreset = null;
     activePopover = null;
     nodePopup = null;
+    modeMenuOpen = false;
+    densityMenuOpen = false;
   }
 
   async function refreshFlowGraph(
     currentModel: GraphModel,
     currentFilters: Filters,
-    selectedNodeID: string | null,
-    currentLayoutMode: LayoutMode,
+    selectedNodeId: string | null,
+    currentHoveredNodeId: string | null,
+    currentHoveredEdgeId: string | null,
+    currentViewMode: ViewMode,
+    currentDensityMode: DensityMode,
     currentManualPositions: ManualPositions,
     currentReservedInsets: { top: number; left: number },
   ): Promise<void> {
     const revision = ++refreshVersion;
-    const nextEdges = toSvelteFlowEdges(currentModel, currentFilters);
-    const nextNodes = await toSvelteFlowNodes(
-      currentModel,
-      currentFilters,
-      selectedNodeID,
-      currentLayoutMode,
-      currentManualPositions,
-      currentReservedInsets,
-    );
+    const presentation = await buildFlowPresentation(currentModel, currentFilters, {
+      viewMode: currentViewMode,
+      densityMode: currentDensityMode,
+      focus: {
+        selectedNodeId,
+        hoveredNodeId: currentHoveredNodeId,
+        hoveredEdgeId: currentHoveredEdgeId,
+      },
+      manualPositions: currentManualPositions,
+      reservedInsets: currentReservedInsets,
+    });
 
     if (revision !== refreshVersion) {
       return;
     }
 
-    flowEdges = nextEdges;
-    flowNodes = nextNodes;
-    if (nodePopup && !matchesFilters(nodePopup.nodeId)) {
+    presentedGraph = presentation.graph;
+    flowNodes = presentation.flowNodes;
+    flowEdges = presentation.flowEdges;
+
+    if (nodePopup && !presentation.graph.nodes.some((node) => node.id === nodePopup.nodeId)) {
       nodePopup = null;
+    }
+    if (hoveredNodeId && !presentation.graph.nodes.some((node) => node.id === hoveredNodeId)) {
+      hoveredNodeId = null;
+    }
+    if (hoveredEdgeId && !presentation.graph.edges.some((edge) => edge.id === hoveredEdgeId)) {
+      hoveredEdgeId = null;
     }
   }
 
-  function clearFilter(kind: 'owners' | 'domains' | 'nodeTypes' | 'relationTypes'): void {
+  function clearFilter(kind: 'owners' | 'domains' | 'nodeTypes'): void {
     filters = {
       ...filters,
       [kind]: [],
@@ -303,9 +376,25 @@
   function togglePopover(kind: PopoverKind): void {
     activePopover = activePopover === kind ? null : kind;
     nodePopup = null;
+    modeMenuOpen = false;
+    densityMenuOpen = false;
   }
 
-  function toggleFilter(kind: 'owners' | 'domains' | 'nodeTypes' | 'relationTypes', value: string): void {
+  function toggleModeMenu(): void {
+    modeMenuOpen = !modeMenuOpen;
+    densityMenuOpen = false;
+    activePopover = null;
+    nodePopup = null;
+  }
+
+  function toggleDensityMenu(): void {
+    densityMenuOpen = !densityMenuOpen;
+    modeMenuOpen = false;
+    activePopover = null;
+    nodePopup = null;
+  }
+
+  function toggleFilter(kind: 'owners' | 'domains' | 'nodeTypes', value: string): void {
     const next = new Set(filters[kind]);
     if (next.has(value)) {
       next.delete(value);
@@ -318,28 +407,7 @@
     };
   }
 
-  function setPreset(preset: FilterPreset | null): void {
-    activePreset = preset;
-    filters = applyPreset(model, preset, {
-      ...filters,
-      nodeTypes: [],
-      relationTypes: [],
-    });
-    nodePopup = null;
-    activePopover = null;
-  }
-
   function removeBadge(badge: ActiveFilterBadge): void {
-    if (badge.kind === 'preset') {
-      activePreset = null;
-      filters = {
-        ...applyPreset(model, null, filters),
-        nodeTypes: [],
-        relationTypes: [],
-      };
-      return;
-    }
-
     if (badge.kind === 'query') {
       filters = {
         ...filters,
@@ -364,35 +432,60 @@
       return;
     }
 
-    if (badge.kind === 'relationTypes') {
-      filters = {
-        ...filters,
-        relationTypes: filters.relationTypes.filter((relationType) => relationType !== badge.value),
-      };
-      return;
-    }
-
     filters = {
       ...filters,
       nodeTypes: filters.nodeTypes.filter((nodeType) => nodeType !== badge.value),
     };
   }
 
-  function setLayoutMode(mode: LayoutMode): void {
-    layoutMode = mode;
+  function setViewMode(mode: ViewMode): void {
+    if (viewMode === mode) {
+      modeMenuOpen = false;
+      return;
+    }
+
+    viewMode = mode;
+    hoveredNodeId = null;
+    hoveredEdgeId = null;
     nodePopup = null;
     activePopover = null;
+    modeMenuOpen = false;
+    densityMenuOpen = false;
+    refocusVersion += 1;
+  }
+
+  function setDensityMode(mode: DensityMode): void {
+    if (densityMode === mode) {
+      densityMenuOpen = false;
+      return;
+    }
+
+    densityMode = mode;
+    densityMenuOpen = false;
+  }
+
+  function refitCanvas(): void {
+    refocusVersion += 1;
+    modeMenuOpen = false;
+    densityMenuOpen = false;
   }
 
   function resetLayout(): void {
     manualPositions = {};
-    clearLayoutState(storageKey);
+    if (storageKey) {
+      clearLayoutState(storageKey);
+    }
     nodePopup = null;
     activePopover = null;
+    modeMenuOpen = false;
+    densityMenuOpen = false;
+    refocusVersion += 1;
   }
 
   function handleNodeClick({ node, event }: { node: Node; event: MouseEvent | TouchEvent }): void {
     activePopover = null;
+    modeMenuOpen = false;
+    densityMenuOpen = false;
 
     let x = 220;
     let y = 160;
@@ -411,7 +504,31 @@
     };
   }
 
+  function handleNodePointerEnter({ node }: { node: Node }): void {
+    hoveredNodeId = node.id;
+  }
+
+  function handleNodePointerLeave({ node }: { node: Node }): void {
+    if (hoveredNodeId === node.id) {
+      hoveredNodeId = null;
+    }
+  }
+
+  function handleEdgePointerEnter({ edge }: { edge: Edge }): void {
+    hoveredEdgeId = edge.id;
+  }
+
+  function handleEdgePointerLeave({ edge }: { edge: Edge }): void {
+    if (hoveredEdgeId === edge.id) {
+      hoveredEdgeId = null;
+    }
+  }
+
   function handleNodeDragStop({ nodes }: { nodes: Node[] }): void {
+    if (viewMode !== 'workbench') {
+      return;
+    }
+
     const draggedPositions = new Map(nodes.map((node) => [node.id, node.position]));
     const nextManualPositions = {
       ...manualPositions,
@@ -429,7 +546,7 @@
       const position = draggedPositions.get(node.id);
       return position ? { ...node, position } : node;
     });
-    const resolved = resolvePositions(merged, layoutMode, {
+    const resolved = resolvePositions(merged, viewMode, {
       lockedNodeIds: new Set(Object.keys(nextManualPositions)),
       priorityNodeIds: new Set(nodes.map((node) => node.id)),
       reservedInsets: reservedCanvasInsets,
@@ -456,31 +573,17 @@
 
     flowNodes = nextFlowNodes;
     manualPositions = next;
-    persistLayoutState(storageKey, next);
+    if (storageKey) {
+      persistLayoutState(storageKey, next);
+    }
     nodePopup = null;
   }
 
   function closeTransientUI(): void {
     activePopover = null;
     nodePopup = null;
-  }
-
-  function matchesFilters(nodeID: string): boolean {
-    const node = model.nodes.find((candidate) => candidate.id === nodeID);
-    if (!node) {
-      return false;
-    }
-
-    return (
-      (filters.nodeTypes.length === 0 || filters.nodeTypes.includes(node.type)) &&
-      (filters.domains.length === 0 || filters.domains.includes(node.domain)) &&
-      (filters.owners.length === 0 || filters.owners.includes(node.owner)) &&
-      (!filters.query ||
-        [node.id, node.name, node.domain, node.owner, node.file, node.summary]
-          .join(' ')
-          .toLowerCase()
-          .includes(filters.query.toLowerCase()))
-    );
+    modeMenuOpen = false;
+    densityMenuOpen = false;
   }
 
   function countBy<T>(items: T[], pick: (item: T) => string): Record<string, number> {
@@ -496,22 +599,11 @@
 
   function buildActiveFilterBadges(currentModel: GraphModel, currentFilters: Filters): ActiveFilterBadge[] {
     const badges: ActiveFilterBadge[] = [];
-    if (activePreset) {
-      badges.push({
-        kind: 'preset',
-        value: activePreset,
-        label: presetLabel(activePreset),
-        category: 'flow',
-        icon: iconForKind('preset', activePreset),
-        tone: accentForKind(currentModel, 'preset', activePreset),
-      });
-    }
     if (currentFilters.query) {
       badges.push({
         kind: 'query',
         value: currentFilters.query,
         label: `Search: ${currentFilters.query}`,
-        category: 'search',
         icon: iconForKind('query'),
         tone: accentForKind(currentModel, 'query'),
       });
@@ -521,7 +613,6 @@
         kind: 'owners',
         value: owner,
         label: teamName(currentModel, owner),
-        category: 'team',
         icon: iconForKind('owners'),
         tone: accentForKind(currentModel, 'owners'),
       });
@@ -531,7 +622,6 @@
         kind: 'domains',
         value: domain,
         label: domainName(currentModel, domain),
-        category: 'domain',
         icon: iconForKind('domains'),
         tone: accentForKind(currentModel, 'domains'),
       });
@@ -541,45 +631,19 @@
         kind: 'nodeTypes',
         value: nodeType,
         label: capitalize(nodeType),
-        category: 'type',
         icon: iconForKind('nodeTypes', nodeType),
         tone: accentForKind(currentModel, 'nodeTypes', nodeType),
-      });
-    }
-    for (const relationType of currentFilters.relationTypes) {
-      badges.push({
-        kind: 'relationTypes',
-        value: relationType,
-        label: edgeLabel(relationType),
-        category: 'relation',
-        icon: iconForKind('relationTypes', relationType),
-        tone: accentForKind(currentModel, 'relationTypes', relationType),
       });
     }
     return badges;
   }
 
-  function presetLabel(preset: FilterPreset): string {
-    if (preset === 'service-map') {
-      return 'Service map';
-    }
-    if (preset === 'event-map') {
-      return 'Event map';
-    }
-    if (preset === 'producer-consumer') {
-      return 'Producer to consumer flow';
-    }
-    return 'APIs and dependencies';
-  }
-
   function railButtonLabel(kind: Exclude<PopoverKind, null>): string {
     const labels: Record<Exclude<PopoverKind, null>, string> = {
       search: 'Search',
-      presets: 'Flows',
       owners: 'Teams',
       domains: 'Domains',
       nodeTypes: 'Types',
-      layout: 'Layout',
     };
     return labels[kind];
   }
@@ -591,28 +655,11 @@
     if (kind === 'query' || kind === 'search') {
       return 'Q';
     }
-    if (kind === 'preset' || kind === 'presets') {
-      return 'F';
-    }
     if (kind === 'owners') {
       return 'T';
     }
     if (kind === 'domains') {
       return 'D';
-    }
-    if (kind === 'layout') {
-      return 'L';
-    }
-    if (kind === 'relationTypes') {
-      const relationIcons: Record<string, string> = {
-        calls: 'C',
-        depends_on: 'DP',
-        stores_in: 'DB',
-        reads_from: 'RD',
-        emits: 'EM',
-        consumes: 'CN',
-      };
-      return relationIcons[value ?? ''] ?? 'R';
     }
     const nodeTypeIcons: Record<string, string> = {
       service: 'S',
@@ -628,7 +675,7 @@
     kind: ActiveFilterBadge['kind'] | Exclude<PopoverKind, null>,
     value?: string,
   ): string {
-    if (kind === 'query' || kind === 'search' || kind === 'layout') {
+    if (kind === 'query' || kind === 'search') {
       return '#667076';
     }
     if (kind === 'owners') {
@@ -636,18 +683,6 @@
     }
     if (kind === 'domains') {
       return '#1664d9';
-    }
-    if (kind === 'preset' || kind === 'presets') {
-      const presetAccents: Record<string, string> = {
-        'service-map': currentModel.ui.nodeColors.service,
-        'event-map': currentModel.ui.nodeColors.event,
-        'producer-consumer': edgeColor('consumes'),
-        'api-dependencies': currentModel.ui.nodeColors.api,
-      };
-      return presetAccents[value ?? ''] ?? '#8a5b14';
-    }
-    if (kind === 'relationTypes') {
-      return edgeColor(value ?? '');
     }
     return nodeColor(currentModel, value ?? 'service');
   }
@@ -665,17 +700,6 @@
       return value;
     }
     return `${value[0].toUpperCase()}${value.slice(1)}`;
-  }
-
-  function countRelationTypes(currentModel: GraphModel, currentFilters: Filters): Record<string, number> {
-    const visibleNodes = new Set(visibleNodesForFilters(currentModel, { ...currentFilters, relationTypes: [] }).map((node) => node.id));
-    return currentModel.edges.reduce<Record<string, number>>((result, edge) => {
-      if (!visibleNodes.has(edge.from) || !visibleNodes.has(edge.to)) {
-        return result;
-      }
-      result[edge.type] = (result[edge.type] ?? 0) + 1;
-      return result;
-    }, {});
   }
 
   function buildPaletteStyle(currentModel: GraphModel): string {
@@ -789,6 +813,38 @@
     return `left:${left}px;top:${top}px;`;
   }
 
+  function applySearchSuggestion(value: string): void {
+    filters = {
+      ...filters,
+      query: value,
+    };
+  }
+
+  function buildSearchSuggestions(currentModel: GraphModel, query: string): string[] {
+    const values = new Set<string>();
+    for (const node of currentModel.nodes) {
+      values.add(node.id);
+      values.add(node.name);
+      if (node.domain) {
+        values.add(node.domain);
+        values.add(domainName(currentModel, node.domain));
+      }
+    }
+
+    const normalizedQuery = query.trim().toLowerCase();
+    const suggestions = Array.from(values)
+      .filter(Boolean)
+      .sort((left, right) => left.localeCompare(right));
+
+    if (!normalizedQuery) {
+      return suggestions.slice(0, 10);
+    }
+
+    return suggestions
+      .filter((value) => value.toLowerCase().includes(normalizedQuery))
+      .slice(0, 8);
+  }
+
   onMount(() => {
     void boot();
 
@@ -796,6 +852,8 @@
       if (event.key === 'Escape') {
         activePopover = null;
         nodePopup = null;
+        modeMenuOpen = false;
+        densityMenuOpen = false;
       }
     }
 
@@ -808,13 +866,16 @@
       if (
         target.closest('[data-interactive-root]') ||
         target.closest('[data-node-popup]') ||
-        target.closest('.svelte-flow__node')
+        target.closest('.svelte-flow__node') ||
+        target.closest('.svelte-flow__edge')
       ) {
         return;
       }
 
       activePopover = null;
       nodePopup = null;
+      modeMenuOpen = false;
+      densityMenuOpen = false;
     }
 
     window.addEventListener('keydown', handleEscape);
@@ -874,18 +935,24 @@
       edges={flowEdges}
       {nodeTypes}
       fitView
-      fitViewOptions={{ padding: 0.08 }}
+      fitViewOptions={{ padding: FIT_VIEW_PADDING }}
       minZoom={0.18}
       maxZoom={2.2}
-      nodesDraggable
+      nodesDraggable={viewMode === 'workbench'}
       nodesConnectable={false}
       elementsSelectable
       onnodeclick={handleNodeClick}
+      onnodepointerenter={handleNodePointerEnter}
+      onnodepointerleave={handleNodePointerLeave}
+      onedgepointerenter={handleEdgePointerEnter}
+      onedgepointerleave={handleEdgePointerLeave}
       onnodedragstop={handleNodeDragStop}
       onpaneclick={closeTransientUI}
       attributionPosition="bottom-left"
       class="immersive-flow"
     >
+      <FlowViewportController request={fitViewRequest} padding={FIT_VIEW_PADDING} maxZoom={1.35} />
+      <DomainLanesBackdrop lanes={presentedGraph.lanes} />
       <Background color="rgba(24, 34, 40, 0.07)" gap={26} />
       <MiniMap position="bottom-left" pannable zoomable />
       <Controls position="bottom-right" />
@@ -902,7 +969,6 @@
                   activePopover === kind ? 'active' : '',
                   (
                     (kind === 'search' && filterCounts.query > 0) ||
-                    (kind === 'presets' && filterCounts.presets > 0) ||
                     (kind === 'owners' && filterCounts.owners > 0) ||
                     (kind === 'domains' && filterCounts.domains > 0) ||
                     (kind === 'nodeTypes' && filterCounts.nodeTypes > 0)
@@ -915,8 +981,6 @@
                 <span>{railButtonLabel(kind)}</span>
                 {#if kind === 'search' && filterCounts.query > 0}
                   <small class="pill-count">{filterCounts.query}</small>
-                {:else if kind === 'presets' && filterCounts.presets > 0}
-                  <small class="pill-count">{filterCounts.presets}</small>
                 {:else if kind === 'owners' && filterCounts.owners > 0}
                   <small class="pill-count">{filterCounts.owners}</small>
                 {:else if kind === 'domains' && filterCounts.domains > 0}
@@ -930,54 +994,29 @@
 
           {#if activePopover === 'search'}
             <div class="toolbar-popover search-popover" data-interactive-root>
-              <input bind:value={filters.query} type="search" placeholder="Search id, name, domain, owner, file" />
-              <button type="button" class="mini-action" onclick={() => (filters = { ...filters, query: '' })}>Clear</button>
-              <button type="button" class="mini-action" onclick={resetFilters}>Reset filters</button>
-            </div>
-          {/if}
-
-          {#if activePopover === 'presets'}
-            <div class="toolbar-popover toolbar-popover--wide" data-interactive-root>
-              <div class="popover-head">
-                <strong>Common flows</strong>
-                <button type="button" class="mini-action" onclick={() => setPreset(null)}>Clear</button>
-              </div>
-              <div class="chip-list">
-                {#each presetOptions as preset}
-                  <button
-                    type="button"
-                    class={['filter-chip', 'filter-chip--preset', activePreset === preset.id ? 'active' : ''].join(' ')}
-                    style={chipStyle(model, 'preset', preset.id)}
-                    onclick={() => setPreset(preset.id)}
-                  >
-                    <span class="chip-icon" aria-hidden="true">{iconForKind('preset', preset.id)}</span>
-                    <span class="chip-kicker">flow</span>
-                    <span>{preset.label}</span>
-                  </button>
+              <input
+                bind:value={filters.query}
+                type="search"
+                list="mapture-search-suggestions"
+                autocomplete="off"
+                placeholder="Search id, name, or domain"
+              />
+              <datalist id="mapture-search-suggestions">
+                {#each searchSuggestions as suggestion}
+                  <option value={suggestion}></option>
                 {/each}
-              </div>
-
-              <div class="popover-section">
-                <div class="popover-head">
-                  <strong>Relations</strong>
-                  <button type="button" class="mini-action" onclick={() => clearFilter('relationTypes')}>Reset</button>
-                </div>
-                <div class="chip-list">
-                  {#each model.edgeTypes as relationType}
-                    <button
-                      type="button"
-                      class={['filter-chip', 'filter-chip--relation', filters.relationTypes.includes(relationType) ? 'active' : ''].join(' ')}
-                      style={chipStyle(model, 'relationTypes', relationType)}
-                      onclick={() => toggleFilter('relationTypes', relationType)}
-                    >
-                      <span class="chip-icon" aria-hidden="true">{iconForKind('relationTypes', relationType)}</span>
-                      <span class="chip-kicker">relation</span>
-                      <span>{edgeLabel(relationType)}</span>
-                      <small>{relationCounts[relationType] ?? 0}</small>
+              </datalist>
+              {#if searchSuggestions.length > 0}
+                <div class="suggestion-strip">
+                  {#each searchSuggestions as suggestion}
+                    <button type="button" class="suggestion-chip" onclick={() => applySearchSuggestion(suggestion)}>
+                      {suggestion}
                     </button>
                   {/each}
                 </div>
-              </div>
+              {/if}
+              <button type="button" class="mini-action" onclick={() => (filters = { ...filters, query: '' })}>Clear</button>
+              <button type="button" class="mini-action" onclick={resetFilters}>Reset filters</button>
             </div>
           {/if}
 
@@ -996,8 +1035,7 @@
                     onclick={() => toggleFilter('owners', owner)}
                   >
                     <span class="chip-icon" aria-hidden="true">{iconForKind('owners')}</span>
-                    <span class="chip-kicker">team</span>
-                    <span>{teamName(model, owner)}</span>
+                    <span class="chip-label">{teamName(model, owner)}</span>
                     <small>{visibleOwnerCounts[owner] ?? 0}</small>
                   </button>
                 {/each}
@@ -1020,8 +1058,7 @@
                     onclick={() => toggleFilter('domains', domain)}
                   >
                     <span class="chip-icon" aria-hidden="true">{iconForKind('domains')}</span>
-                    <span class="chip-kicker">domain</span>
-                    <span>{domainName(model, domain)}</span>
+                    <span class="chip-label">{domainName(model, domain)}</span>
                     <small>{visibleDomainCounts[domain] ?? 0}</small>
                   </button>
                 {/each}
@@ -1044,52 +1081,10 @@
                     onclick={() => toggleFilter('nodeTypes', nodeType)}
                   >
                     <span class="chip-icon" aria-hidden="true">{iconForKind('nodeTypes', nodeType)}</span>
-                    <span class="chip-kicker">type</span>
-                    <span>{capitalize(nodeType)}</span>
+                    <span class="chip-label">{capitalize(nodeType)}</span>
                     <small>{visibleTypeCounts[nodeType] ?? 0}</small>
                   </button>
                 {/each}
-              </div>
-            </div>
-          {/if}
-
-          {#if activePopover === 'layout'}
-            <div class="toolbar-popover" data-interactive-root>
-              <div class="popover-head">
-                <strong>Layout</strong>
-                <button type="button" class="mini-action" onclick={resetLayout}>Reset layout</button>
-              </div>
-              <div class="chip-list">
-                <button
-                  type="button"
-                  class={['filter-chip', 'filter-chip--layout', layoutMode === 'freeform' ? 'active' : ''].join(' ')}
-                  style={chipStyle(model, 'layout')}
-                  onclick={() => setLayoutMode('freeform')}
-                >
-                  <span class="chip-icon" aria-hidden="true">{iconForKind('layout')}</span>
-                  <span class="chip-kicker">layout</span>
-                  <span>Freeform</span>
-                </button>
-                <button
-                  type="button"
-                  class={['filter-chip', 'filter-chip--layout', layoutMode === 'clustered' ? 'active' : ''].join(' ')}
-                  style={chipStyle(model, 'layout')}
-                  onclick={() => setLayoutMode('clustered')}
-                >
-                  <span class="chip-icon" aria-hidden="true">{iconForKind('layout')}</span>
-                  <span class="chip-kicker">layout</span>
-                  <span>Clustered</span>
-                </button>
-                <button
-                  type="button"
-                  class={['filter-chip', 'filter-chip--layout', layoutMode === 'elk-horizontal' ? 'active' : ''].join(' ')}
-                  style={chipStyle(model, 'layout')}
-                  onclick={() => setLayoutMode('elk-horizontal')}
-                >
-                  <span class="chip-icon" aria-hidden="true">{iconForKind('layout')}</span>
-                  <span class="chip-kicker">layout</span>
-                  <span>ELK Horizontal</span>
-                </button>
               </div>
             </div>
           {/if}
@@ -1105,7 +1100,6 @@
                 >
                   <span class="active-badge__meta">
                     <span class="chip-icon" aria-hidden="true">{badge.icon}</span>
-                    <span class="chip-kicker">{badge.category}</span>
                   </span>
                   <span class="active-badge__label">{badge.label}</span>
                   <small aria-hidden="true">x</small>
@@ -1114,6 +1108,89 @@
               <button type="button" class="active-reset" onclick={resetFilters}>Reset filters</button>
             </div>
           {/if}
+        </div>
+      </Panel>
+
+      <Panel position="top-right" class="canvas-control-shell">
+        <div class="control-stack" data-interactive-root>
+          <div class="control-picker">
+            <button
+              type="button"
+              class={['control-trigger', modeMenuOpen ? 'active' : ''].join(' ')}
+              onclick={toggleModeMenu}
+            >
+              <span class="control-trigger__icon" aria-hidden="true">{activeViewOption.glyph}</span>
+              <span class="control-trigger__copy">
+                <strong>{activeViewOption.label}</strong>
+                <small>{activeViewOption.summary}</small>
+              </span>
+              <span class="control-trigger__caret" aria-hidden="true">{modeMenuOpen ? 'x' : 'v'}</span>
+            </button>
+
+            {#if modeMenuOpen}
+              <div class="control-menu">
+                <div class="control-menu__head">
+                  <strong>View</strong>
+                  <button
+                    type="button"
+                    class="mini-action"
+                    onclick={viewMode === 'workbench' ? resetLayout : refitCanvas}
+                  >
+                    {viewMode === 'workbench' ? 'Reset' : 'Refit'}
+                  </button>
+                </div>
+                {#each viewModeOptions as option}
+                  <button
+                    type="button"
+                    class={['control-option', viewMode === option.value ? 'active' : ''].join(' ')}
+                    onclick={() => setViewMode(option.value)}
+                  >
+                    <span class="control-option__icon" aria-hidden="true">{option.glyph}</span>
+                    <span class="control-option__copy">
+                      <strong>{option.label}</strong>
+                      <small>{option.summary}</small>
+                    </span>
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </div>
+
+          <div class="control-picker control-picker--density">
+            <button
+              type="button"
+              class={['control-trigger', 'control-trigger--density', densityMenuOpen ? 'active' : ''].join(' ')}
+              onclick={toggleDensityMenu}
+            >
+              <span class="control-trigger__icon" aria-hidden="true">{activeDensityOption.glyph}</span>
+              <span class="control-trigger__copy">
+                <strong>{activeDensityOption.label}</strong>
+                <small>{activeDensityOption.summary}</small>
+              </span>
+              <span class="control-trigger__caret" aria-hidden="true">{densityMenuOpen ? 'x' : 'v'}</span>
+            </button>
+
+            {#if densityMenuOpen}
+              <div class="control-menu control-menu--density">
+                <div class="control-menu__head">
+                  <strong>Density</strong>
+                </div>
+                {#each densityOptions as option}
+                  <button
+                    type="button"
+                    class={['control-option', densityMode === option.value ? 'active' : ''].join(' ')}
+                    onclick={() => setDensityMode(option.value)}
+                  >
+                    <span class="control-option__icon" aria-hidden="true">{option.glyph}</span>
+                    <span class="control-option__copy">
+                      <strong>{option.label}</strong>
+                      <small>{option.summary}</small>
+                    </span>
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </div>
         </div>
       </Panel>
 

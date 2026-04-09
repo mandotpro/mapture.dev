@@ -15,7 +15,13 @@
 
 <Handle type="target" position={targetPosition} />
 <article
-  class={['mapture-node', `mapture-node--${data.type}`, selected ? 'selected' : ''].join(' ')}
+  class={[
+    'mapture-node',
+    `mapture-node--${data.type}`,
+    `mapture-node--tone-${data.tone ?? 'primary'}`,
+    `mapture-node--mode-${data.viewMode ?? 'system-map'}`,
+    selected ? 'selected' : '',
+  ].join(' ')}
   style={`--node-color:${data.color};`}
 >
   <div class="mapture-node__shell">

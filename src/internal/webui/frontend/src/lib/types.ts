@@ -16,7 +16,15 @@ export interface BackendGraphEdge {
   type: string;
 }
 
+export interface BackendGraphMetadata {
+  generatedAt: string;
+  scannerVersion: string;
+  sourceRoot: string;
+}
+
 export interface BackendGraph {
+  schemaVersion: number;
+  metadata: BackendGraphMetadata;
   nodes?: BackendGraphNode[];
   edges?: BackendGraphEdge[];
 }
@@ -42,9 +50,9 @@ export interface CatalogDomain {
 }
 
 export interface CatalogEvent {
- id: string;
- name: string;
- domain: string;
+  id: string;
+  name: string;
+  domain: string;
   owner_team: string;
   status?: string;
   description?: string;
@@ -58,6 +66,7 @@ export interface UINodeColors {
 }
 
 export interface UIConfig {
+  defaultLayout?: LayoutMode;
   nodeColors?: UINodeColors;
 }
 
@@ -114,8 +123,11 @@ export interface GraphEdge {
 }
 
 export type LayoutMode = 'freeform' | 'clustered' | 'elk-horizontal';
-
-export type FilterPreset = 'service-map' | 'event-map' | 'producer-consumer' | 'api-dependencies';
+export type ViewMode = 'system-map' | 'event-flow' | 'domain-lanes' | 'workbench';
+export type DensityMode = 'overview' | 'standard' | 'detailed';
+export type NodeTone = 'primary' | 'secondary' | 'muted';
+export type EdgeTone = 'primary' | 'secondary' | 'muted';
+export type NodeStage = 'support' | 'producer' | 'event' | 'consumer';
 
 export interface GraphModel {
   nodes: GraphNode[];
@@ -128,7 +140,10 @@ export interface GraphModel {
   teams: Map<string, string>;
   domainNames: Map<string, string>;
   events: Map<string, CatalogEvent>;
-  ui: Required<UIConfig>;
+  ui: {
+    defaultLayout: LayoutMode;
+    nodeColors: Required<NonNullable<UIConfig['nodeColors']>>;
+  };
   projectId: string;
   sourceLabel: string;
   mode: 'live' | 'offline';
@@ -140,7 +155,54 @@ export interface Filters {
   nodeTypes: string[];
   domains: string[];
   owners: string[];
-  relationTypes: string[];
+}
+
+export interface PresenterFocus {
+  selectedNodeId: string | null;
+  hoveredNodeId: string | null;
+  hoveredEdgeId: string | null;
+}
+
+export interface PresentedNode extends GraphNode {
+  stage: NodeStage;
+  subtitle: string;
+  tone: NodeTone;
+}
+
+export interface PresentedEdge {
+  id: string;
+  from: string;
+  to: string;
+  type: string;
+  label: string;
+  tone: EdgeTone;
+  showLabel: boolean;
+  synthetic: boolean;
+  crossDomain: boolean;
+  secondary: boolean;
+}
+
+export interface LaneOverlay {
+  id: string;
+  label: string;
+  ownerLabel: string;
+  accent: string;
+  x: number;
+  width: number;
+  top: number;
+  height: number;
+}
+
+export interface PresentedGraph {
+  nodes: PresentedNode[];
+  edges: PresentedEdge[];
+  lanes: LaneOverlay[];
+}
+
+export interface FlowPresentation {
+  graph: PresentedGraph;
+  flowNodes: import('@xyflow/svelte').Node[];
+  flowEdges: import('@xyflow/svelte').Edge[];
 }
 
 export interface WindowWithPayload extends Window {
