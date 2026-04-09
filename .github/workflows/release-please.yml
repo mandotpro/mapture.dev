@@ -3,7 +3,7 @@ name: Release Please
 on:
   push:
     branches:
-      - main
+      - 0.x
   workflow_dispatch:
 
 permissions:
@@ -16,5 +16,6 @@ jobs:
     steps:
       - uses: googleapis/release-please-action@v4
         with:
+          target-branch: 0.x
           config-file: .github/release-please-config.json
           manifest-file: .github/.release-please-manifest.json
