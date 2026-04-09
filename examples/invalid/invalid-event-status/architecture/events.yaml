@@ -1,0 +1,8 @@
+events:
+  - id: order.placed
+    name: Order Placed
+    domain: orders
+    ownerTeam: team-commerce
+    kind: domain
+    visibility: internal
+    status: random

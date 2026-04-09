@@ -1,0 +1,23 @@
+# Binaries
+/mapture
+/testing
+/dist/
+/build/
+*.exe
+*.test
+*.out
+
+# Mapture-generated artifacts
+.mapture/
+
+# Local AI / tool settings (user-specific, not shared)
+.agents/
+.claude/
+.codex/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+src/internal/webui/frontend/node_modules/

@@ -1,0 +1,10 @@
+events:
+  - id: notification.sent
+    name: Notification Sent
+    domain: notifications
+    ownerTeam: team-commerce
+    kind: domain
+    visibility: internal
+    status: active
+    version: 1
+    description: Emitted after delivery accepts a notification.

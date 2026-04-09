@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "metadata": {
+    "generatedAt": "2026-01-02T03:04:05Z",
+    "scannerVersion": "dev",
+    "sourceRoot": "/repo/examples/demo"
+  },
+  "nodes": [
+    {
+      "id": "api:payment-api",
+      "type": "api",
+      "name": "Payment API",
+      "domain": "billing",
+      "owner": "team-billing",
+      "file": "src/ts/PaymentApiClient.ts",
+      "line": 1
+    },
+    {
+      "id": "database:orders-db",
+      "type": "database",
+      "name": "Orders Database",
+      "domain": "orders",
+      "owner": "team-commerce",
+      "file": "src/go/ordersdb/ordersdb.go",
+      "line": 1
+    },
+    {
+      "id": "event:order.placed",
+      "type": "event",
+      "name": "Order Placed",
+      "domain": "orders",
+      "owner": "team-commerce"
+    },
+    {
+      "id": "service:checkout-service",
+      "type": "service",
+      "name": "Checkout Service",
+      "domain": "orders",
+      "owner": "team-commerce",
+      "file": "src/php/CheckoutService.php",
+      "line": 3
+    }
+  ],
+  "edges": [
+    {
+      "from": "event:order.placed",
+      "to": "api:payment-api",
+      "type": "consumes"
+    },
+    {
+      "from": "service:checkout-service",
+      "to": "api:payment-api",
+      "type": "calls"
+    },
+    {
+      "from": "service:checkout-service",
+      "to": "database:orders-db",
+      "type": "stores_in"
+    },
+    {
+      "from": "service:checkout-service",
+      "to": "event:order.placed",
+      "type": "emits"
+    }
+  ]
+}

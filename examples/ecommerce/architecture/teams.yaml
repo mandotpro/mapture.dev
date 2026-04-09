@@ -1,0 +1,12 @@
+teams:
+  - id: team-commerce
+    name: Commerce Platform
+    email: commerce@example.com
+
+  - id: team-operations
+    name: Operations Platform
+    email: operations@example.com
+
+  - id: team-engagement
+    name: Customer Engagement
+    email: engagement@example.com

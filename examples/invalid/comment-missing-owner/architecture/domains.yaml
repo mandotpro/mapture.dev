@@ -1,0 +1,5 @@
+domains:
+  - id: orders
+    name: Orders
+    ownerTeams: [team-commerce]
+    description: Order lifecycle ownership.

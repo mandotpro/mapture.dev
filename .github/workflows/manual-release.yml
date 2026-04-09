@@ -1,0 +1,35 @@
+name: Manual Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump for the next stable tag
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+
+jobs:
+  tag-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - id: version
+        run: |
+          next_version="$(INITIAL_VERSION=v0.1.0 ./scripts/next-version.sh "${{ inputs.bump }}")"
+          echo "value=$next_version" >> "$GITHUB_OUTPUT"
+      - name: Create release tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.version.outputs.value }}" -m "Release ${{ steps.version.outputs.value }}"
+          git push origin "${{ steps.version.outputs.value }}"

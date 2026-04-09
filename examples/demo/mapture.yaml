@@ -1,0 +1,37 @@
+version: 1
+
+catalog:
+  dir: ./architecture
+
+scan:
+  include:
+    - ./src
+  exclude:
+    - ./vendor
+    - ./node_modules
+    - ./dist
+    - ./build
+
+languages:
+  php: true
+  go: true
+  typescript: true
+
+comments:
+  style: tags
+
+validation:
+  failOnUnknownDomain: true
+  failOnUnknownTeam: true
+  failOnUnknownEvent: true
+  requireMetadataOn:
+    - trigger
+    - listener
+
+ui:
+  defaultLayout: elk-horizontal
+  nodeColors:
+    service: "#2563eb"
+    api: "#0f766e"
+    database: "#b45309"
+    event: "#be185d"

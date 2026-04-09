@@ -1,0 +1,50 @@
+name: Bug report
+description: Report a reproducible defect in Mapture
+title: "fix: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please include enough detail for someone else to reproduce it locally.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened and what did you expect instead?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Stable tag, nightly build, or commit SHA
+      placeholder: v0.1.0 / nightly / 1a2b3c4
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command and context
+      description: Paste the exact command and any relevant config or fixture context
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Smallest set of steps to reproduce the problem
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Paste the error output or attach a screenshot if the issue is in the UI
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, architecture, shell, Go version if building from source, and any other useful details

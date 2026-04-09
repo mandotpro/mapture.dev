@@ -1,0 +1,47 @@
+version: 1
+
+# Multi-language monorepo fixture used to exercise Mapture across
+# PHP, Go, and TypeScript with a realistic commerce workflow.
+
+catalog:
+  dir: ./architecture
+
+scan:
+  include:
+    - ./src
+  exclude:
+    - ./vendor
+    - ./node_modules
+    - ./dist
+    - ./build
+
+languages:
+  php: true
+  go: true
+  typescript: true
+
+comments:
+  style: tags
+
+validation:
+  failOnUnknownDomain: true
+  failOnUnknownTeam: true
+  failOnUnknownEvent: true
+  failOnUnknownNode: true
+  warnOnOrphanedNodes: false
+  warnOnDeprecatedEvents: true
+  requireMetadataOn:
+    - trigger
+    - listener
+    - publisher
+    - subscriber
+    - bridge-out
+    - bridge-in
+
+ui:
+  defaultLayout: elk-horizontal
+  nodeColors:
+    service: "#1d4ed8"
+    api: "#0f766e"
+    database: "#b45309"
+    event: "#be185d"

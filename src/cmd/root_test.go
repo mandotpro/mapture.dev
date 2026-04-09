@@ -1,0 +1,291 @@
+package cmd
+
+import (
+	"bytes"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"syscall"
+	"testing"
+
+	"github.com/mandotpro/mapture.dev/src/internal/config"
+)
+
+func TestLoadProjectSuccess(t *testing.T) {
+	t.Parallel()
+
+	configPath, cfg, cat, err := loadProject("../../examples/demo")
+	if err != nil {
+		t.Fatalf("loadProject returned error: %v", err)
+	}
+	if !strings.HasSuffix(configPath, "examples/demo/mapture.yaml") {
+		t.Fatalf("unexpected config path: %s", configPath)
+	}
+	if cfg.Catalog.Dir != "./architecture" {
+		t.Fatalf("unexpected catalog dir: %s", cfg.Catalog.Dir)
+	}
+	if len(cat.Teams) != 2 || len(cat.Domains) != 2 || len(cat.Events) != 1 {
+		t.Fatalf("unexpected catalog sizes: teams=%d domains=%d events=%d", len(cat.Teams), len(cat.Domains), len(cat.Events))
+	}
+}
+
+func TestLoadProjectRejectsBrokenFixtures(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		path    string
+		wantErr string
+	}{
+		{name: "bad config role", path: "../../examples/invalid/bad-config-role", wantErr: "random"},
+		{name: "duplicate team", path: "../../examples/invalid/duplicate-team", wantErr: "duplicate team id"},
+		{name: "unknown domain owner", path: "../../examples/invalid/unknown-domain-owner", wantErr: "unknown team"},
+		{name: "invalid event status", path: "../../examples/invalid/invalid-event-status", wantErr: "random"},
+		{name: "missing teams file", path: "../../examples/invalid/missing-teams-file", wantErr: "read"},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, _, _, err := loadProject(tc.path)
+			if err == nil {
+				t.Fatalf("expected error for %s", tc.path)
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("expected %q in error, got %v", tc.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestValidateProjectRejectsValidationFixtures(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		path    string
+		wantErr string
+	}{
+		{name: "unknown comment domain", path: "../../examples/invalid/comment-unknown-domain-ref", wantErr: "unknown domain"},
+		{name: "event domain mismatch", path: "../../examples/invalid/comment-event-domain-mismatch", wantErr: "event_domain_mismatch"},
+		{name: "unknown node target", path: "../../examples/invalid/comment-unknown-node-target", wantErr: "unknown_node_target"},
+		{name: "missing owner", path: "../../examples/invalid/comment-missing-owner", wantErr: "arch.owner"},
+		{name: "bad event role", path: "../../examples/invalid/comment-bad-event-role", wantErr: "event.role"},
+		{name: "unknown key", path: "../../examples/invalid/comment-unknown-key", wantErr: "arch.foobar"},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			configPath, cfg, cat, err := loadProject(tc.path)
+			if err != nil {
+				t.Fatalf("loadProject returned error: %v", err)
+			}
+
+			_, _, err = validateProject(filepath.Dir(configPath), cfg, cat, nil)
+			if err == nil {
+				t.Fatalf("expected validateProject error for %s", tc.path)
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("expected %q in error, got %v", tc.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestValidateProjectSuccess(t *testing.T) {
+	t.Parallel()
+
+	configPath, _, cat, err := loadProject("../../examples/demo")
+	if err != nil {
+		t.Fatalf("loadProject returned error: %v", err)
+	}
+
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		t.Fatalf("config.Load returned error: %v", err)
+	}
+
+	blocks, result, err := validateProject("../../examples/demo", cfg, cat, nil)
+	if err != nil {
+		t.Fatalf("validateProject returned error: %v", err)
+	}
+	if len(blocks) == 0 {
+		t.Fatal("expected scanned blocks")
+	}
+	if len(result.Graph.Nodes) == 0 || len(result.Graph.Edges) == 0 {
+		t.Fatalf("expected non-empty graph, got %#v", result.Graph)
+	}
+}
+
+func TestValidateProjectScopedSuccessWithBoundaryNodes(t *testing.T) {
+	t.Parallel()
+
+	configPath, cfg, cat, err := loadProject("../../examples/ecommerce")
+	if err != nil {
+		t.Fatalf("loadProject returned error: %v", err)
+	}
+
+	_, result, err := validateProject(filepath.Dir(configPath), cfg, cat, []string{"./src/php/orders"})
+	if err != nil {
+		t.Fatalf("validateProject returned error: %v", err)
+	}
+
+	foundBoundary := false
+	for _, node := range result.Graph.Nodes {
+		if node.ID == "api:payment-api" && node.File == "" && strings.Contains(node.Summary, "out-of-scope") {
+			foundBoundary = true
+		}
+	}
+	if !foundBoundary {
+		t.Fatalf("expected scoped graph to synthesize api:payment-api boundary node, got %#v", result.Graph.Nodes)
+	}
+}
+
+func TestScanCommandRespectsScope(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+
+	cmd := newScanCmd()
+	cmd.SetOut(&stdout)
+	cmd.SetArgs([]string{"../../examples/ecommerce", "--scope", "./src/php/orders"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "src/php/orders/CheckoutService.php") {
+		t.Fatalf("expected scoped scan output to include php orders file, got %q", output)
+	}
+	if strings.Contains(output, "src/ts/shipping/ShippingService.ts") {
+		t.Fatalf("expected scoped scan output to exclude unrelated files, got %q", output)
+	}
+}
+
+func TestRunValidateOutputsRichSummary(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	err := runValidate("../../examples/demo", &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("runValidate returned error: %v", err)
+	}
+
+	output := stdout.String()
+	for _, want := range []string{
+		"Resolving project",
+		"Loading config",
+		"Loading catalogs",
+		"Scanning sources",
+		"Building graph",
+		"Validation Succeeded:",
+		"Validation complete",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("expected %q in output, got %q", want, output)
+		}
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+}
+
+func TestRunValidateOutputsDiagnosticsOnFailure(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	err := runValidate("../../examples/invalid/comment-unknown-node-target", &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected runValidate error")
+	}
+
+	errorOutput := stderr.String()
+	if errorOutput != "" {
+		t.Fatalf("expected empty stderr, got %q", errorOutput)
+	}
+	errorOutput = stdout.String()
+	for _, want := range []string{
+		"Errors",
+		"unknown_node_target",
+		"Validation Failed:",
+	} {
+		if !strings.Contains(errorOutput, want) {
+			t.Fatalf("expected %q in stderr, got %q", want, errorOutput)
+		}
+	}
+}
+
+func TestGraphCommandWritesMermaidToStdout(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	commandStdout = &stdout
+	t.Cleanup(func() { commandStdout = os.Stdout })
+
+	cmd := newGraphCmd()
+	cmd.SetArgs([]string{"../../examples/demo"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	output := stdout.String()
+	for _, want := range []string{"flowchart LR", "Checkout Service", "|calls|", "Order Placed"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("expected %q in output, got %q", want, output)
+		}
+	}
+}
+
+func TestGraphCommandWritesMermaidFile(t *testing.T) {
+	t.Parallel()
+
+	outputPath := filepath.Join(t.TempDir(), "ecommerce.mmd")
+
+	cmd := newGraphCmd()
+	cmd.SetArgs([]string{"../../examples/ecommerce", "-o", outputPath, "--domain", "billing"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("ReadFile returned error: %v", err)
+	}
+	output := string(data)
+	for _, want := range []string{"flowchart LR", "Billing", "Payment Service"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("expected %q in file output, got %q", want, output)
+		}
+	}
+}
+
+func TestReportServeErrorIncludesPortBusyHint(t *testing.T) {
+	t.Parallel()
+
+	var stderr bytes.Buffer
+	err := fmt.Errorf("listen %s: %w", "127.0.0.1:8765", syscall.EADDRINUSE)
+
+	reportServeError(&stderr, "127.0.0.1:8765", err)
+
+	output := stderr.String()
+	for _, want := range []string{
+		"mapture serve: listen 127.0.0.1:8765",
+		"already in use",
+		"Ctrl-Z",
+		"kill %<job>",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("expected %q in output, got %q", want, output)
+		}
+	}
+}

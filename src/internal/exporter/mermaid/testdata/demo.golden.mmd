@@ -1,0 +1,14 @@
+flowchart LR
+  subgraph Billing
+    n_api_payment_api([Payment API])
+  end
+  subgraph Orders
+    n_database_orders_db[(Orders Database)]
+    n_event_order_placed((Order Placed))
+    n_service_checkout_service[Checkout Service]
+  end
+
+  n_event_order_placed -->|consumed by| n_api_payment_api
+  n_service_checkout_service -->|calls| n_api_payment_api
+  n_service_checkout_service -->|stores in| n_database_orders_db
+  n_service_checkout_service -->|emits| n_event_order_placed

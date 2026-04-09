@@ -1,0 +1,8 @@
+domains:
+  - id: orders
+    name: Orders
+    ownerTeams: [team-commerce]
+
+  - id: billing
+    name: Billing
+    ownerTeams: [team-billing]

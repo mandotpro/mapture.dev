@@ -1,0 +1,41 @@
+version: 1
+
+# Lean strangler-fig fixture that keeps a legacy checkout path alive
+# while modern order ownership moves into a dedicated service.
+
+catalog:
+  dir: ./architecture
+
+scan:
+  include:
+    - ./src
+  exclude:
+    - ./vendor
+    - ./node_modules
+    - ./dist
+    - ./build
+
+languages:
+  php: true
+  go: true
+
+comments:
+  style: tags
+
+validation:
+  failOnUnknownDomain: true
+  failOnUnknownTeam: true
+  failOnUnknownEvent: true
+  failOnUnknownNode: true
+  warnOnOrphanedNodes: false
+  warnOnDeprecatedEvents: true
+  requireMetadataOn:
+    - trigger
+    - listener
+
+ui:
+  nodeColors:
+    service: "#1d4ed8"
+    api: "#0f766e"
+    database: "#b45309"
+    event: "#be185d"

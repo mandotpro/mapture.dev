@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/internal/webui/frontend/package-lock.json
+      - name: Install dev tools
+        run: ./scripts/test-go.sh --install-only
+      - name: Check formatting
+        run: ./scripts/check-fmt.sh
+      - name: Run lint
+        run: ./scripts/lint-go.sh
+      - name: Run test suite
+        run: ./scripts/test.sh
+      - name: Run public audit
+        run: make audit-public
+      - name: Verify embedded frontend bundle
+        run: |
+          make web
+          git diff --exit-code -- src/internal/webui/dist

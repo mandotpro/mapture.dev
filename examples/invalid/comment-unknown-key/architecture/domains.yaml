@@ -1,0 +1,5 @@
+domains:
+  - id: notifications
+    name: Notifications
+    ownerTeams: [team-commerce]
+    description: Notification workflows.

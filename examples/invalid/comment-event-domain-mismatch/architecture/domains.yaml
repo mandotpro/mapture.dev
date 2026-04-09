@@ -1,0 +1,10 @@
+domains:
+  - id: orders
+    name: Orders
+    ownerTeams: [team-commerce]
+    description: Handles customer orders.
+
+  - id: billing
+    name: Billing
+    ownerTeams: [team-billing]
+    description: Handles payment capture.

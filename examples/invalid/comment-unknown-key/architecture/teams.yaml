@@ -1,0 +1,4 @@
+teams:
+  - id: team-commerce
+    name: Commerce Team
+    email: commerce@example.com

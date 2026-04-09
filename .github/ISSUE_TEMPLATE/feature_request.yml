@@ -1,0 +1,39 @@
+name: Feature request
+description: Propose a new capability or workflow improvement
+title: "feat: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please focus on the user problem first. Clear problem statements lead to better feature design.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do that Mapture does not handle well today?
+    validations:
+      required: true
+  - type: textarea
+    id: desired
+    attributes:
+      label: Desired outcome
+      description: What result would make this workflow successful?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach
+      description: Optional. If you already have a concrete UI, CLI, or export idea, describe it here.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What are you doing today instead?
+  - type: textarea
+    id: context
+    attributes:
+      label: Extra context
+      description: Links, screenshots, example repos, or related tools
