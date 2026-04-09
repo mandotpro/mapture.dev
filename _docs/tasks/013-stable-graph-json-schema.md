@@ -21,9 +21,9 @@ to be locked, versioned, and validated like the catalog files are.
 - Add a `schemaVersion` field to `graph.Graph` (start at `1`)
 - Add `internal/graph/graph_test.go` snapshot covering the example
   graphs (works with task 016)
-- Document the contract in `AGENTS.md` under "Project rules" via the
-  `agent-docs` skill — "the graph JSON schema is stable; bump
-  `schemaVersion` and write a migration note for any breaking change"
+- Document the contract in the public contributor docs — "the graph JSON
+  schema is stable; bump `schemaVersion` and write a migration note for
+  any breaking change"
 
 ## Acceptance
 - Graph JSON validates against the new CUE schema

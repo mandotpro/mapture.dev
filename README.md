@@ -9,7 +9,7 @@ architecture context.
 
 **Status:** early scaffolding — not yet usable. See
 [`_docs/mapture-dev-prd-v1.md`](./_docs/mapture-dev-prd-v1.md) for the
-full product spec and [`AGENTS.md`](./AGENTS.md) for a repo map.
+full product spec.
 
 ## Idea in 30 seconds
 

@@ -26,7 +26,6 @@
     `mapture-node--${data.type}`,
     `mapture-node--kind-${data.kind ?? 'node'}`,
     data.groupKind ? `mapture-node--group-${data.groupKind}` : '',
-    data.trace ? 'mapture-node--trace' : '',
     data.impact && data.impact !== 'none' ? `mapture-node--impact-${data.impact}` : '',
     `mapture-node--tone-${data.tone ?? 'primary'}`,
     `mapture-node--mode-${data.viewMode ?? 'system-map'}`,

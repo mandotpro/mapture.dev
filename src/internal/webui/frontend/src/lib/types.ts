@@ -168,11 +168,6 @@ export interface PresenterFocus {
   hoveredEdgeId: string | null;
 }
 
-export interface TraceSelection {
-  sourceNodeId: string | null;
-  targetNodeId: string | null;
-}
-
 export interface TypeSummary {
   service: number;
   api: number;
@@ -191,7 +186,6 @@ export interface PresentedNode extends GraphNode {
   memberCount: number;
   typeSummary: TypeSummary;
   colorHint: string;
-  trace: boolean;
   impact: ImpactDirection;
 }
 
@@ -208,18 +202,7 @@ export interface PresentedEdge {
   secondary: boolean;
   aggregated: boolean;
   weight: number;
-  trace: boolean;
   impact: ImpactDirection;
-}
-
-export interface TraceResult {
-  active: boolean;
-  sourceId: string | null;
-  targetId: string | null;
-  found: boolean;
-  directed: boolean;
-  nodeIDs: string[];
-  edgeIDs: string[];
 }
 
 export interface LaneOverlay {
@@ -237,7 +220,6 @@ export interface PresentedGraph {
   nodes: PresentedNode[];
   edges: PresentedEdge[];
   lanes: LaneOverlay[];
-  trace: TraceResult;
 }
 
 export interface FlowPresentation {
@@ -262,7 +244,6 @@ export interface ArchitectureNodeData {
   eyebrow: string;
   memberCount: number;
   typeSummary: TypeSummary;
-  trace: boolean;
   impact: ImpactDirection;
 }
 
@@ -280,7 +261,6 @@ export interface ExplorerSettings {
     themePreference: ThemePreference;
   };
   experimental: {
-    traceTools: boolean;
     structureTools: boolean;
     impactPreview: boolean;
   };

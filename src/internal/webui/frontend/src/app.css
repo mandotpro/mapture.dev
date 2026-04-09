@@ -21,6 +21,8 @@
   --canvas-accent-1: rgba(13, 118, 97, 0.15);
   --canvas-accent-2: rgba(20, 89, 207, 0.12);
   --canvas-grid: rgba(24, 34, 40, 0.07);
+  --canvas-surface: #efe8d7;
+  --canvas-surface-elevated: rgba(255, 252, 246, 0.36);
 
   --bg: var(--color-bg-base);
   --ink: var(--color-text-primary);
@@ -72,6 +74,8 @@
   --canvas-accent-1: rgba(47, 179, 148, 0.16);
   --canvas-accent-2: rgba(88, 142, 232, 0.16);
   --canvas-grid: rgba(192, 214, 229, 0.09);
+  --canvas-surface: #0b1218;
+  --canvas-surface-elevated: rgba(20, 31, 41, 0.42);
 }
 
 * {
@@ -117,6 +121,15 @@ button:hover,
   transform: translateY(-1px);
   border-color: color-mix(in srgb, var(--accent) 28%, var(--border-strong));
   box-shadow: 0 10px 24px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.control-trigger,
+.control-option,
+.suggestion-chip,
+.svelte-flow__controls button,
+.svelte-flow__node,
+.svelte-flow__edge-interaction {
+  cursor: pointer;
 }
 
 input {
@@ -259,6 +272,18 @@ input {
 .immersive-flow {
   width: 100%;
   height: 100%;
+  background:
+    radial-gradient(circle at top left, var(--canvas-accent-1), transparent 26%),
+    radial-gradient(circle at 82% 14%, var(--canvas-accent-2), transparent 24%),
+    linear-gradient(180deg, color-mix(in srgb, var(--canvas-surface-elevated) 58%, transparent), transparent 28%),
+    var(--canvas-surface);
+}
+
+.immersive-flow .svelte-flow__renderer,
+.immersive-flow .svelte-flow__pane,
+.immersive-flow .svelte-flow__viewport,
+.immersive-flow .svelte-flow__background {
+  background: transparent;
 }
 
 .canvas-toolbar-shell,
@@ -282,7 +307,7 @@ input {
   gap: 0.4rem;
   padding: 0.4rem;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--surface-panel) 72%, transparent);
+  background: color-mix(in srgb, var(--surface-panel) 62%, transparent);
   border: 1px solid var(--border-strong);
   box-shadow: var(--shadow);
   backdrop-filter: blur(14px);
@@ -311,9 +336,9 @@ input {
   left: 0;
   min-width: 240px;
   max-width: min(340px, calc(100vw - 2rem));
-  padding: 0.75rem;
+  padding: 0.72rem;
   border-radius: 22px;
-  background: var(--surface-overlay);
+  background: color-mix(in srgb, var(--surface-overlay) 96%, transparent);
   border: 1px solid var(--border-strong);
   box-shadow: var(--shadow);
   backdrop-filter: blur(16px);
@@ -324,12 +349,6 @@ input {
   gap: 0.5rem;
 }
 
-.trace-popover,
-.structure-popover {
-  display: grid;
-  gap: 0.65rem;
-}
-
 .suggestion-strip {
   display: flex;
   flex-wrap: wrap;
@@ -337,8 +356,8 @@ input {
 }
 
 .suggestion-chip {
-  padding: 0.28rem 0.64rem;
-  min-height: 1.7rem;
+  padding: 0.24rem 0.58rem;
+  min-height: 1.6rem;
   border-radius: 999px;
   background: var(--surface-panel-soft);
   box-shadow: none;
@@ -359,143 +378,8 @@ input {
 }
 
 .mini-action {
-  padding: 0.28rem 0.58rem;
-  font-size: 0.72rem;
-}
-
-.trace-fields {
-  display: grid;
-  gap: 0.6rem;
-}
-
-.trace-field {
-  display: grid;
-  gap: 0.32rem;
-}
-
-.trace-field span {
-  color: var(--text-secondary);
-  font-size: 0.72rem;
-  font-weight: 600;
-}
-
-.trace-suggestions {
-  display: grid;
-  gap: 0.34rem;
-}
-
-.trace-suggestion {
-  display: grid;
-  justify-items: start;
-  gap: 0.08rem;
-  border-radius: 16px;
-  padding: 0.5rem 0.7rem;
-  background: var(--surface-panel-soft);
-  box-shadow: none;
-}
-
-.trace-suggestion strong {
-  font-size: 0.74rem;
-}
-
-.trace-suggestion small,
-.trace-status small,
-.structure-row__copy small {
-  color: var(--text-secondary);
-  font-size: 0.68rem;
-}
-
-.trace-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.42rem;
-}
-
-.trace-status {
-  display: grid;
-  gap: 0.14rem;
-  padding: 0.66rem 0.74rem;
-  border-radius: 18px;
-  border: 1px solid var(--border-soft);
-  background: var(--surface-panel-soft);
-}
-
-.trace-status strong {
-  font-size: 0.75rem;
-}
-
-.trace-status--ok {
-  border-color: rgba(13, 118, 97, 0.18);
-}
-
-.trace-status--warning {
-  border-color: rgba(181, 71, 8, 0.18);
-}
-
-.trace-status--muted {
-  border-color: rgba(23, 32, 39, 0.08);
-}
-
-.structure-toggle {
-  justify-content: space-between;
-}
-
-.structure-section {
-  display: grid;
-  gap: 0.42rem;
-}
-
-.structure-section__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-
-.structure-section__head strong {
-  font-size: 0.8rem;
-}
-
-.structure-list {
-  display: grid;
-  gap: 0.38rem;
-}
-
-.structure-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.6rem;
-  width: 100%;
-  padding: 0.5rem 0.72rem;
-  border-radius: 18px;
-  background: var(--surface-panel-soft);
-  box-shadow: none;
-  text-align: left;
-}
-
-.structure-row.active {
-  border-color: rgba(13, 118, 97, 0.24);
-  background: color-mix(in srgb, var(--chip-accent, var(--accent)) 10%, rgba(255, 252, 246, 0.96));
-}
-
-.structure-row__copy {
-  display: grid;
-  gap: 0.06rem;
-  min-width: 0;
-}
-
-.structure-row__copy strong {
-  font-size: 0.76rem;
-  color: var(--text-primary);
-}
-
-.structure-row__state {
-  color: var(--text-secondary);
+  padding: 0.24rem 0.52rem;
   font-size: 0.7rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
 }
 
 .chip-list {
@@ -575,7 +459,7 @@ input {
   flex-wrap: wrap;
   gap: 0.42rem;
   max-width: min(80vw, 760px);
-  padding: 0.38rem;
+  padding: 0.34rem;
   border-radius: 22px;
   background: color-mix(in srgb, var(--surface-panel) 74%, transparent);
   border: 1px solid var(--border-strong);
@@ -622,11 +506,15 @@ input {
 .control-trigger {
   min-width: 224px;
   justify-content: space-between;
-  padding: 0.46rem 0.56rem;
+  padding: 0.42rem 0.5rem;
 }
 
 .control-trigger--density {
   min-width: 184px;
+}
+
+.control-trigger--structure {
+  min-width: 172px;
 }
 
 .control-trigger.active {
@@ -638,12 +526,12 @@ input {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 2rem;
-  height: 2rem;
+  min-width: 1.8rem;
+  height: 1.8rem;
   border-radius: 14px;
   background: var(--surface-raised);
   color: var(--text-primary);
-  font-size: 0.64rem;
+  font-size: 0.6rem;
   font-weight: 800;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -662,14 +550,38 @@ input {
 .control-trigger__copy strong,
 .control-option__copy strong {
   color: var(--text-primary);
-  font-size: 0.77rem;
+  font-size: 0.75rem;
 }
 
 .control-trigger__copy small,
-.control-option__copy small,
-.control-trigger__caret {
+.control-option__copy small {
   color: var(--text-secondary);
-  font-size: 0.69rem;
+  font-size: 0.66rem;
+}
+
+.control-trigger__caret {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  color: var(--text-secondary);
+  transition: transform 160ms ease, color 160ms ease;
+}
+
+.control-trigger__caret svg {
+  width: 0.9rem;
+  height: 0.9rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.control-trigger__caret.is-open {
+  transform: rotate(180deg);
+  color: var(--text-primary);
 }
 
 .control-menu {
@@ -691,6 +603,10 @@ input {
   width: min(232px, calc(100vw - 1.8rem));
 }
 
+.control-menu--structure {
+  width: min(248px, calc(100vw - 1.8rem));
+}
+
 .control-menu__head {
   display: flex;
   align-items: center;
@@ -699,7 +615,7 @@ input {
 }
 
 .control-option {
-  padding: 0.42rem 0.48rem;
+  padding: 0.38rem 0.44rem;
   justify-content: flex-start;
   box-shadow: none;
 }
@@ -932,11 +848,6 @@ input {
   border-style: dashed;
 }
 
-.mapture-node--trace {
-  transform: translateY(-2px);
-  box-shadow: 0 22px 42px color-mix(in srgb, var(--node-color, var(--service)) 20%, transparent);
-}
-
 .mapture-node--impact-incoming::after,
 .mapture-node--impact-outgoing::after,
 .mapture-node--impact-mixed::after,
@@ -1032,6 +943,38 @@ input {
 .svelte-flow__minimap {
   margin-left: 1rem;
   margin-bottom: 1rem;
+}
+
+.immersive-flow .svelte-flow__controls button {
+  min-width: 2.55rem;
+  min-height: 2.55rem;
+  border: 0;
+  border-bottom: 1px solid var(--border-strong);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--surface-overlay) 96%, transparent);
+  color: var(--text-primary);
+  box-shadow: none;
+}
+
+.immersive-flow .svelte-flow__controls button:last-child {
+  border-bottom: 0;
+}
+
+.immersive-flow .svelte-flow__controls button:hover {
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--surface-raised) 88%, transparent);
+  box-shadow: none;
+}
+
+.immersive-flow .svelte-flow__controls button svg,
+.immersive-flow .svelte-flow__controls button svg * {
+  fill: none;
+  stroke: currentColor;
+}
+
+.immersive-flow .svelte-flow__controls button:disabled {
+  color: var(--text-tertiary);
+  background: color-mix(in srgb, var(--surface-panel-soft) 92%, transparent);
 }
 
 @media (max-width: 920px) {

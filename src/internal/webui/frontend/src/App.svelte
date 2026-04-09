@@ -33,7 +33,6 @@
   import GroupNode from './lib/nodes/GroupNode.svelte';
   import ServiceNode from './lib/nodes/ServiceNode.svelte';
   import CanvasModal from './lib/ui/CanvasModal.svelte';
-  import ImpactPreviewPanel from './lib/ui/ImpactPreviewPanel.svelte';
   import NodeInspector from './lib/ui/NodeInspector.svelte';
   import SettingsField from './lib/ui/SettingsField.svelte';
   import SettingsSection from './lib/ui/SettingsSection.svelte';
@@ -50,12 +49,11 @@
     ResolvedTheme,
     SettingsSectionConfig,
     ThemePreference,
-    TraceSelection,
     ViewMode,
     WindowWithPayload,
   } from './lib/types';
 
-  type PopoverKind = 'search' | 'trace' | 'structure' | 'owners' | 'domains' | 'nodeTypes' | null;
+  type PopoverKind = 'search' | 'structure' | 'owners' | 'domains' | 'nodeTypes' | null;
   type ManualPositions = Record<string, { x: number; y: number }>;
   type PersistedLayoutState = {
     version: 1;
@@ -68,10 +66,6 @@
     icon: string;
     tone: string;
   };
-  type TraceDraft = {
-    sourceQuery: string;
-    targetQuery: string;
-  };
 
   const GITHUB_URL = 'https://github.com/mandotpro/mapture.dev';
   const STORAGE_PREFIX = 'mapture-layout';
@@ -83,7 +77,6 @@
       themePreference: 'system',
     },
     experimental: {
-      traceTools: false,
       structureTools: false,
       impactPreview: false,
     },
@@ -124,15 +117,6 @@
     nodes: [],
     edges: [],
     lanes: [],
-    trace: {
-      active: false,
-      sourceId: null,
-      targetId: null,
-      found: false,
-      directed: true,
-      nodeIDs: [],
-      edgeIDs: [],
-    },
   };
 
   const nodeTypes = {
@@ -187,16 +171,9 @@
   let toolbarElement = $state<HTMLElement | null>(null);
   let toolbarSize = $state.raw({ width: 420, height: 52 });
   let manualPositions = $state.raw<ManualPositions>({});
-  let traceSelection = $state.raw<TraceSelection>({
-    sourceNodeId: null,
-    targetNodeId: null,
-  });
-  let traceDraft = $state.raw<TraceDraft>({
-    sourceQuery: '',
-    targetQuery: '',
-  });
   let collapsedDomains = $state.raw<string[]>([]);
   let collapsedOwners = $state.raw<string[]>([]);
+  let boundaryFocus = $state(false);
   let aggregateCrossDomain = $state(false);
   let explorerSettings = $state.raw<ExplorerSettings>(defaultExplorerSettings);
   let systemPrefersDark = $state(false);
@@ -237,11 +214,6 @@
   const visibleOwnerCounts = $derived(countBy(presentedGraph.nodes, (node) => node.owner));
   const visibleDomainCounts = $derived(countBy(presentedGraph.nodes, (node) => node.domain));
   const searchSuggestions = $derived(buildSearchSuggestions(model, filters.query));
-  const traceSourceSuggestions = $derived(buildNodeSuggestions(presentedGraph.nodes, traceDraft.sourceQuery, traceSelection.targetNodeId));
-  const traceTargetSuggestions = $derived(buildNodeSuggestions(presentedGraph.nodes, traceDraft.targetQuery, traceSelection.sourceNodeId));
-  const structureDomainCounts = $derived(countBy(baseVisibleNodes, (node) => node.domain));
-  const structureOwnerCounts = $derived(countBy(baseVisibleNodes, (node) => node.owner));
-  const traceStatus = $derived(buildTraceStatus(presentedGraph, traceSelection));
   const popupImpact = $derived(buildImpactPreview(presentedGraph, popupNode?.id ?? null));
   const resolvedTheme = $derived<ResolvedTheme>(
     explorerSettings.appearance.themePreference === 'system'
@@ -252,11 +224,8 @@
   const nodeInspectorActions = $derived(buildNodeInspectorActions());
   const filterCounts = $derived({
     query: filters.query ? 1 : 0,
-    trace: explorerSettings.experimental.traceTools && (traceSelection.sourceNodeId || traceSelection.targetNodeId)
-      ? (traceSelection.sourceNodeId ? 1 : 0) + (traceSelection.targetNodeId ? 1 : 0)
-      : 0,
     structure: explorerSettings.experimental.structureTools
-      ? collapsedDomains.length + collapsedOwners.length + (aggregateCrossDomain ? 1 : 0)
+      ? (boundaryFocus ? 1 : 0) + (aggregateCrossDomain ? 1 : 0) + collapsedDomains.length + collapsedOwners.length
       : 0,
     owners: filters.owners.length,
     domains: filters.domains.length,
@@ -299,7 +268,7 @@
       hoveredEdgeId,
       viewMode,
       densityMode,
-      traceSelection,
+      boundaryFocus,
       collapsedDomains,
       collapsedOwners,
       aggregateCrossDomain,
@@ -319,43 +288,35 @@
   });
 
   $effect(() => {
-    if (explorerSettings.experimental.traceTools) {
-      return;
-    }
-
-    if (activePopover === 'trace') {
-      activePopover = null;
-    }
-    if (traceSelection.sourceNodeId || traceSelection.targetNodeId) {
-      traceSelection = {
-        sourceNodeId: null,
-        targetNodeId: null,
-      };
-    }
-    if (traceDraft.sourceQuery || traceDraft.targetQuery) {
-      traceDraft = {
-        sourceQuery: '',
-        targetQuery: '',
-      };
-    }
-  });
-
-  $effect(() => {
     if (explorerSettings.experimental.structureTools) {
       return;
     }
 
-    if (activePopover === 'structure') {
-      activePopover = null;
-    }
     if (collapsedDomains.length > 0) {
       collapsedDomains = [];
     }
     if (collapsedOwners.length > 0) {
       collapsedOwners = [];
     }
+    if (boundaryFocus) {
+      boundaryFocus = false;
+    }
     if (aggregateCrossDomain) {
       aggregateCrossDomain = false;
+    }
+  });
+
+  $effect(() => {
+    const visibleDomains = new Set(baseVisibleNodes.map((node) => node.domain).filter(Boolean));
+    const visibleOwners = new Set(baseVisibleNodes.map((node) => node.owner).filter(Boolean));
+    const nextCollapsedDomains = collapsedDomains.filter((domain) => visibleDomains.has(domain));
+    const nextCollapsedOwners = collapsedOwners.filter((owner) => visibleOwners.has(owner));
+
+    if (nextCollapsedDomains.length !== collapsedDomains.length) {
+      collapsedDomains = nextCollapsedDomains;
+    }
+    if (nextCollapsedOwners.length !== collapsedOwners.length) {
+      collapsedOwners = nextCollapsedOwners;
     }
   });
 
@@ -414,7 +375,6 @@
             : 'system',
         },
         experimental: {
-          traceTools: parsed?.experimental?.traceTools === true,
           structureTools: parsed?.experimental?.structureTools === true,
           impactPreview: parsed?.experimental?.impactPreview === true,
         },
@@ -510,7 +470,7 @@
     currentHoveredEdgeId: string | null,
     currentViewMode: ViewMode,
     currentDensityMode: DensityMode,
-    currentTraceSelection: TraceSelection,
+    currentBoundaryFocus: boolean,
     currentCollapsedDomains: string[],
     currentCollapsedOwners: string[],
     currentAggregateCrossDomain: boolean,
@@ -526,7 +486,7 @@
         hoveredNodeId: currentHoveredNodeId,
         hoveredEdgeId: currentHoveredEdgeId,
       },
-      trace: currentTraceSelection,
+      boundaryFocus: currentBoundaryFocus,
       collapsedDomains: new Set(currentCollapsedDomains),
       collapsedOwners: new Set(currentCollapsedOwners),
       aggregateCrossDomain: currentAggregateCrossDomain,
@@ -561,15 +521,7 @@
   }
 
   function visibleRailKinds(): Array<Exclude<PopoverKind, null>> {
-    const kinds: Array<Exclude<PopoverKind, null>> = ['search'];
-    if (explorerSettings.experimental.traceTools) {
-      kinds.push('trace');
-    }
-    if (explorerSettings.experimental.structureTools) {
-      kinds.push('structure');
-    }
-    kinds.push('owners', 'domains', 'nodeTypes');
-    return kinds;
+    return ['search', 'owners', 'domains', 'nodeTypes'];
   }
 
   function togglePopover(kind: PopoverKind): void {
@@ -604,7 +556,7 @@
       return;
     }
 
-    if (id === 'traceTools' || id === 'structureTools' || id === 'impactPreview') {
+    if (id === 'structureTools' || id === 'impactPreview') {
       updateExplorerSettings({
         ...explorerSettings,
         experimental: {
@@ -642,18 +594,10 @@
         description: 'Hidden tools that need more iteration before they become default.',
         fields: [
           {
-            id: 'traceTools',
-            kind: 'toggle',
-            label: 'Trace tools',
-            description: 'Path tracing workflows and quick trace actions.',
-            value: settings.experimental.traceTools,
-            badge: 'FT',
-          },
-          {
             id: 'structureTools',
             kind: 'toggle',
             label: 'Structure tools',
-            description: 'Collapse domains and teams, plus cross-domain aggregation.',
+            description: 'Compact boundary controls for cross-domain emphasis and contextual collapsing.',
             value: settings.experimental.structureTools,
             badge: 'FT',
           },
@@ -676,12 +620,6 @@
     }
 
     const actions: NodeInspectorAction[] = [];
-    if (explorerSettings.experimental.traceTools) {
-      actions.push(
-        { id: 'trace-source', label: 'Trace from here', tone: 'accent', badge: 'FT' },
-        { id: 'trace-target', label: 'Trace to here', tone: 'accent', badge: 'FT' },
-      );
-    }
     if (explorerSettings.experimental.structureTools && popupNode.domain) {
       actions.push({
         id: 'toggle-domain',
@@ -700,14 +638,6 @@
   }
 
   function handleNodeInspectorAction(actionId: string): void {
-    if (actionId === 'trace-source') {
-      usePopupNodeAsTrace('source');
-      return;
-    }
-    if (actionId === 'trace-target') {
-      usePopupNodeAsTrace('target');
-      return;
-    }
     if (actionId === 'toggle-domain') {
       togglePopupDomainCollapse();
       return;
@@ -720,6 +650,7 @@
   function resetStructure(): void {
     collapsedDomains = [];
     collapsedOwners = [];
+    boundaryFocus = false;
     aggregateCrossDomain = false;
   }
 
@@ -731,117 +662,12 @@
     collapsedOwners = toggleValue(collapsedOwners, owner);
   }
 
+  function toggleBoundaryFocus(): void {
+    boundaryFocus = !boundaryFocus;
+  }
+
   function toggleCrossDomainAggregation(): void {
     aggregateCrossDomain = !aggregateCrossDomain;
-  }
-
-  function assignTraceEndpoint(slot: 'source' | 'target', node: PresentedNode): void {
-    if (slot === 'source') {
-      traceSelection = {
-        ...traceSelection,
-        sourceNodeId: node.id,
-      };
-      traceDraft = {
-        ...traceDraft,
-        sourceQuery: node.id,
-      };
-      return;
-    }
-
-    traceSelection = {
-      ...traceSelection,
-      targetNodeId: node.id,
-    };
-    traceDraft = {
-      ...traceDraft,
-      targetQuery: node.id,
-    };
-  }
-
-  function clearTrace(): void {
-    traceSelection = {
-      sourceNodeId: null,
-      targetNodeId: null,
-    };
-    traceDraft = {
-      sourceQuery: '',
-      targetQuery: '',
-    };
-  }
-
-  function clearTraceEndpoint(slot: 'source' | 'target'): void {
-    if (slot === 'source') {
-      traceSelection = {
-        ...traceSelection,
-        sourceNodeId: null,
-      };
-      traceDraft = {
-        ...traceDraft,
-        sourceQuery: '',
-      };
-      return;
-    }
-
-    traceSelection = {
-      ...traceSelection,
-      targetNodeId: null,
-    };
-    traceDraft = {
-      ...traceDraft,
-      targetQuery: '',
-    };
-  }
-
-  function swapTrace(): void {
-    traceSelection = {
-      sourceNodeId: traceSelection.targetNodeId,
-      targetNodeId: traceSelection.sourceNodeId,
-    };
-    traceDraft = {
-      sourceQuery: traceDraft.targetQuery,
-      targetQuery: traceDraft.sourceQuery,
-    };
-  }
-
-  function updateTraceDraft(slot: 'source' | 'target', value: string): void {
-    if (slot === 'source') {
-      traceDraft = {
-        ...traceDraft,
-        sourceQuery: value,
-      };
-      traceSelection = {
-        ...traceSelection,
-        sourceNodeId: traceSelection.sourceNodeId && traceSelection.sourceNodeId === value ? traceSelection.sourceNodeId : null,
-      };
-      return;
-    }
-
-    traceDraft = {
-      ...traceDraft,
-      targetQuery: value,
-    };
-    traceSelection = {
-      ...traceSelection,
-      targetNodeId: traceSelection.targetNodeId && traceSelection.targetNodeId === value ? traceSelection.targetNodeId : null,
-    };
-  }
-
-  function applyTraceSelection(): void {
-    const source = traceSelection.sourceNodeId
-      ? presentedGraph.nodes.find((node) => node.id === traceSelection.sourceNodeId) ?? null
-      : resolveTraceReference(traceDraft.sourceQuery);
-    const target = traceSelection.targetNodeId
-      ? presentedGraph.nodes.find((node) => node.id === traceSelection.targetNodeId) ?? null
-      : resolveTraceReference(traceDraft.targetQuery);
-
-    traceSelection = {
-      sourceNodeId: source?.id ?? null,
-      targetNodeId: target?.id ?? null,
-    };
-    traceDraft = {
-      sourceQuery: source?.id ?? traceDraft.sourceQuery,
-      targetQuery: target?.id ?? traceDraft.targetQuery,
-    };
   }
 
   function toggleModeMenu(): void {
@@ -957,13 +783,6 @@
     densityMenuOpen = false;
     settingsOpen = false;
     selectedNodeId = node.id;
-  }
-
-  function usePopupNodeAsTrace(slot: 'source' | 'target'): void {
-    if (!popupNode) {
-      return;
-    }
-    assignTraceEndpoint(slot, popupNode);
   }
 
   function togglePopupDomainCollapse(): void {
@@ -1118,7 +937,6 @@
   function railButtonLabel(kind: Exclude<PopoverKind, null>): string {
     const labels: Record<Exclude<PopoverKind, null>, string> = {
       search: 'Search',
-      trace: 'Trace',
       structure: 'Structure',
       owners: 'Teams',
       domains: 'Domains',
@@ -1130,9 +948,6 @@
   function popoverCount(kind: Exclude<PopoverKind, null>): number {
     if (kind === 'search') {
       return filterCounts.query;
-    }
-    if (kind === 'trace') {
-      return filterCounts.trace;
     }
     if (kind === 'structure') {
       return filterCounts.structure;
@@ -1163,12 +978,6 @@
     if (kind === 'domains') {
       return 'D';
     }
-    if (kind === 'trace') {
-      return 'P';
-    }
-    if (kind === 'structure') {
-      return 'GR';
-    }
     const nodeTypeIcons: Record<string, string> = {
       service: 'S',
       api: 'A',
@@ -1192,21 +1001,10 @@
     if (kind === 'domains') {
       return '#1664d9';
     }
-    if (kind === 'trace') {
-      return '#8c6d44';
-    }
     if (kind === 'structure') {
       return '#8f4a18';
     }
     return nodeColor(currentModel, value ?? 'service');
-  }
-
-  function chipStyle(
-    currentModel: GraphModel,
-    kind: ActiveFilterBadge['kind'] | Exclude<PopoverKind, null>,
-    value?: string,
-  ): string {
-    return `--chip-accent:${accentForKind(currentModel, kind, value)};`;
   }
 
   function capitalize(value: string): string {
@@ -1354,91 +1152,6 @@
       .slice(0, 8);
   }
 
-  function buildNodeSuggestions(
-    nodes: PresentedNode[],
-    query: string,
-    excludeNodeId: string | null,
-  ): PresentedNode[] {
-    const normalizedQuery = query.trim().toLowerCase();
-    const visible = nodes.filter((node) => node.id !== excludeNodeId);
-    const sorted = [...visible].sort((left, right) => {
-      const leftLabel = `${left.name} ${left.id}`.toLowerCase();
-      const rightLabel = `${right.name} ${right.id}`.toLowerCase();
-      return leftLabel.localeCompare(rightLabel);
-    });
-
-    if (!normalizedQuery) {
-      return sorted.slice(0, 6);
-    }
-
-    return sorted
-      .filter((node) => (
-        `${node.id} ${node.name} ${node.domain} ${node.owner}`.toLowerCase().includes(normalizedQuery)
-      ))
-      .slice(0, 6);
-  }
-
-  function resolveTraceReference(query: string): PresentedNode | null {
-    const trimmed = query.trim();
-    if (!trimmed) {
-      return null;
-    }
-
-    const byID = presentedGraph.nodes.find((node) => node.id === trimmed);
-    if (byID) {
-      return byID;
-    }
-
-    const lowered = trimmed.toLowerCase();
-    const exactName = presentedGraph.nodes.find((node) => node.name.toLowerCase() === lowered);
-    if (exactName) {
-      return exactName;
-    }
-
-    const fuzzy = presentedGraph.nodes.filter((node) => (
-      `${node.id} ${node.name}`.toLowerCase().includes(lowered)
-    ));
-    return fuzzy.length === 1 ? fuzzy[0] : null;
-  }
-
-  function buildTraceStatus(
-    currentGraph: PresentedGraph,
-    currentTraceSelection: TraceSelection,
-  ): { label: string; tone: 'muted' | 'ok' | 'warning'; hops: number } {
-    if (!currentTraceSelection.sourceNodeId && !currentTraceSelection.targetNodeId) {
-      return {
-        label: 'Pick two visible nodes to trace a path.',
-        tone: 'muted',
-        hops: 0,
-      };
-    }
-
-    if (!(currentTraceSelection.sourceNodeId && currentTraceSelection.targetNodeId)) {
-      return {
-        label: 'Choose both a start and an end node.',
-        tone: 'muted',
-        hops: 0,
-      };
-    }
-
-    if (!currentGraph.trace.found) {
-      return {
-        label: 'No visible path in the current view.',
-        tone: 'warning',
-        hops: 0,
-      };
-    }
-
-    const hops = Math.max(0, currentGraph.trace.edgeIDs.length);
-    return {
-      label: currentGraph.trace.directed
-        ? `Directed path across ${hops} hop${hops === 1 ? '' : 's'}.`
-        : `Related path across ${hops} hop${hops === 1 ? '' : 's'} in the current view.`,
-      tone: 'ok',
-      hops,
-    };
-  }
-
   function buildImpactPreview(currentGraph: PresentedGraph, nodeId: string | null): ImpactPreview {
     if (!nodeId) {
       return {
@@ -1546,12 +1259,12 @@
     return summary ? `${node.memberCount} nodes · ${summary}` : `${node.memberCount} nodes`;
   }
 
-  function traceNodeName(nodeId: string | null): string {
-    if (!nodeId) {
-      return 'None';
-    }
-    const node = presentedGraph.nodes.find((candidate) => candidate.id === nodeId);
-    return node ? node.name : nodeId;
+  function popupTagLabel(node: PresentedNode): string {
+    return [
+      capitalize(node.type),
+      node.stage ? capitalize(node.stage) : '',
+      node.groupKind ? capitalize(node.groupKind) : '',
+    ].filter(Boolean).join(' · ');
   }
 
   function toggleValue(values: string[], value: string): string[] {
@@ -1807,131 +1520,6 @@
             </div>
           {/if}
 
-          {#if explorerSettings.experimental.traceTools && activePopover === 'trace'}
-            <div class="toolbar-popover trace-popover" data-interactive-root>
-              <div class="popover-head">
-                <strong>Path Trace</strong>
-                <button type="button" class="mini-action" onclick={clearTrace}>Clear</button>
-              </div>
-              <div class="trace-fields">
-                <label class="trace-field">
-                  <span>From</span>
-                  <input
-                    type="search"
-                    value={traceDraft.sourceQuery}
-                    placeholder="Start node id or name"
-                    oninput={(event) => updateTraceDraft('source', (event.currentTarget as HTMLInputElement).value)}
-                    onblur={applyTraceSelection}
-                  />
-                  {#if traceSourceSuggestions.length > 0}
-                    <div class="trace-suggestions">
-                      {#each traceSourceSuggestions as node}
-                        <button type="button" class="trace-suggestion" onclick={() => assignTraceEndpoint('source', node)}>
-                          <strong>{node.name}</strong>
-                          <small>{node.id}</small>
-                        </button>
-                      {/each}
-                    </div>
-                  {/if}
-                </label>
-                <label class="trace-field">
-                  <span>To</span>
-                  <input
-                    type="search"
-                    value={traceDraft.targetQuery}
-                    placeholder="Target node id or name"
-                    oninput={(event) => updateTraceDraft('target', (event.currentTarget as HTMLInputElement).value)}
-                    onblur={applyTraceSelection}
-                  />
-                  {#if traceTargetSuggestions.length > 0}
-                    <div class="trace-suggestions">
-                      {#each traceTargetSuggestions as node}
-                        <button type="button" class="trace-suggestion" onclick={() => assignTraceEndpoint('target', node)}>
-                          <strong>{node.name}</strong>
-                          <small>{node.id}</small>
-                        </button>
-                      {/each}
-                    </div>
-                  {/if}
-                </label>
-              </div>
-              <div class="trace-actions">
-                <button type="button" class="mini-action" onclick={applyTraceSelection}>Trace</button>
-                <button type="button" class="mini-action" onclick={swapTrace}>Swap</button>
-                <button type="button" class="mini-action" onclick={() => clearTraceEndpoint('source')}>Clear start</button>
-                <button type="button" class="mini-action" onclick={() => clearTraceEndpoint('target')}>Clear end</button>
-              </div>
-              <article class={['trace-status', `trace-status--${traceStatus.tone}`].join(' ')}>
-                <strong>{traceStatus.label}</strong>
-                <small>{traceNodeName(traceSelection.sourceNodeId)} -> {traceNodeName(traceSelection.targetNodeId)}</small>
-              </article>
-            </div>
-          {/if}
-
-          {#if explorerSettings.experimental.structureTools && activePopover === 'structure'}
-            <div class="toolbar-popover structure-popover" data-interactive-root>
-              <div class="popover-head">
-                <strong>Structure</strong>
-                <button type="button" class="mini-action" onclick={resetStructure}>Reset</button>
-              </div>
-              <TokenBadge
-                label="Summarize cross-domain links"
-                icon={iconForKind('structure')}
-                accent={accentForKind(model, 'structure')}
-                active={aggregateCrossDomain}
-                trailingText={aggregateCrossDomain ? 'On' : 'Off'}
-                className="filter-chip structure-toggle"
-                onclick={toggleCrossDomainAggregation}
-              />
-
-              <section class="structure-section">
-                <div class="structure-section__head">
-                  <strong>Collapse Domains</strong>
-                  <button type="button" class="mini-action" onclick={() => (collapsedDomains = [])}>Clear</button>
-                </div>
-                <div class="structure-list">
-                  {#each model.domains as domain}
-                    <button
-                      type="button"
-                      class={['structure-row', collapsedDomains.includes(domain) ? 'active' : ''].join(' ')}
-                      style={chipStyle(model, 'domains')}
-                      onclick={() => toggleCollapsedDomain(domain)}
-                    >
-                      <span class="structure-row__copy">
-                        <strong>{domainName(model, domain)}</strong>
-                        <small>{structureDomainCounts[domain] ?? 0} visible</small>
-                      </span>
-                      <span class="structure-row__state">{collapsedDomains.includes(domain) ? 'Collapsed' : 'Open'}</span>
-                    </button>
-                  {/each}
-                </div>
-              </section>
-
-              <section class="structure-section">
-                <div class="structure-section__head">
-                  <strong>Collapse Teams</strong>
-                  <button type="button" class="mini-action" onclick={() => (collapsedOwners = [])}>Clear</button>
-                </div>
-                <div class="structure-list">
-                  {#each model.owners as owner}
-                    <button
-                      type="button"
-                      class={['structure-row', collapsedOwners.includes(owner) ? 'active' : ''].join(' ')}
-                      style={chipStyle(model, 'owners')}
-                      onclick={() => toggleCollapsedOwner(owner)}
-                    >
-                      <span class="structure-row__copy">
-                        <strong>{teamName(model, owner)}</strong>
-                        <small>{structureOwnerCounts[owner] ?? 0} visible</small>
-                      </span>
-                      <span class="structure-row__state">{collapsedOwners.includes(owner) ? 'Collapsed' : 'Open'}</span>
-                    </button>
-                  {/each}
-                </div>
-              </section>
-            </div>
-          {/if}
-
           {#if activePopover === 'owners'}
             <div class="toolbar-popover" data-interactive-root>
               <div class="popover-head">
@@ -2029,7 +1617,11 @@
                 <strong>{activeViewOption.label}</strong>
                 <small>{activeViewOption.summary}</small>
               </span>
-              <span class="control-trigger__caret" aria-hidden="true">{modeMenuOpen ? 'x' : 'v'}</span>
+              <span class={['control-trigger__caret', modeMenuOpen ? 'is-open' : ''].join(' ')} aria-hidden="true">
+                <svg viewBox="0 0 16 16" focusable="false">
+                  <path d="M4.5 6.25 8 9.75l3.5-3.5"></path>
+                </svg>
+              </span>
             </button>
 
             {#if modeMenuOpen}
@@ -2072,7 +1664,11 @@
                 <strong>{activeDensityOption.label}</strong>
                 <small>{activeDensityOption.summary}</small>
               </span>
-              <span class="control-trigger__caret" aria-hidden="true">{densityMenuOpen ? 'x' : 'v'}</span>
+              <span class={['control-trigger__caret', densityMenuOpen ? 'is-open' : ''].join(' ')} aria-hidden="true">
+                <svg viewBox="0 0 16 16" focusable="false">
+                  <path d="M4.5 6.25 8 9.75l3.5-3.5"></path>
+                </svg>
+              </span>
             </button>
 
             {#if densityMenuOpen}
@@ -2096,6 +1692,88 @@
               </div>
             {/if}
           </div>
+
+          {#if explorerSettings.experimental.structureTools}
+            <div class="control-picker control-picker--structure">
+              <button
+                type="button"
+                class={['control-trigger', 'control-trigger--structure', activePopover === 'structure' ? 'active' : ''].join(' ')}
+                onclick={() => togglePopover('structure')}
+              >
+                <span class="control-trigger__icon" aria-hidden="true">{iconForKind('structure')}</span>
+                <span class="control-trigger__copy">
+                  <strong>Structure</strong>
+                  <small>{filterCounts.structure > 0 ? `${filterCounts.structure} active` : 'Boundary tools'}</small>
+                </span>
+                <span class={['control-trigger__caret', activePopover === 'structure' ? 'is-open' : ''].join(' ')} aria-hidden="true">
+                  <svg viewBox="0 0 16 16" focusable="false">
+                    <path d="M4.5 6.25 8 9.75l3.5-3.5"></path>
+                  </svg>
+                </span>
+              </button>
+
+              {#if activePopover === 'structure'}
+                <div class="control-menu control-menu--structure">
+                  <div class="control-menu__head">
+                    <strong>Structure</strong>
+                    <button type="button" class="mini-action" onclick={resetStructure}>Reset</button>
+                  </div>
+
+                  <button
+                    type="button"
+                    class={['control-option', boundaryFocus ? 'active' : ''].join(' ')}
+                    onclick={toggleBoundaryFocus}
+                  >
+                    <span class="control-option__icon" aria-hidden="true">BF</span>
+                    <span class="control-option__copy">
+                      <strong>Boundary focus</strong>
+                      <small>Emphasize cross-domain traffic</small>
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    class={['control-option', aggregateCrossDomain ? 'active' : ''].join(' ')}
+                    onclick={toggleCrossDomainAggregation}
+                  >
+                    <span class="control-option__icon" aria-hidden="true">AG</span>
+                    <span class="control-option__copy">
+                      <strong>Summarize links</strong>
+                      <small>Aggregate cross-domain connections</small>
+                    </span>
+                  </button>
+
+                  {#if popupNode?.domain}
+                    <button
+                      type="button"
+                      class={['control-option', collapsedDomains.includes(popupNode.domain) ? 'active' : ''].join(' ')}
+                      onclick={togglePopupDomainCollapse}
+                    >
+                      <span class="control-option__icon" aria-hidden="true">DM</span>
+                      <span class="control-option__copy">
+                        <strong>{collapsedDomains.includes(popupNode.domain) ? 'Expand domain' : 'Collapse domain'}</strong>
+                        <small>{domainName(model, popupNode.domain)}</small>
+                      </span>
+                    </button>
+                  {/if}
+
+                  {#if popupNode?.owner}
+                    <button
+                      type="button"
+                      class={['control-option', collapsedOwners.includes(popupNode.owner) ? 'active' : ''].join(' ')}
+                      onclick={togglePopupOwnerCollapse}
+                    >
+                      <span class="control-option__icon" aria-hidden="true">TM</span>
+                      <span class="control-option__copy">
+                        <strong>{collapsedOwners.includes(popupNode.owner) ? 'Expand team' : 'Collapse team'}</strong>
+                        <small>{teamName(model, popupNode.owner)}</small>
+                      </span>
+                    </button>
+                  {/if}
+                </div>
+              {/if}
+            </div>
+          {/if}
         </div>
       </Panel>
 
@@ -2109,19 +1787,15 @@
               domainLabel={popupNode.domain ? domainName(model, popupNode.domain) : 'n/a'}
               ownerLabel={popupNode.owner ? teamName(model, popupNode.owner) : 'n/a'}
               sourceLabel={popupSourceLabel(popupNode)}
+              tagLabel={popupTagLabel(popupNode)}
               compositionLabel={popupCompositionLabel(popupNode)}
               summary={popupNode.summary}
+              preview={popupImpact}
+              impactEnabled={explorerSettings.experimental.impactPreview}
               actions={nodeInspectorActions}
               onaction={handleNodeInspectorAction}
               onclose={() => (selectedNodeId = null)}
             />
-
-            {#if explorerSettings.experimental.impactPreview}
-              <ImpactPreviewPanel
-                preview={popupImpact}
-                ontrace={explorerSettings.experimental.traceTools ? assignTraceEndpoint : undefined}
-              />
-            {/if}
           </div>
         </Panel>
       {/if}

@@ -20,8 +20,6 @@ import type {
   PresentedGroupKind,
   PresentedNode,
   PresenterFocus,
-  TraceResult,
-  TraceSelection,
   TypeSummary,
   UIConfig,
   ViewMode,
@@ -32,7 +30,7 @@ type BuildPresentationOptions = {
   viewMode: ViewMode;
   densityMode: DensityMode;
   focus: PresenterFocus;
-  trace: TraceSelection;
+  boundaryFocus: boolean;
   collapsedDomains: Set<string>;
   collapsedOwners: Set<string>;
   aggregateCrossDomain: boolean;
@@ -81,8 +79,6 @@ type FocusState = {
   active: boolean;
   nodeIDs: Set<string>;
   edgeIDs: Set<string>;
-  traceNodeIDs: Set<string>;
-  traceEdgeIDs: Set<string>;
   anchorNodeId: string | null;
 };
 
@@ -195,7 +191,6 @@ export async function buildFlowPresentation(
     collapsedOwners: options.collapsedOwners,
     aggregateCrossDomain: options.aggregateCrossDomain,
   });
-  const trace = buildTraceResult(structuredGraph.nodes, structuredGraph.edges, options.trace);
   const graph = applyPresentation(
     model,
     structuredGraph.nodes,
@@ -203,7 +198,7 @@ export async function buildFlowPresentation(
     options.viewMode,
     options.densityMode,
     options.focus,
-    trace,
+    options.boundaryFocus,
   );
   const flowNodesInput = graph.nodes.map((node) => toFlowNode(model, node, options.viewMode));
   const layoutEdges = graph.edges.map((edge) => ({
@@ -635,88 +630,6 @@ function applyStructureTransform(
   };
 }
 
-function buildTraceResult(
-  nodes: WorkingNode[],
-  edges: ModeEdge[],
-  trace: TraceSelection,
-): TraceResult {
-  if (!trace.sourceNodeId || !trace.targetNodeId) {
-    return {
-      active: false,
-      sourceId: trace.sourceNodeId,
-      targetId: trace.targetNodeId,
-      found: false,
-      directed: true,
-      nodeIDs: [],
-      edgeIDs: [],
-    };
-  }
-
-  const visibleNodeIDs = new Set(nodes.map((node) => node.id));
-  const sourceVisible = visibleNodeIDs.has(trace.sourceNodeId);
-  const targetVisible = visibleNodeIDs.has(trace.targetNodeId);
-
-  if (!sourceVisible || !targetVisible) {
-    return {
-      active: true,
-      sourceId: sourceVisible ? trace.sourceNodeId : null,
-      targetId: targetVisible ? trace.targetNodeId : null,
-      found: false,
-      directed: true,
-      nodeIDs: [trace.sourceNodeId, trace.targetNodeId].filter((value, index, list) => list.indexOf(value) === index),
-      edgeIDs: [],
-    };
-  }
-
-  if (trace.sourceNodeId === trace.targetNodeId) {
-    return {
-      active: true,
-      sourceId: trace.sourceNodeId,
-      targetId: trace.targetNodeId,
-      found: true,
-      directed: true,
-      nodeIDs: [trace.sourceNodeId],
-      edgeIDs: [],
-    };
-  }
-
-  const directed = findShortestPath(trace.sourceNodeId, trace.targetNodeId, edges, true);
-  if (directed) {
-    return {
-      active: true,
-      sourceId: trace.sourceNodeId,
-      targetId: trace.targetNodeId,
-      found: true,
-      directed: true,
-      nodeIDs: directed.nodeIDs,
-      edgeIDs: directed.edgeIDs,
-    };
-  }
-
-  const undirected = findShortestPath(trace.sourceNodeId, trace.targetNodeId, edges, false);
-  if (undirected) {
-    return {
-      active: true,
-      sourceId: trace.sourceNodeId,
-      targetId: trace.targetNodeId,
-      found: true,
-      directed: false,
-      nodeIDs: undirected.nodeIDs,
-      edgeIDs: undirected.edgeIDs,
-    };
-  }
-
-  return {
-    active: true,
-    sourceId: trace.sourceNodeId,
-    targetId: trace.targetNodeId,
-    found: false,
-    directed: true,
-    nodeIDs: [trace.sourceNodeId, trace.targetNodeId],
-    edgeIDs: [],
-  };
-}
-
 function applyPresentation(
   model: GraphModel,
   nodes: WorkingNode[],
@@ -724,25 +637,25 @@ function applyPresentation(
   viewMode: ViewMode,
   densityMode: DensityMode,
   focus: PresenterFocus,
-  trace: TraceResult,
+  boundaryFocus: boolean,
 ): PresentedGraph {
   const nodeStages = buildNodeStages(nodes, edges, viewMode);
   const nodeMap = new Map(nodes.map((node) => [node.id, node]));
-  const focusState = buildFocusState(edges, focus, new Set(nodes.map((node) => node.id)), trace);
-  const impactState = buildImpactState(edges, focusState.anchorNodeId, trace.active);
+  const boundaryState = buildBoundaryState(nodes, edges);
+  const focusState = buildFocusState(edges, focus, new Set(nodes.map((node) => node.id)));
+  const impactState = buildImpactState(edges, focusState.anchorNodeId);
 
   const presentedNodes: PresentedNode[] = nodes.map((node) => ({
     ...node,
     stage: nodeStages.get(node.id) ?? 'support',
     subtitle: resolveNodeSubtitle(model, node),
-    tone: resolveNodeTone(node, viewMode, densityMode, focusState),
+    tone: resolveNodeTone(node, viewMode, densityMode, focusState, boundaryState, boundaryFocus),
     kind: node.kind,
     groupKind: node.groupKind,
     eyebrow: node.eyebrow,
     memberCount: node.memberCount,
     typeSummary: node.typeSummary,
     colorHint: node.colorHint,
-    trace: focusState.traceNodeIDs.has(node.id),
     impact: impactState.nodeDirections.get(node.id) ?? 'none',
   }));
 
@@ -756,12 +669,11 @@ function applyPresentation(
     );
     return {
       ...edge,
-      tone: resolveEdgeTone(edge, viewMode, crossDomain, focusState),
+      tone: resolveEdgeTone(edge, viewMode, crossDomain, focusState, boundaryState, boundaryFocus),
       showLabel: shouldShowEdgeLabel(edge, densityMode, focusState),
       crossDomain,
       aggregated: edge.aggregated,
       weight: edge.weight,
-      trace: focusState.traceEdgeIDs.has(edge.id),
       impact: impactState.edgeDirections.get(edge.id) ?? 'none',
     };
   });
@@ -770,7 +682,6 @@ function applyPresentation(
     nodes: presentedNodes,
     edges: presentedEdges,
     lanes: [],
-    trace,
   };
 }
 
@@ -808,25 +719,39 @@ function buildNodeStages(
   return stages;
 }
 
+function buildBoundaryState(
+  nodes: WorkingNode[],
+  edges: ModeEdge[],
+): {
+  nodeIDs: Set<string>;
+  edgeIDs: Set<string>;
+} {
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+  const nodeIDs = new Set<string>();
+  const edgeIDs = new Set<string>();
+
+  for (const edge of edges) {
+    const source = nodeMap.get(edge.from);
+    const target = nodeMap.get(edge.to);
+    if (!(source?.domain && target?.domain && source.domain !== target.domain)) {
+      continue;
+    }
+    edgeIDs.add(edge.id);
+    nodeIDs.add(edge.from);
+    nodeIDs.add(edge.to);
+  }
+
+  return {
+    nodeIDs,
+    edgeIDs,
+  };
+}
+
 function buildFocusState(
   edges: ModeEdge[],
   focus: PresenterFocus,
   visibleNodeIDs: Set<string>,
-  trace: TraceResult,
 ): FocusState {
-  if (trace.active) {
-    const nodeIDs = new Set(trace.nodeIDs.filter((nodeID) => visibleNodeIDs.has(nodeID)));
-    const edgeIDs = new Set(trace.edgeIDs);
-    return {
-      active: nodeIDs.size > 0 || edgeIDs.size > 0,
-      nodeIDs,
-      edgeIDs,
-      traceNodeIDs: new Set(nodeIDs),
-      traceEdgeIDs: new Set(edgeIDs),
-      anchorNodeId: null,
-    };
-  }
-
   const hoveredEdge = focus.hoveredEdgeId
     ? edges.find((edge) => edge.id === focus.hoveredEdgeId) ?? null
     : null;
@@ -836,8 +761,6 @@ function buildFocusState(
       active: true,
       nodeIDs: new Set([hoveredEdge.from, hoveredEdge.to]),
       edgeIDs: new Set([hoveredEdge.id]),
-      traceNodeIDs: new Set(),
-      traceEdgeIDs: new Set(),
       anchorNodeId: null,
     };
   }
@@ -853,8 +776,6 @@ function buildFocusState(
       active: false,
       nodeIDs: new Set(),
       edgeIDs: new Set(),
-      traceNodeIDs: new Set(),
-      traceEdgeIDs: new Set(),
       anchorNodeId: null,
     };
   }
@@ -874,8 +795,6 @@ function buildFocusState(
     active: true,
     nodeIDs,
     edgeIDs,
-    traceNodeIDs: new Set(),
-    traceEdgeIDs: new Set(),
     anchorNodeId,
   };
 }
@@ -883,7 +802,6 @@ function buildFocusState(
 function buildImpactState(
   edges: ModeEdge[],
   anchorNodeId: string | null,
-  traceActive: boolean,
 ): {
   nodeDirections: Map<string, ImpactDirection>;
   edgeDirections: Map<string, ImpactDirection>;
@@ -891,7 +809,7 @@ function buildImpactState(
   const nodeDirections = new Map<string, ImpactDirection>();
   const edgeDirections = new Map<string, ImpactDirection>();
 
-  if (!anchorNodeId || traceActive) {
+  if (!anchorNodeId) {
     return {
       nodeDirections,
       edgeDirections,
@@ -926,10 +844,15 @@ function resolveNodeTone(
   viewMode: ViewMode,
   densityMode: DensityMode,
   focusState: FocusState,
+  boundaryState: { nodeIDs: Set<string>; edgeIDs: Set<string> },
+  boundaryFocus: boolean,
 ): NodeTone {
   const baseTone = baseNodeTone(node, viewMode, densityMode);
 
   if (!focusState.active) {
+    if (boundaryFocus && !boundaryState.nodeIDs.has(node.id)) {
+      return baseTone === 'primary' ? 'secondary' : 'muted';
+    }
     return baseTone;
   }
 
@@ -949,10 +872,15 @@ function resolveEdgeTone(
   viewMode: ViewMode,
   crossDomain: boolean,
   focusState: FocusState,
+  boundaryState: { nodeIDs: Set<string>; edgeIDs: Set<string> },
+  boundaryFocus: boolean,
 ): NodeTone {
   const baseTone = baseEdgeTone(edge, viewMode, crossDomain);
 
   if (!focusState.active) {
+    if (boundaryFocus && !boundaryState.edgeIDs.has(edge.id)) {
+      return 'muted';
+    }
     return baseTone;
   }
 
@@ -975,7 +903,7 @@ function shouldShowEdgeLabel(
   if (densityMode === 'detailed') {
     return true;
   }
-  if (focusState.traceEdgeIDs.has(edge.id) || focusState.edgeIDs.has(edge.id)) {
+  if (focusState.edgeIDs.has(edge.id)) {
     return true;
   }
   if (!focusState.anchorNodeId) {
@@ -1087,7 +1015,6 @@ function toFlowNode(model: GraphModel, node: PresentedNode, viewMode: ViewMode):
       eyebrow: node.eyebrow,
       memberCount: node.memberCount,
       typeSummary: node.typeSummary,
-      trace: node.trace,
       impact: node.impact,
     },
     sourcePosition: Position.Right,
@@ -1099,24 +1026,20 @@ function toFlowNode(model: GraphModel, node: PresentedNode, viewMode: ViewMode):
 }
 
 function toFlowEdge(edge: PresentedEdge): Edge {
-  const opacity = edge.trace
-    ? 0.92
-    : edge.tone === 'muted'
-      ? 0.11
-      : edge.tone === 'secondary'
-        ? 0.34
-        : 0.8;
-  const strokeWidth = edge.trace
-    ? 2.6
-    : edge.aggregated
-      ? 2.2
-      : edge.synthetic
-        ? 1.6
-        : edge.crossDomain
-          ? 1.9
-          : edge.tone === 'primary'
-            ? 1.7
-            : 1.4;
+  const opacity = edge.tone === 'muted'
+    ? 0.11
+    : edge.tone === 'secondary'
+      ? 0.34
+      : 0.8;
+  const strokeWidth = edge.aggregated
+    ? 2.2
+    : edge.synthetic
+      ? 1.6
+      : edge.crossDomain
+        ? 1.9
+        : edge.tone === 'primary'
+          ? 1.7
+          : 1.4;
   const dash = edge.synthetic
     ? 'stroke-dasharray:11 6;'
     : edge.type === 'depends_on'
@@ -1135,15 +1058,13 @@ function toFlowEdge(edge: PresentedEdge): Edge {
     target: edge.to,
     type: 'smoothstep',
     label: edge.showLabel ? edge.label : '',
-    animated: edge.trace,
+    animated: false,
     markerEnd: {
       type: MarkerType.ArrowClosed,
       color: edgeColor(edge.type),
     },
     style: `stroke:${edgeColor(edge.type)};stroke-width:${strokeWidth};opacity:${opacity};${dash}`,
-    labelStyle: edge.trace
-      ? 'font-size:11px;font-weight:700;color:#1b2730;background:rgba(255,250,242,0.98);border:1px solid rgba(13,118,97,0.18);border-radius:999px;padding:3px 8px;box-shadow:0 10px 24px rgba(13,118,97,0.12);'
-      : 'font-size:11px;font-weight:600;color:#4f5b66;background:rgba(255,252,246,0.96);border:1px solid rgba(23,32,39,0.08);border-radius:999px;padding:3px 8px;box-shadow:0 8px 20px rgba(58,39,14,0.08);',
+    labelStyle: 'font-size:11px;font-weight:600;color:#4f5b66;background:rgba(255,252,246,0.96);border:1px solid rgba(23,32,39,0.08);border-radius:999px;padding:3px 8px;box-shadow:0 8px 20px rgba(58,39,14,0.08);',
   };
 }
 
@@ -1382,74 +1303,6 @@ function resolveNodeSubtitle(model: GraphModel, node: WorkingNode): string {
   }
 
   return node.domain || node.owner || '';
-}
-
-function findShortestPath(
-  sourceID: string,
-  targetID: string,
-  edges: ModeEdge[],
-  directed: boolean,
-): { nodeIDs: string[]; edgeIDs: string[] } | null {
-  type PathStep = { viaNode: string | null; viaEdge: string | null };
-
-  const queue = [sourceID];
-  const seen = new Set<string>([sourceID]);
-  const parents = new Map<string, PathStep>();
-
-  while (queue.length > 0) {
-    const current = queue.shift();
-    if (!current) {
-      break;
-    }
-
-    if (current === targetID) {
-      break;
-    }
-
-    for (const edge of edges) {
-      const candidates: Array<{ next: string; edgeID: string }> = [];
-      if (edge.from === current) {
-        candidates.push({ next: edge.to, edgeID: edge.id });
-      }
-      if (!directed && edge.to === current) {
-        candidates.push({ next: edge.from, edgeID: edge.id });
-      }
-
-      for (const candidate of candidates) {
-        if (seen.has(candidate.next)) {
-          continue;
-        }
-        seen.add(candidate.next);
-        parents.set(candidate.next, {
-          viaNode: current,
-          viaEdge: candidate.edgeID,
-        });
-        queue.push(candidate.next);
-      }
-    }
-  }
-
-  if (!seen.has(targetID)) {
-    return null;
-  }
-
-  const nodeIDs: string[] = [targetID];
-  const edgeIDs: string[] = [];
-  let cursor = targetID;
-  while (cursor !== sourceID) {
-    const parent = parents.get(cursor);
-    if (!parent?.viaNode || !parent.viaEdge) {
-      break;
-    }
-    edgeIDs.unshift(parent.viaEdge);
-    nodeIDs.unshift(parent.viaNode);
-    cursor = parent.viaNode;
-  }
-
-  return {
-    nodeIDs,
-    edgeIDs,
-  };
 }
 
 function mergeImpactDirection(

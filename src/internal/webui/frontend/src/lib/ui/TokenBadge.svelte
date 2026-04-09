@@ -102,9 +102,9 @@
     --token-accent: var(--accent);
     display: inline-flex;
     align-items: center;
-    gap: 0.42rem;
+    gap: 0.34rem;
     min-height: 2rem;
-    padding: 0.38rem 0.72rem;
+    padding: 0.34rem 0.66rem;
     border-radius: 999px;
     border: 1px solid color-mix(in srgb, var(--token-accent) 18%, var(--border-soft));
     background: color-mix(in srgb, var(--token-accent) 8%, var(--surface-raised));
@@ -131,13 +131,13 @@
 
   .token-badge.is-compact {
     min-height: 1.8rem;
-    padding: 0.28rem 0.58rem;
+    padding: 0.24rem 0.52rem;
   }
 
   .token-badge__main {
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
+    gap: 0.34rem;
     min-width: 0;
   }
 
@@ -147,31 +147,39 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 1.28rem;
-    height: 1.28rem;
-    padding: 0 0.24rem;
+    min-width: 1.08rem;
+    height: 1.08rem;
+    padding: 0 0.22rem;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--token-accent) 14%, var(--surface-raised));
-    color: color-mix(in srgb, var(--token-accent) 86%, var(--text-primary));
-    font-size: 0.6rem;
+    background: color-mix(in srgb, var(--token-accent) 10%, var(--surface-raised));
+    color: color-mix(in srgb, var(--token-accent) 74%, var(--text-primary));
+    font-size: 0.55rem;
     font-weight: 800;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.03em;
     text-transform: uppercase;
     flex: 0 0 auto;
   }
 
   .token-badge__label {
     min-width: 0;
-    font-size: 0.74rem;
-    font-weight: 650;
+    font-size: 0.72rem;
+    font-weight: 620;
     letter-spacing: 0.01em;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
   .token-badge__count {
-    min-width: 1.36rem;
-    font-size: 0.67rem;
+    min-width: 1.18rem;
+    height: 1rem;
+    padding: 0 0.22rem;
+    font-size: 0.62rem;
     box-shadow: inset 0 0 0 1px var(--border-soft);
+  }
+
+  .token-badge__trailing {
+    min-width: 1rem;
+    height: 1rem;
+    font-size: 0.56rem;
   }
 </style>
