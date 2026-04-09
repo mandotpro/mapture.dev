@@ -27,6 +27,7 @@ go run src/main.go serve examples/ecommerce
 ```
 
 Then open the local explorer and inspect the bundled example graph.
+For the repo’s day-to-day wrappers and testing helpers, run `make help`.
 
 ## Install
 
@@ -44,12 +45,12 @@ Install the rolling canary channel today:
 brew install mandotpro/mapture/mapture-canary
 ```
 
-The stable `mapture` formula will be published to the same tap after the first semver release lands.
+Stable `mapture` Homebrew packages are published from semver releases cut on the `0.x` branch.
 Both channels install the same `mapture` binary, so switch channels by uninstalling the other formula first.
 
 ### Stable releases
 
-Download a prebuilt binary from [GitHub Releases](https://github.com/mandotpro/mapture.dev/releases).
+Download semver-tagged binaries from [GitHub Releases](https://github.com/mandotpro/mapture.dev/releases). Stable releases are prepared from the `0.x` branch through automated release PRs.
 
 ### Canary builds
 
@@ -110,10 +111,11 @@ That means:
 
 ## Release channels
 
-- Stable releases use semver tags and are published through the automated release flow.
+- Stable semver releases are cut from the `0.x` branch and published through automated release PRs.
+- Merges into `main` do not produce stable tags; they update the rolling canary channel only.
 - Canary builds are rolling prereleases from the latest successful `main` build.
 - Homebrew canary installs are synced to `mandotpro/mapture` from the canary workflow.
-- Stable version bumps are driven by Conventional Commit style squash-merge titles.
+- Stable version bumps are driven by Conventional Commit style squash-merge titles on `0.x`.
 
 ## Contributing and support
 
