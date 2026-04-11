@@ -75,6 +75,10 @@ jobs:
       - build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          fetch-depth: 0
       - uses: actions/download-artifact@v8
         with:
           path: dist
@@ -92,6 +96,11 @@ jobs:
           CANARY_VERSION: ${{ needs.prepare.outputs.version }}
           CANARY_BUILT_AT: ${{ needs.prepare.outputs.built_at }}
         run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f canary "$CANARY_SHA"
+          git push origin refs/tags/canary --force
+
           cat > canary-notes.md <<EOF
           Rolling canary build from \`main\`.
 

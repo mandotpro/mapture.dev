@@ -62,7 +62,7 @@ The committed bundle is part of the shipped single-binary experience.
 
 ## Release notes and versioning
 
-Stable releases are managed through an automated release PR flow on `0.x`. Canary builds are published separately from `main`.
+Stable releases are managed through an automated release PR flow on `0.x` and published as plain `v0.x.y` semver tags. Canary builds are published separately from `main` through the moving `canary` tag.
 The Homebrew tap in `mandotpro/homebrew-mapture` is updated automatically from the same release pipelines when the required repository variable and token secret are present.
 
 If your change is user-visible, make sure the PR description explains:
