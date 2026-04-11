@@ -3,8 +3,7 @@ flowchart LR
     n_api_payment_api([Payment API])
     n_api_stripe_webhook_api([Stripe Webhook API])
     n_database_billing_db[(Billing Database)]
-    n_event_payment_captured_event((Payment Captured Event))
-    n_event_payment_captured((Payment Captured))
+    n_event_payment_captured((Payment Captured Event))
     n_event_payment_failed((Payment Failed))
     n_event_stripe_webhook_received((Stripe Webhook Received))
     n_service_payment_service[Payment Service]
@@ -15,6 +14,6 @@ flowchart LR
   n_event_stripe_webhook_received -->|consumed by| n_api_stripe_webhook_api
   n_service_payment_service -->|reads from| n_database_billing_db
   n_service_payment_service -->|stores in| n_database_billing_db
-  n_service_payment_service -->|depends on| n_event_payment_captured_event
+  n_service_payment_service -->|depends on| n_event_payment_captured
   n_service_payment_service -->|emits| n_event_payment_captured
   n_service_payment_service -->|emits| n_event_payment_failed

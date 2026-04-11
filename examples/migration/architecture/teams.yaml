@@ -1,8 +1,0 @@
-teams:
-  - id: team-legacy
-    name: Legacy Commerce
-    email: legacy@example.com
-
-  - id: team-platform
-    name: Orders Platform
-    email: platform@example.com

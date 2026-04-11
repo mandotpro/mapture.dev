@@ -28,13 +28,10 @@ languages:
 		t.Fatalf("Load returned error: %v", err)
 	}
 
-	if cfg.Catalog.Dir != "./architecture" {
-		t.Fatalf("expected default catalog dir, got %q", cfg.Catalog.Dir)
-	}
 	if cfg.Comments.Style != "tags" {
 		t.Fatalf("expected default comment style, got %q", cfg.Comments.Style)
 	}
-	if !cfg.Validation.FailOnUnknownDomain || !cfg.Validation.FailOnUnknownTeam || !cfg.Validation.FailOnUnknownEvent || !cfg.Validation.FailOnUnknownNode {
+	if !cfg.Validation.FailOnUnknownDomain || !cfg.Validation.FailOnUnknownTeam || !cfg.Validation.FailOnUnknownNode {
 		t.Fatalf("expected default failOnUnknown* values to be true: %+v", cfg.Validation)
 	}
 	if cfg.Validation.WarnOnOrphanedNodes {

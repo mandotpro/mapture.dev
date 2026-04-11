@@ -17,6 +17,7 @@ final class CheckoutService
          * @event.id order.placed
          * @event.role trigger
          * @event.domain orders
+         * @event.owner team-commerce
          * @event.producer App\Orders\CheckoutService::placeOrder
          * @event.phase post-commit
          */

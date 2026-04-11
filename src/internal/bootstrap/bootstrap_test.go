@@ -94,7 +94,6 @@ func TestWriteScaffoldSkipsExistingFiles(t *testing.T) {
 		LanguageEnabled:        map[string]bool{"go": true, "php": false, "typescript": false, "javascript": false},
 		FailOnUnknownDomain:    true,
 		FailOnUnknownTeam:      true,
-		FailOnUnknownEvent:     true,
 		FailOnUnknownNode:      true,
 		WarnOnDeprecatedEvents: true,
 		WarnOnOrphanedNodes:    false,
@@ -108,7 +107,7 @@ func TestWriteScaffoldSkipsExistingFiles(t *testing.T) {
 	if len(result.Skipped) != 1 || result.Skipped[0] != "mapture.yaml" {
 		t.Fatalf("expected mapture.yaml to be skipped, got %+v", result)
 	}
-	if len(result.Created) != 3 {
-		t.Fatalf("expected three created catalog files, got %+v", result)
+	if len(result.Created) != 0 {
+		t.Fatalf("expected no additional scaffold files beyond mapture.yaml, got %+v", result)
 	}
 }

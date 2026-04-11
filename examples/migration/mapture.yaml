@@ -3,8 +3,29 @@ version: 1
 # Lean strangler-fig fixture that keeps a legacy checkout path alive
 # while modern order ownership moves into a dedicated service.
 
-catalog:
-  dir: ./architecture
+teams:
+  - id: team-legacy
+    name: Legacy Commerce
+    email: legacy@example.com
+
+  - id: team-platform
+    name: Orders Platform
+    email: platform@example.com
+
+domains:
+  - id: legacy
+    name: Legacy
+    ownerTeams: [team-legacy]
+    description: Monolith-owned checkout and order state that is being strangled away.
+    allowedOutboundDomains: [orders]
+    allowedInboundDomains: [orders]
+
+  - id: orders
+    name: Orders
+    ownerTeams: [team-platform]
+    description: Modern order write path and canonical order events.
+    allowedOutboundDomains: [legacy]
+    allowedInboundDomains: [legacy]
 
 scan:
   include:
@@ -25,7 +46,6 @@ comments:
 validation:
   failOnUnknownDomain: true
   failOnUnknownTeam: true
-  failOnUnknownEvent: true
   failOnUnknownNode: true
   warnOnOrphanedNodes: false
   warnOnDeprecatedEvents: true

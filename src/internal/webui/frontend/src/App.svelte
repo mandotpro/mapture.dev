@@ -93,7 +93,6 @@
     edgeTypes: [],
     teams: new Map(),
     domainNames: new Map(),
-    events: new Map(),
     ui: {
       defaultLayout: 'elk-horizontal',
       nodeColors: {

@@ -29,7 +29,9 @@
       "type": "event",
       "name": "Order Placed",
       "domain": "orders",
-      "owner": "team-commerce"
+      "owner": "team-commerce",
+      "file": "src/php/CheckoutService.php",
+      "line": 16
     },
     {
       "id": "service:checkout-service",

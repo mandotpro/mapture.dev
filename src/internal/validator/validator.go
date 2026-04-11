@@ -43,6 +43,20 @@ type BuildOptions struct {
 	Scoped         bool
 }
 
+type eventModel struct {
+	Node                graph.Node
+	Deprecated          bool
+	hasDefinition       bool
+	hasProducerMetadata bool
+}
+
+type eventModelSet struct {
+	byID             map[string]eventModel
+	aliases          map[string]string
+	archByLocation   map[string]scanner.RawBlock
+	pairedByLocation map[string]string
+}
+
 // ValidationError reports one or more validation errors.
 type ValidationError struct {
 	Result *Result
@@ -93,26 +107,14 @@ func Build(cfg *config.Config, cat *catalog.Catalog, blocks []scanner.RawBlock, 
 	if len(opts) > 0 {
 		buildOptions = opts[0]
 	}
-	archNodes := make(map[string]graph.Node)
+	eventModels := collectEventModels(blocks)
 	fileNodes := make(map[string][]graph.Node)
-	referencedEventIDs, requiredNodeRefs := collectScopedRefs(blocks)
+	requiredNodeRefs := collectScopedRefs(blocks, eventModels.aliases)
 
-	for _, event := range cat.Events {
-		if buildOptions.Scoped {
-			if _, ok := referencedEventIDs[event.ID]; !ok {
-				continue
-			}
-		}
-		node := graph.Node{
-			ID:      eventNodeID(event.ID),
-			Type:    graph.NodeEvent,
-			Name:    event.Name,
-			Domain:  event.Domain,
-			Owner:   event.OwnerTeam,
-			Summary: event.Description,
-		}
+	for _, event := range eventModels.byID {
+		node := event.Node
 		if err := builder.AddNode(node); err != nil {
-			addError(result, 6, "duplicate_node_id", err.Error(), "", 0)
+			addError(result, 6, "duplicate_node_id", err.Error(), node.File, node.Line)
 		}
 	}
 
@@ -120,7 +122,10 @@ func Build(cfg *config.Config, cat *catalog.Catalog, blocks []scanner.RawBlock, 
 		if block.Kind != "arch" {
 			continue
 		}
-		node, err := buildArchNode(block)
+		if _, paired := eventModels.pairedByLocation[blockLocationKey(block.File, block.Line)]; paired {
+			continue
+		}
+		node, err := buildArchNode(block, eventModels.aliases)
 		if err != nil {
 			addError(result, 6, "invalid_node", err.Error(), block.File, block.Line)
 			continue
@@ -133,7 +138,6 @@ func Build(cfg *config.Config, cat *catalog.Catalog, blocks []scanner.RawBlock, 
 			addError(result, 6, "duplicate_node_id", err.Error(), block.File, block.Line)
 			continue
 		}
-		archNodes[node.ID] = node
 		fileNodes[node.File] = append(fileNodes[node.File], node)
 	}
 
@@ -146,27 +150,34 @@ func Build(cfg *config.Config, cat *catalog.Catalog, blocks []scanner.RawBlock, 
 	for _, block := range blocks {
 		switch block.Kind {
 		case "arch":
-			sourceNode, err := buildArchNode(block)
+			if _, paired := eventModels.pairedByLocation[blockLocationKey(block.File, block.Line)]; paired {
+				continue
+			}
+			sourceNode, err := buildArchNode(block, eventModels.aliases)
 			if err != nil {
 				continue
 			}
 			for relation, targets := range block.Relations {
 				for _, target := range targets {
+					targetRef := nodeRef{Type: target.Type, ID: target.ID}
+					if targetRef.Type == graph.NodeEvent {
+						targetRef.ID = canonicalEventID(targetRef.ID, eventModels.aliases)
+					}
+					targetNodeID := nodeIDForRef(targetRef)
 					if buildOptions.Scoped {
-						requiredNodeRefs[fmt.Sprintf("%s:%s", target.Type, target.ID)] = nodeRef{
-							Type: target.Type,
-							ID:   target.ID,
-						}
+						requiredNodeRefs[targetNodeID] = targetRef
 					}
 					builder.AddEdge(graph.Edge{
 						From: sourceNode.ID,
-						To:   fmt.Sprintf("%s:%s", target.Type, target.ID),
+						To:   targetNodeID,
 						Type: relation,
 					})
 				}
 			}
 		case "event":
-			validateEventBlock(result, cfg, cat, block)
+			eventID := block.Fields["id"]
+			model := eventModels.byID[eventID]
+			validateEventBlock(result, cfg, cat, block, model, eventModels.archByLocation[blockLocationKey(block.File, block.Line)])
 
 			relation, ok := eventRelation(block.Fields["role"])
 			if !ok {
@@ -180,14 +191,14 @@ func Build(cfg *config.Config, cat *catalog.Catalog, blocks []scanner.RawBlock, 
 			}
 
 			from := source.ID
-			to := eventNodeID(block.Fields["id"])
+			to := eventNodeID(eventID)
 			if relation.FromEvent {
 				from, to = to, from
 			}
 			if buildOptions.Scoped {
-				requiredNodeRefs[eventNodeID(block.Fields["id"])] = nodeRef{
+				requiredNodeRefs[eventNodeID(eventID)] = nodeRef{
 					Type: graph.NodeEvent,
-					ID:   block.Fields["id"],
+					ID:   eventID,
 				}
 			}
 
@@ -200,7 +211,7 @@ func Build(cfg *config.Config, cat *catalog.Catalog, blocks []scanner.RawBlock, 
 	}
 
 	if buildOptions.Scoped {
-		synthesizeScopedBoundaryNodes(builder, cat, requiredNodeRefs)
+		synthesizeScopedBoundaryNodes(builder, requiredNodeRefs)
 	}
 
 	result.Graph = builder.Build(graph.NewMetadata(buildOptions.SourceRoot, buildOptions.GeneratedAt, buildOptions.ScannerVersion))
@@ -218,14 +229,17 @@ func Build(cfg *config.Config, cat *catalog.Catalog, blocks []scanner.RawBlock, 
 	return result, nil
 }
 
-func buildArchNode(block scanner.RawBlock) (graph.Node, error) {
+func buildArchNode(block scanner.RawBlock, eventAliases map[string]string) (graph.Node, error) {
 	ref, err := parseNodeRef(block.Fields["node"])
 	if err != nil {
 		return graph.Node{}, err
 	}
+	if ref.Type == graph.NodeEvent {
+		ref.ID = canonicalEventID(ref.ID, eventAliases)
+	}
 
 	return graph.Node{
-		ID:      fmt.Sprintf("%s:%s", ref.Type, ref.ID),
+		ID:      nodeIDForRef(ref),
 		Type:    ref.Type,
 		Name:    block.Fields["name"],
 		Domain:  block.Fields["domain"],
@@ -253,8 +267,146 @@ func eventNodeID(eventID string) string {
 	return graph.NodeEvent + ":" + eventID
 }
 
-func collectScopedRefs(blocks []scanner.RawBlock) (map[string]struct{}, map[string]nodeRef) {
-	eventIDs := make(map[string]struct{})
+func nodeIDForRef(ref nodeRef) string {
+	if ref.Type == graph.NodeEvent {
+		return eventNodeID(ref.ID)
+	}
+	return fmt.Sprintf("%s:%s", ref.Type, ref.ID)
+}
+
+func blockLocationKey(file string, line int) string {
+	return fmt.Sprintf("%s:%d", file, line)
+}
+
+func canonicalEventID(id string, aliases map[string]string) string {
+	if canonical, ok := aliases[id]; ok {
+		return canonical
+	}
+	return id
+}
+
+func collectEventModels(blocks []scanner.RawBlock) eventModelSet {
+	models := eventModelSet{
+		byID:             make(map[string]eventModel),
+		aliases:          make(map[string]string),
+		archByLocation:   collectEventArchBlocks(blocks),
+		pairedByLocation: make(map[string]string),
+	}
+
+	for _, block := range blocks {
+		if block.Kind != "event" {
+			continue
+		}
+
+		eventID := block.Fields["id"]
+		if eventID == "" {
+			continue
+		}
+
+		model := ensureEventModel(models.byID[eventID], eventID)
+		location := blockLocationKey(block.File, block.Line)
+		if archBlock, ok := models.archByLocation[location]; ok {
+			model = attachPairedArchMetadata(model, eventID, archBlock, location, &models)
+		}
+		model = applyEventRoleMetadata(model, block)
+		models.byID[eventID] = model
+	}
+
+	return models
+}
+
+func collectEventArchBlocks(blocks []scanner.RawBlock) map[string]scanner.RawBlock {
+	archByLocation := make(map[string]scanner.RawBlock)
+	for _, block := range blocks {
+		if block.Kind != "arch" {
+			continue
+		}
+		ref, err := parseNodeRef(block.Fields["node"])
+		if err != nil || ref.Type != graph.NodeEvent {
+			continue
+		}
+		archByLocation[blockLocationKey(block.File, block.Line)] = block
+	}
+	return archByLocation
+}
+
+func ensureEventModel(model eventModel, eventID string) eventModel {
+	if model.Node.ID != "" {
+		return model
+	}
+	model.Node = graph.Node{
+		ID:   eventNodeID(eventID),
+		Type: graph.NodeEvent,
+		Name: fallbackNodeName(eventID),
+	}
+	return model
+}
+
+func attachPairedArchMetadata(model eventModel, eventID string, archBlock scanner.RawBlock, location string, models *eventModelSet) eventModel {
+	ref, err := parseNodeRef(archBlock.Fields["node"])
+	if err == nil && ref.Type == graph.NodeEvent {
+		models.aliases[ref.ID] = eventID
+		models.pairedByLocation[location] = eventID
+	}
+	if archBlock.Fields["name"] != "" {
+		model.Node.Name = archBlock.Fields["name"]
+	}
+	if archBlock.Fields["description"] != "" {
+		model.Node.Summary = archBlock.Fields["description"]
+	}
+	if archBlock.Fields["status"] == "deprecated" {
+		model.Deprecated = true
+	}
+	if model.Node.File == "" {
+		model.Node.File = archBlock.File
+		model.Node.Line = archBlock.Line
+	}
+	return model
+}
+
+func applyEventRoleMetadata(model eventModel, block scanner.RawBlock) eventModel {
+	switch block.Fields["role"] {
+	case "definition":
+		model.hasDefinition = true
+		model.Node.Domain = block.Fields["domain"]
+		if owner := block.Fields["owner"]; owner != "" {
+			model.Node.Owner = owner
+		}
+		if notes := block.Fields["notes"]; notes != "" && model.Node.Summary == "" {
+			model.Node.Summary = notes
+		}
+		model.Node.File = block.File
+		model.Node.Line = block.Line
+	case "trigger", "publisher", "bridge-out":
+		if !model.hasDefinition && !model.hasProducerMetadata {
+			applyEventFallbackMetadata(&model, block)
+		}
+		model.hasProducerMetadata = true
+	default:
+		if model.Node.Domain == "" || model.Node.Owner == "" || model.Node.File == "" || model.Node.Summary == "" {
+			applyEventFallbackMetadata(&model, block)
+		}
+	}
+	return model
+}
+
+func applyEventFallbackMetadata(model *eventModel, block scanner.RawBlock) {
+	if model.Node.Domain == "" {
+		model.Node.Domain = block.Fields["domain"]
+	}
+	if model.Node.Owner == "" {
+		model.Node.Owner = block.Fields["owner"]
+	}
+	if notes := block.Fields["notes"]; notes != "" && model.Node.Summary == "" {
+		model.Node.Summary = notes
+	}
+	if model.Node.File == "" {
+		model.Node.File = block.File
+		model.Node.Line = block.Line
+	}
+}
+
+func collectScopedRefs(blocks []scanner.RawBlock, eventAliases map[string]string) map[string]nodeRef {
 	requiredNodeRefs := make(map[string]nodeRef)
 
 	for _, block := range blocks {
@@ -263,7 +415,6 @@ func collectScopedRefs(blocks []scanner.RawBlock) (map[string]struct{}, map[stri
 			if eventID == "" {
 				continue
 			}
-			eventIDs[eventID] = struct{}{}
 			requiredNodeRefs[eventNodeID(eventID)] = nodeRef{
 				Type: graph.NodeEvent,
 				ID:   eventID,
@@ -272,18 +423,19 @@ func collectScopedRefs(blocks []scanner.RawBlock) (map[string]struct{}, map[stri
 
 		for _, targets := range block.Relations {
 			for _, target := range targets {
-				if target.Type == graph.NodeEvent {
-					eventIDs[target.ID] = struct{}{}
-				}
-				requiredNodeRefs[fmt.Sprintf("%s:%s", target.Type, target.ID)] = nodeRef{
+				ref := nodeRef{
 					Type: target.Type,
 					ID:   target.ID,
 				}
+				if ref.Type == graph.NodeEvent {
+					ref.ID = canonicalEventID(ref.ID, eventAliases)
+				}
+				requiredNodeRefs[nodeIDForRef(ref)] = ref
 			}
 		}
 	}
 
-	return eventIDs, requiredNodeRefs
+	return requiredNodeRefs
 }
 
 func checkDomain(result *Result, fail bool, file string, line int, domainID string, cat *catalog.Catalog) {
@@ -308,28 +460,25 @@ func checkOwner(result *Result, fail bool, file string, line int, ownerID string
 	addWarning(result, 4, "unknown_team", fmt.Sprintf("unknown team %q", ownerID), file, line)
 }
 
-func validateEventBlock(result *Result, cfg *config.Config, cat *catalog.Catalog, block scanner.RawBlock) {
-	eventID := block.Fields["id"]
-	event, ok := cat.EventsByID[eventID]
-	if !ok {
-		if cfg.Validation.FailOnUnknownEvent {
-			addError(result, 4, "unknown_event", fmt.Sprintf("unknown event %q", eventID), block.File, block.Line)
-		} else {
-			addWarning(result, 4, "unknown_event", fmt.Sprintf("unknown event %q", eventID), block.File, block.Line)
-		}
-		return
+func validateEventBlock(result *Result, cfg *config.Config, cat *catalog.Catalog, block scanner.RawBlock, model eventModel, pairedArch scanner.RawBlock) {
+	checkDomain(result, cfg.Validation.FailOnUnknownDomain, block.File, block.Line, block.Fields["domain"], cat)
+	if owner := block.Fields["owner"]; owner != "" {
+		checkOwner(result, cfg.Validation.FailOnUnknownTeam, block.File, block.Line, owner, cat)
 	}
 
-	if block.Fields["role"] == "definition" && block.Fields["domain"] != event.Domain {
-		addError(result, 4, "event_domain_mismatch", fmt.Sprintf("event %q belongs to domain %q, not %q", eventID, event.Domain, block.Fields["domain"]), block.File, block.Line)
-	}
-	if block.Fields["role"] == "definition" {
-		if owner := block.Fields["owner"]; owner != "" && owner != event.OwnerTeam {
-			addError(result, 4, "event_owner_mismatch", fmt.Sprintf("event %q owner should be %q, not %q", eventID, event.OwnerTeam, owner), block.File, block.Line)
+	if block.Fields["role"] == "definition" && pairedArch.Kind == "arch" {
+		if domain := pairedArch.Fields["domain"]; domain != "" && domain != block.Fields["domain"] {
+			addError(result, 4, "event_domain_mismatch", fmt.Sprintf("event %q belongs to domain %q, not %q", block.Fields["id"], domain, block.Fields["domain"]), block.File, block.Line)
+		}
+		if owner := block.Fields["owner"]; owner != "" {
+			if archOwner := pairedArch.Fields["owner"]; archOwner != "" && archOwner != owner {
+				addError(result, 4, "event_owner_mismatch", fmt.Sprintf("event %q owner should be %q, not %q", block.Fields["id"], archOwner, owner), block.File, block.Line)
+			}
 		}
 	}
-	if cfg.Validation.WarnOnDeprecatedEvents && (event.Deprecated || event.Status == "deprecated") {
-		addWarning(result, 4, "deprecated_event", fmt.Sprintf("event %q is deprecated", eventID), block.File, block.Line)
+
+	if cfg.Validation.WarnOnDeprecatedEvents && model.Deprecated {
+		addWarning(result, 4, "deprecated_event", fmt.Sprintf("event %q is deprecated", block.Fields["id"]), block.File, block.Line)
 	}
 }
 
@@ -394,7 +543,7 @@ func validateEdgeTargets(result *Result, cfg *config.Config, g graph.Graph) {
 	}
 }
 
-func synthesizeScopedBoundaryNodes(builder *graph.Builder, cat *catalog.Catalog, refs map[string]nodeRef) {
+func synthesizeScopedBoundaryNodes(builder *graph.Builder, refs map[string]nodeRef) {
 	for nodeID, ref := range refs {
 		if builder.HasNode(nodeID) {
 			continue
@@ -406,17 +555,6 @@ func synthesizeScopedBoundaryNodes(builder *graph.Builder, cat *catalog.Catalog,
 			Name:    fallbackNodeName(ref.ID),
 			Summary: "Inferred out-of-scope boundary from scoped scan.",
 		}
-		if ref.Type == graph.NodeEvent {
-			if event, ok := cat.EventsByID[ref.ID]; ok {
-				node.Name = event.Name
-				node.Domain = event.Domain
-				node.Owner = event.OwnerTeam
-				if event.Description != "" {
-					node.Summary = event.Description
-				}
-			}
-		}
-
 		_ = builder.AddNode(node)
 	}
 }
