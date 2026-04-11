@@ -5,17 +5,25 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mandotpro/mapture.dev/src/internal/config"
 )
 
-func TestLoadBuildsIndexes(t *testing.T) {
+func TestLoadBuildsIndexesFromInlineConfig(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	writeCatalogFile(t, root, "teams.yaml", "teams:\n  - id: team-commerce\n    name: Commerce Team\n    email: commerce@example.com\n")
-	writeCatalogFile(t, root, "domains.yaml", "domains:\n  - id: orders\n    name: Orders\n    ownerTeams: [team-commerce]\n")
-	writeCatalogFile(t, root, "events.yaml", "events:\n  - id: order.placed\n    name: Order Placed\n    domain: orders\n    ownerTeam: team-commerce\n    kind: domain\n    visibility: internal\n    status: active\n")
+	configPath := filepath.Join(root, "mapture.yaml")
+	cfg := &config.Config{
+		Teams: []config.Team{
+			{ID: "team-commerce", Name: "Commerce Team", Email: "commerce@example.com"},
+		},
+		Domains: []config.Domain{
+			{ID: "orders", Name: "Orders", OwnerTeams: []string{"team-commerce"}},
+		},
+	}
 
-	c, err := Load(root)
+	c, err := Load(configPath, cfg)
 	if err != nil {
 		t.Fatalf("Load returned error: %v", err)
 	}
@@ -26,8 +34,29 @@ func TestLoadBuildsIndexes(t *testing.T) {
 	if _, ok := c.DomainsByID["orders"]; !ok {
 		t.Fatalf("expected domain index to be populated")
 	}
-	if _, ok := c.EventsByID["order.placed"]; !ok {
-		t.Fatalf("expected event index to be populated")
+}
+
+func TestLoadSupportsLegacyCatalogDirForTeamsAndDomains(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	configPath := filepath.Join(root, "mapture.yaml")
+	if err := os.MkdirAll(filepath.Join(root, "architecture"), 0o755); err != nil {
+		t.Fatalf("mkdir architecture: %v", err)
+	}
+	writeCatalogFile(t, filepath.Join(root, "architecture"), "teams.yaml", "teams:\n  - id: team-commerce\n    name: Commerce Team\n    email: commerce@example.com\n")
+	writeCatalogFile(t, filepath.Join(root, "architecture"), "domains.yaml", "domains:\n  - id: orders\n    name: Orders\n    ownerTeams: [team-commerce]\n")
+
+	cfg := &config.Config{
+		Catalog: config.Catalog{Dir: "./architecture"},
+	}
+
+	c, err := Load(configPath, cfg)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if len(c.Teams) != 1 || len(c.Domains) != 1 {
+		t.Fatalf("unexpected catalog sizes: %+v", c)
 	}
 }
 
@@ -35,11 +64,18 @@ func TestLoadRejectsDuplicateTeamIDs(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	writeCatalogFile(t, root, "teams.yaml", "teams:\n  - id: team-commerce\n    name: One\n  - id: team-commerce\n    name: Two\n")
-	writeCatalogFile(t, root, "domains.yaml", "domains:\n  - id: orders\n    name: Orders\n    ownerTeams: [team-commerce]\n")
-	writeCatalogFile(t, root, "events.yaml", "events: []\n")
+	configPath := filepath.Join(root, "mapture.yaml")
+	cfg := &config.Config{
+		Teams: []config.Team{
+			{ID: "team-commerce", Name: "One"},
+			{ID: "team-commerce", Name: "Two"},
+		},
+		Domains: []config.Domain{
+			{ID: "orders", Name: "Orders", OwnerTeams: []string{"team-commerce"}},
+		},
+	}
 
-	_, err := Load(root)
+	_, err := Load(configPath, cfg)
 	if err == nil {
 		t.Fatalf("expected duplicate team ids to fail")
 	}
@@ -52,11 +88,17 @@ func TestLoadRejectsUnknownDomainOwnerTeam(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	writeCatalogFile(t, root, "teams.yaml", "teams:\n  - id: team-commerce\n    name: Commerce Team\n")
-	writeCatalogFile(t, root, "domains.yaml", "domains:\n  - id: orders\n    name: Orders\n    ownerTeams: [team-missing]\n")
-	writeCatalogFile(t, root, "events.yaml", "events: []\n")
+	configPath := filepath.Join(root, "mapture.yaml")
+	cfg := &config.Config{
+		Teams: []config.Team{
+			{ID: "team-commerce", Name: "Commerce Team"},
+		},
+		Domains: []config.Domain{
+			{ID: "orders", Name: "Orders", OwnerTeams: []string{"team-missing"}},
+		},
+	}
 
-	_, err := Load(root)
+	_, err := Load(configPath, cfg)
 	if err == nil {
 		t.Fatalf("expected missing team reference to fail")
 	}
@@ -65,20 +107,18 @@ func TestLoadRejectsUnknownDomainOwnerTeam(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsInvalidEventStatusViaSchema(t *testing.T) {
+func TestLoadRequiresTeamsAndDomainsFromEitherSource(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	writeCatalogFile(t, root, "teams.yaml", "teams:\n  - id: team-commerce\n    name: Commerce Team\n")
-	writeCatalogFile(t, root, "domains.yaml", "domains:\n  - id: orders\n    name: Orders\n    ownerTeams: [team-commerce]\n")
-	writeCatalogFile(t, root, "events.yaml", "events:\n  - id: order.placed\n    name: Order Placed\n    domain: orders\n    ownerTeam: team-commerce\n    kind: domain\n    visibility: internal\n    status: random\n")
+	configPath := filepath.Join(root, "mapture.yaml")
 
-	_, err := Load(root)
+	_, err := Load(configPath, &config.Config{})
 	if err == nil {
-		t.Fatalf("expected invalid event status to fail")
+		t.Fatalf("expected missing catalog data to fail")
 	}
-	if !strings.Contains(err.Error(), "status") || !strings.Contains(err.Error(), "random") {
-		t.Fatalf("expected schema error mentioning status/random, got %v", err)
+	if !strings.Contains(err.Error(), "no teams configured") {
+		t.Fatalf("expected missing teams error, got %v", err)
 	}
 }
 

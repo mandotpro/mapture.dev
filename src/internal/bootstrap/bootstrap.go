@@ -16,8 +16,6 @@ import (
 	survey "github.com/AlecAivazis/survey/v2"
 )
 
-const catalogDir = "./architecture"
-
 var supportedLanguages = []languageOption{
 	{Label: "Go", Key: "go", Extensions: []string{".go"}},
 	{Label: "PHP", Key: "php", Extensions: []string{".php"}},
@@ -83,7 +81,6 @@ type initConfig struct {
 	LanguageEnabled        map[string]bool
 	FailOnUnknownDomain    bool
 	FailOnUnknownTeam      bool
-	FailOnUnknownEvent     bool
 	FailOnUnknownNode      bool
 	WarnOnOrphanedNodes    bool
 	WarnOnDeprecatedEvents bool
@@ -234,12 +231,7 @@ func detectLanguageForFile(path string, detected map[string]bool) {
 }
 
 func existingScaffoldFiles(root string) []string {
-	candidates := []string{
-		"mapture.yaml",
-		filepath.Join("architecture", "teams.yaml"),
-		filepath.Join("architecture", "domains.yaml"),
-		filepath.Join("architecture", "events.yaml"),
-	}
+	candidates := []string{"mapture.yaml"}
 
 	existing := make([]string, 0, len(candidates))
 	for _, candidate := range candidates {
@@ -367,7 +359,6 @@ func promptConfig(root string, state detectedState, stdio survey.AskOpt, stdout 
 		LanguageEnabled:        make(map[string]bool, len(supportedLanguages)),
 		FailOnUnknownDomain:    true,
 		FailOnUnknownTeam:      true,
-		FailOnUnknownEvent:     true,
 		FailOnUnknownNode:      true,
 		WarnOnDeprecatedEvents: true,
 	}
@@ -387,7 +378,6 @@ func promptConfig(root string, state detectedState, stdio survey.AskOpt, stdout 
 	}{
 		{message: "Fail when a comment references an unknown team?", target: &config.FailOnUnknownTeam},
 		{message: "Fail when a comment references an unknown domain?", target: &config.FailOnUnknownDomain},
-		{message: "Fail when an @event.id is missing from the catalog?", target: &config.FailOnUnknownEvent},
 		{message: "Fail when a relation targets an unknown node?", target: &config.FailOnUnknownNode},
 		{message: "Warn when declared nodes have no edges?", target: &config.WarnOnOrphanedNodes},
 		{message: "Warn when deprecated events are referenced?", target: &config.WarnOnDeprecatedEvents},
@@ -496,13 +486,6 @@ func defaultExcludeDirs() []string {
 func writeScaffold(root string, config initConfig, skipExisting bool) (writeResult, error) {
 	files := map[string]string{
 		"mapture.yaml": renderConfig(config),
-		filepath.Join("architecture", "teams.yaml"):   renderTeamsCatalog(),
-		filepath.Join("architecture", "domains.yaml"): renderDomainsCatalog(),
-		filepath.Join("architecture", "events.yaml"):  renderEventsCatalog(),
-	}
-
-	if err := os.MkdirAll(filepath.Join(root, "architecture"), 0o755); err != nil {
-		return writeResult{}, fmt.Errorf("create architecture directory: %w", err)
 	}
 
 	result := writeResult{}
@@ -552,9 +535,26 @@ func renderConfig(config initConfig) string {
 
 	b.WriteString("# Mapture repository config.\n\n")
 	b.WriteString("version: 1\n\n")
-	b.WriteString("catalog:\n")
-	b.WriteString("  # Relative path to the catalog files.\n")
-	b.WriteString("  dir: " + catalogDir + "\n\n")
+	b.WriteString("# Teams and domains live here by default so a fresh setup starts with one file.\n")
+	b.WriteString("# If you later want split catalogs, uncomment the legacy section below.\n")
+	b.WriteString("# catalog:\n")
+	b.WriteString("#   dir: ./architecture\n\n")
+	b.WriteString("teams:\n")
+	b.WriteString("  - id: team-commerce\n")
+	b.WriteString("    name: Commerce Team\n")
+	b.WriteString("    email: commerce@example.com\n\n")
+	b.WriteString("  - id: team-billing\n")
+	b.WriteString("    name: Billing Team\n")
+	b.WriteString("    email: billing@example.com\n\n")
+	b.WriteString("domains:\n")
+	b.WriteString("  - id: orders\n")
+	b.WriteString("    name: Orders\n")
+	b.WriteString("    ownerTeams: [team-commerce]\n")
+	b.WriteString("    description: Handles the full lifecycle of customer orders.\n\n")
+	b.WriteString("  - id: billing\n")
+	b.WriteString("    name: Billing\n")
+	b.WriteString("    ownerTeams: [team-billing]\n")
+	b.WriteString("    description: Manages payment capture and invoicing.\n\n")
 	b.WriteString("scan:\n")
 	b.WriteString("  # Directories Mapture scans for @arch.* and @event.* tags.\n")
 	b.WriteString("  include:\n")
@@ -581,7 +581,6 @@ func renderConfig(config initConfig) string {
 	b.WriteString("validation:\n")
 	_, _ = fmt.Fprintf(&b, "  failOnUnknownDomain: %t\n", config.FailOnUnknownDomain)
 	_, _ = fmt.Fprintf(&b, "  failOnUnknownTeam: %t\n", config.FailOnUnknownTeam)
-	_, _ = fmt.Fprintf(&b, "  failOnUnknownEvent: %t\n", config.FailOnUnknownEvent)
 	_, _ = fmt.Fprintf(&b, "  failOnUnknownNode: %t\n", config.FailOnUnknownNode)
 	b.WriteString("  # Uncomment roles below if every usage must carry event metadata.\n")
 	b.WriteString("  # requireMetadataOn:\n")
@@ -591,46 +590,6 @@ func renderConfig(config initConfig) string {
 	_, _ = fmt.Fprintf(&b, "  warnOnDeprecatedEvents: %t\n", config.WarnOnDeprecatedEvents)
 
 	return b.String()
-}
-
-func renderTeamsCatalog() string {
-	return `teams:
-  - id: team-commerce
-    name: Commerce Team
-    email: commerce@example.com
-
-  - id: team-billing
-    name: Billing Team
-    email: billing@example.com
-`
-}
-
-func renderDomainsCatalog() string {
-	return `domains:
-  - id: orders
-    name: Orders
-    ownerTeams: [team-commerce]
-    description: Handles the full lifecycle of customer orders.
-
-  - id: billing
-    name: Billing
-    ownerTeams: [team-billing]
-    description: Manages payment capture and invoicing.
-`
-}
-
-func renderEventsCatalog() string {
-	return `events:
-  - id: order.placed
-    name: Order Placed
-    domain: orders
-    ownerTeam: team-commerce
-    kind: domain
-    visibility: internal
-    status: active
-    version: 1
-    description: Emitted when a customer successfully places an order.
-`
 }
 
 func printSummary(stdout io.Writer, root string, result writeResult) error {

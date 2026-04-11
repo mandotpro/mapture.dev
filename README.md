@@ -8,7 +8,7 @@
 [![Go Version](https://img.shields.io/github/go-mod/go-version/mandotpro/mapture.dev)](https://github.com/mandotpro/mapture.dev/blob/main/go.mod)
 [![License](https://img.shields.io/github/license/mandotpro/mapture.dev)](./LICENSE)
 
-Mapture is an experimental architecture graph tool for repositories that want a lightweight, reviewable source of truth for system structure. It combines a small YAML catalog with flat `@arch.*` and `@event.*` code comments, validates the result, and renders it as CLI output, Mermaid diagrams, and an interactive explorer.
+Mapture is an experimental architecture graph tool for repositories that want a lightweight, reviewable source of truth for system structure. It keeps teams, domains, scan settings, and UI defaults in `mapture.yaml`, derives event nodes from flat `@arch.*` and `@event.*` code comments, validates the result, and renders it as CLI output, Mermaid diagrams, and an interactive explorer.
 
 > Status: early preview. Mapture is under active development and not production-ready yet, but the validator, graph pipeline, examples, and local explorer are ready for evaluation and feedback.
 
@@ -22,6 +22,7 @@ Clone the repo and run the current examples locally:
 git clone https://github.com/mandotpro/mapture.dev.git
 cd mapture.dev
 
+make help
 go run src/main.go validate examples/demo
 go run src/main.go serve examples/ecommerce
 ```
@@ -84,9 +85,9 @@ Notes:
 
 ## What Mapture does today
 
-- Validates catalog ownership, domains, events, and architecture references
+- Validates teams, domains, and architecture references from a single repo config by default
 - Scans Go, PHP, TypeScript, and JavaScript comment blocks for `@arch.*` and `@event.*` tags
-- Builds a normalized graph with deterministic node and edge identities
+- Builds a normalized graph with deterministic node and edge identities, including event nodes derived from code comments
 - Exports Mermaid diagrams for filtered graph views
 - Serves an interactive local explorer UI for browsing the graph
 - Ships example fixtures for demo, ecommerce, migration, and invalid validation cases
@@ -106,7 +107,7 @@ That means:
 
 - no heavy source instrumentation
 - no separate modeling tool to keep in sync
-- one small catalog for ownership and canonical event/domain references
+- one small repo config for teams, domains, scanning, and UI defaults
 - portable annotations that work across mixed-language repos
 
 ## Supported source languages

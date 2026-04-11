@@ -1,7 +1,13 @@
 version: 1
 
-catalog:
-  dir: ./architecture
+teams:
+  - id: team-commerce
+    name: Commerce Team
+
+domains:
+  - id: billing
+    name: Billing
+    ownerTeams: [team-commerce]
 
 scan:
   include:
@@ -23,7 +29,6 @@ comments:
 validation:
   failOnUnknownDomain: true
   failOnUnknownTeam: true
-  failOnUnknownEvent: true
   failOnUnknownNode: true
   warnOnOrphanedNodes: false
   warnOnDeprecatedEvents: true

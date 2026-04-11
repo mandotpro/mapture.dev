@@ -79,7 +79,6 @@ expect_scan_failure() {
 expect_failure examples/invalid/bad-config-role
 expect_failure examples/invalid/duplicate-team
 expect_failure examples/invalid/unknown-domain-owner
-expect_failure examples/invalid/invalid-event-status
 expect_failure examples/invalid/missing-teams-file
 expect_failure examples/invalid/comment-unknown-domain-ref
 expect_failure examples/invalid/comment-event-domain-mismatch

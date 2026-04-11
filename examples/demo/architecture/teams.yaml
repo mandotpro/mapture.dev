@@ -1,8 +1,0 @@
-teams:
-  - id: team-commerce
-    name: Commerce Team
-    email: commerce@example.com
-
-  - id: team-billing
-    name: Billing Team
-    email: billing@example.com

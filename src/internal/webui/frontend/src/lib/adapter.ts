@@ -1,7 +1,6 @@
 import { MarkerType, Position, type Edge, type Node } from '@xyflow/svelte';
 import type {
   BackendGraph,
-  CatalogEvent,
   DensityMode,
   Diagnostic,
   ExplorerPayload,
@@ -20,6 +19,7 @@ import type {
   PresentedGroupKind,
   PresentedNode,
   PresenterFocus,
+  StageBandOverlay,
   TypeSummary,
   UIConfig,
   ViewMode,
@@ -122,7 +122,6 @@ export function normalizeGraph(payload: ExplorerPayload): GraphModel {
   }));
   const teams = new Map((payload.catalog.teams ?? []).map((team) => [team.id, team.name]));
   const domainNames = new Map((payload.catalog.domains ?? []).map((domain) => [domain.id, domain.name]));
-  const events = new Map<string, CatalogEvent>((payload.catalog.events ?? []).map((event) => [event.id, event]));
 
   return {
     nodes,
@@ -134,7 +133,6 @@ export function normalizeGraph(payload: ExplorerPayload): GraphModel {
     edgeTypes: unique(edges.map((edge) => edge.type).filter(Boolean)),
     teams,
     domainNames,
-    events,
     ui: {
       defaultLayout: resolveDefaultLayout(payload.ui),
       nodeColors: resolveNodeColors(payload.ui),
@@ -214,11 +212,15 @@ export async function buildFlowPresentation(
   const lanes = options.viewMode === 'domain-lanes'
     ? buildLaneOverlays(model, graph.nodes, laidOut.nodes)
     : [];
+  const stageBands = options.viewMode === 'event-flow'
+    ? buildStageBandOverlays(graph.nodes, laidOut.nodes)
+    : [];
 
   return {
     graph: {
       ...graph,
       lanes,
+      stageBands,
     },
     flowNodes: laidOut.nodes,
     flowEdges: graph.edges.map((edge) => toFlowEdge(edge)),
@@ -682,6 +684,7 @@ function applyPresentation(
     nodes: presentedNodes,
     edges: presentedEdges,
     lanes: [],
+    stageBands: [],
   };
 }
 
@@ -1108,6 +1111,53 @@ function buildLaneOverlays(
       top: globalTop,
       height: globalBottom - globalTop,
     };
+  });
+}
+
+function buildStageBandOverlays(
+  nodes: PresentedNode[],
+  laidOutNodes: Node[],
+): StageBandOverlay[] {
+  if (laidOutNodes.length === 0) {
+    return [];
+  }
+
+  const nodeByID = new Map(nodes.map((node) => [node.id, node]));
+  const stageOrder: Array<{ id: PresentedNode['stage']; label: string; summary: string; accent: string }> = [
+    { id: 'support', label: 'Support', summary: 'Context and helpers', accent: '#8a744d' },
+    { id: 'producer', label: 'Producers', summary: 'Emit messages', accent: '#1f6fe5' },
+    { id: 'event', label: 'Events', summary: 'Contracts and signals', accent: '#cf2c7d' },
+    { id: 'consumer', label: 'Consumers', summary: 'React downstream', accent: '#12806b' },
+  ];
+  const globalTop = Math.max(
+    24,
+    Math.min(...laidOutNodes.map((node) => node.position.y)) - 68,
+  );
+  const globalBottom = Math.max(
+    ...laidOutNodes.map((node) => node.position.y + (typeof node.height === 'number' ? node.height : NODE_HEIGHT)),
+  ) + 54;
+
+  return stageOrder.flatMap((stage) => {
+    const stageNodes = laidOutNodes.filter((node) => nodeByID.get(node.id)?.stage === stage.id);
+    if (stageNodes.length === 0) {
+      return [];
+    }
+
+    const minX = Math.min(...stageNodes.map((node) => node.position.x));
+    const maxX = Math.max(
+      ...stageNodes.map((node) => node.position.x + (typeof node.width === 'number' ? node.width : NODE_WIDTH)),
+    );
+
+    return [{
+      id: stage.id,
+      label: stage.label,
+      summary: stage.summary,
+      accent: stage.accent,
+      x: minX - 36,
+      width: maxX - minX + 72,
+      top: globalTop,
+      height: globalBottom - globalTop,
+    }];
   });
 }
 

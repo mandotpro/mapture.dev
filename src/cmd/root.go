@@ -128,7 +128,7 @@ func todo(name string) func(*cobra.Command, []string) error {
 func newInitCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "init [path]",
-		Short: "Bootstrap mapture.yaml and architecture/ catalog files",
+		Short: "Bootstrap a starter mapture.yaml for the target repository",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			path := "."
@@ -190,18 +190,14 @@ func runValidateWithScopes(target string, scopes []string, stdout, stderr io.Wri
 		return err
 	}
 
-	catalogDir, err := cfg.CatalogDir(configPath)
+	if err := reporter.Stage("Loading catalog metadata", filepath.Clean(configPath)); err != nil {
+		return err
+	}
+	c, err := catalog.Load(configPath, cfg)
 	if err != nil {
 		return err
 	}
-	if err := reporter.Stage("Loading catalogs", filepath.Clean(catalogDir)); err != nil {
-		return err
-	}
-	c, err := catalog.Load(catalogDir)
-	if err != nil {
-		return err
-	}
-	if err := reporter.Success("Catalogs loaded", fmt.Sprintf("teams=%d domains=%d events=%d", len(c.Teams), len(c.Domains), len(c.Events))); err != nil {
+	if err := reporter.Success("Catalog metadata loaded", fmt.Sprintf("teams=%d domains=%d", len(c.Teams), len(c.Domains))); err != nil {
 		return err
 	}
 
@@ -276,12 +272,7 @@ func loadProject(target string) (string, *config.Config, *catalog.Catalog, error
 		return "", nil, nil, err
 	}
 
-	catalogDir, err := cfg.CatalogDir(configPath)
-	if err != nil {
-		return "", nil, nil, err
-	}
-
-	c, err := catalog.Load(catalogDir)
+	c, err := catalog.Load(configPath, cfg)
 	if err != nil {
 		return "", nil, nil, err
 	}
