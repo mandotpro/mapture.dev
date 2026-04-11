@@ -43,7 +43,7 @@ func TestResolveVersionPrefersInjectedReleaseVersion(t *testing.T) {
 	}
 }
 
-func TestResolveVersionUsesModuleVersionForSourceInstalls(t *testing.T) {
+func TestResolveVersionKeepsInjectedDevVersion(t *testing.T) {
 	t.Parallel()
 
 	info := &debug.BuildInfo{
@@ -53,6 +53,21 @@ func TestResolveVersionUsesModuleVersionForSourceInstalls(t *testing.T) {
 	}
 
 	got := resolveVersion("0.0.0-dev", info)
+	if got != "0.0.0-dev" {
+		t.Fatalf("expected injected dev version, got %q", got)
+	}
+}
+
+func TestResolveVersionUsesModuleVersionForSourceInstalls(t *testing.T) {
+	t.Parallel()
+
+	info := &debug.BuildInfo{
+		Main: debug.Module{
+			Version: "v0.0.0-20260411-abcdef",
+		},
+	}
+
+	got := resolveVersion("", info)
 	if got != "v0.0.0-20260411-abcdef" {
 		t.Fatalf("expected build info version, got %q", got)
 	}
@@ -71,7 +86,7 @@ func TestResolveVersionFallsBackToRevisionWhenVersionMissing(t *testing.T) {
 		},
 	}
 
-	got := resolveVersion("0.0.0-dev", info)
+	got := resolveVersion("", info)
 	if got != "0.0.0-dev+dirty.1234567" {
 		t.Fatalf("expected dirty revision fallback, got %q", got)
 	}

@@ -32,7 +32,7 @@ import (
 // version is overridden at build time via -ldflags. When a binary is
 // installed directly with `go install module/path@version`, no project
 // ldflags are applied, so we fall back to Go build metadata.
-var version = "0.0.0-dev"
+var version string
 
 var (
 	commandStdout io.Writer = os.Stdout
@@ -76,11 +76,13 @@ var readBuildInfo = func() *debug.BuildInfo {
 }
 
 func resolveVersion(injected string, info *debug.BuildInfo) string {
-	if injected != "" && injected != "0.0.0-dev" {
+	const devVersion = "0.0.0-dev"
+
+	if injected != "" {
 		return injected
 	}
 	if info == nil {
-		return injected
+		return devVersion
 	}
 	if info.Main.Version != "" && info.Main.Version != "(devel)" {
 		return info.Main.Version
@@ -98,15 +100,15 @@ func resolveVersion(injected string, info *debug.BuildInfo) string {
 	}
 
 	if revision == "" {
-		return injected
+		return devVersion
 	}
 	if len(revision) > 7 {
 		revision = revision[:7]
 	}
 	if modified {
-		return fmt.Sprintf("%s+dirty.%s", injected, revision)
+		return fmt.Sprintf("%s+dirty.%s", devVersion, revision)
 	}
-	return fmt.Sprintf("%s+sha.%s", injected, revision)
+	return fmt.Sprintf("%s+sha.%s", devVersion, revision)
 }
 
 // todo is a placeholder body used while v0.1 commands are scaffolded.
