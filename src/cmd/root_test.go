@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"syscall"
 	"testing"
@@ -27,6 +28,55 @@ func TestLoadProjectSuccess(t *testing.T) {
 	}
 	if len(cat.Teams) != 2 || len(cat.Domains) != 2 || len(cat.Events) != 1 {
 		t.Fatalf("unexpected catalog sizes: teams=%d domains=%d events=%d", len(cat.Teams), len(cat.Domains), len(cat.Events))
+	}
+}
+
+func TestResolveVersionPrefersInjectedReleaseVersion(t *testing.T) {
+	t.Parallel()
+
+	info := &debug.BuildInfo{
+		Main: debug.Module{
+			Version: "v0.9.9",
+		},
+	}
+
+	got := resolveVersion("v1.2.3", info)
+	if got != "v1.2.3" {
+		t.Fatalf("expected injected version, got %q", got)
+	}
+}
+
+func TestResolveVersionUsesModuleVersionForSourceInstalls(t *testing.T) {
+	t.Parallel()
+
+	info := &debug.BuildInfo{
+		Main: debug.Module{
+			Version: "v0.0.0-20260411-abcdef",
+		},
+	}
+
+	got := resolveVersion("0.0.0-dev", info)
+	if got != "v0.0.0-20260411-abcdef" {
+		t.Fatalf("expected build info version, got %q", got)
+	}
+}
+
+func TestResolveVersionFallsBackToRevisionWhenVersionMissing(t *testing.T) {
+	t.Parallel()
+
+	info := &debug.BuildInfo{
+		Main: debug.Module{
+			Version: "(devel)",
+		},
+		Settings: []debug.BuildSetting{
+			{Key: "vcs.revision", Value: "1234567890abcdef"},
+			{Key: "vcs.modified", Value: "true"},
+		},
+	}
+
+	got := resolveVersion("0.0.0-dev", info)
+	if got != "0.0.0-dev+dirty.1234567" {
+		t.Fatalf("expected dirty revision fallback, got %q", got)
 	}
 }
 

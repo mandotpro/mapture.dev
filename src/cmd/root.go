@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"syscall"
 
 	"github.com/mandotpro/mapture.dev/src/internal/bootstrap"
@@ -28,7 +29,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// version is overridden at build time via -ldflags.
+// version is overridden at build time via -ldflags. When a binary is
+// installed directly with `go install module/path@version`, no project
+// ldflags are applied, so we fall back to Go build metadata.
 var version = "0.0.0-dev"
 
 var (
@@ -51,6 +54,8 @@ func Execute() error {
 }
 
 func init() {
+	version = resolveVersion(version, readBuildInfo())
+	rootCmd.Version = version
 	rootCmd.AddCommand(
 		newInitCmd(),
 		newValidateCmd(),
@@ -60,6 +65,48 @@ func init() {
 		newExportHTMLCmd(),
 		newExportAICmd(),
 	)
+}
+
+var readBuildInfo = func() *debug.BuildInfo {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return nil
+	}
+	return info
+}
+
+func resolveVersion(injected string, info *debug.BuildInfo) string {
+	if injected != "" && injected != "0.0.0-dev" {
+		return injected
+	}
+	if info == nil {
+		return injected
+	}
+	if info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+
+	var revision string
+	var modified bool
+	for _, setting := range info.Settings {
+		switch setting.Key {
+		case "vcs.revision":
+			revision = setting.Value
+		case "vcs.modified":
+			modified = setting.Value == "true"
+		}
+	}
+
+	if revision == "" {
+		return injected
+	}
+	if len(revision) > 7 {
+		revision = revision[:7]
+	}
+	if modified {
+		return fmt.Sprintf("%s+dirty.%s", injected, revision)
+	}
+	return fmt.Sprintf("%s+sha.%s", injected, revision)
 }
 
 // todo is a placeholder body used while v0.1 commands are scaffolded.

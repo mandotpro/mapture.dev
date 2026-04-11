@@ -58,15 +58,29 @@ Rolling canary prereleases from the latest successful `main` build are published
 
 ### Build from source
 
+Install the latest Go-visible source version:
+
 ```bash
 go install github.com/mandotpro/mapture.dev/cmd/mapture@latest
 ```
 
-Install the current canary from source:
+Install the current `main` branch from source:
 
 ```bash
-go install github.com/mandotpro/mapture.dev/cmd/mapture@canary
+go install github.com/mandotpro/mapture.dev/cmd/mapture@main
 ```
+
+For a reproducible stable source install, prefer an explicit semver tag once the current `v0.x.y` line is published:
+
+```bash
+go install github.com/mandotpro/mapture.dev/cmd/mapture@v0.x.y
+```
+
+Notes:
+
+- Use `@main` for source-installed canary/dev builds. The canary channel also publishes release archives and Homebrew packages, but a moving `canary` git tag is not a reliable target for the public Go module proxy.
+- `@latest` follows the newest Go-visible module version. Until the next plain `v0.x.y` stable tag is published, that may still resolve to a recent `main` pseudo-version instead of the latest stable release.
+- Source installs use Go module version metadata. Release archives and Homebrew builds keep the channel version injected at build time.
 
 ## What Mapture does today
 
