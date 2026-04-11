@@ -25,6 +25,7 @@ import (
 	"github.com/mandotpro/mapture.dev/src/internal/scanner"
 	"github.com/mandotpro/mapture.dev/src/internal/server"
 	"github.com/mandotpro/mapture.dev/src/internal/ui"
+	"github.com/mandotpro/mapture.dev/src/internal/updater"
 	"github.com/mandotpro/mapture.dev/src/internal/validator"
 	"github.com/spf13/cobra"
 )
@@ -37,6 +38,7 @@ var version string
 var (
 	commandStdout io.Writer = os.Stdout
 	commandStderr io.Writer = os.Stderr
+	runUpdateCmd            = updater.Run
 )
 
 var rootCmd = &cobra.Command{
@@ -62,6 +64,7 @@ func init() {
 		newScanCmd(),
 		newGraphCmd(),
 		newServeCmd(),
+		newUpdateCmd(),
 		newExportHTMLCmd(),
 		newExportAICmd(),
 	)
@@ -469,6 +472,30 @@ func newServeCmd() *cobra.Command {
 	c.Flags().Bool("no-watch", false, "disable filesystem watching and live reload")
 	c.Flags().Bool("open", false, "open the explorer in the default browser on start")
 	bindScopeFlag(c)
+	return c
+}
+
+func newUpdateCmd() *cobra.Command {
+	c := &cobra.Command{
+		Use:   "update",
+		Short: "Upgrade the current mapture installation",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			channelValue, err := cmd.Flags().GetString("channel")
+			if err != nil {
+				return err
+			}
+
+			return runUpdateCmd(cmd.Context(), updater.Options{
+				RequestedChannel: updater.Channel(channelValue),
+				CurrentVersion:   version,
+				BuildInfo:        readBuildInfo(),
+				Stdout:           commandStdout,
+				Stderr:           commandStderr,
+			})
+		},
+	}
+	c.Flags().String("channel", "", "update channel override: stable or canary (default: detect from current install)")
 	return c
 }
 
