@@ -8,7 +8,7 @@
 [![Go Version](https://img.shields.io/github/go-mod/go-version/mandotpro/mapture.dev)](https://github.com/mandotpro/mapture.dev/blob/main/go.mod)
 [![License](https://img.shields.io/github/license/mandotpro/mapture.dev)](./LICENSE)
 
-Mapture is an experimental architecture graph tool for repositories that want a lightweight, reviewable source of truth for system structure. It keeps teams, domains, scan settings, and UI defaults in `mapture.yaml`, derives event nodes from flat `@arch.*` and `@event.*` code comments, validates the result, and renders it as CLI output, Mermaid diagrams, and an interactive explorer.
+Mapture is an experimental architecture graph tool for repositories that want a lightweight, reviewable source of truth for system structure. It combines a small YAML catalog with flat `@arch.*` and `@event.*` code comments, validates the result, and renders it as CLI output, Mermaid diagrams, and an interactive explorer.
 
 > Status: early preview. Mapture is under active development and not production-ready yet, but the validator, graph pipeline, examples, and local explorer are ready for evaluation and feedback.
 
@@ -22,13 +22,13 @@ Clone the repo and run the current examples locally:
 git clone https://github.com/mandotpro/mapture.dev.git
 cd mapture.dev
 
-make help
 go run src/main.go validate examples/demo
 go run src/main.go serve examples/ecommerce
 ```
 
 Then open the local explorer and inspect the bundled example graph.
 For the repo’s day-to-day wrappers and testing helpers, run `make help`.
+Release packaging and distribution scripts live under `scripts/release/`.
 
 ## Install
 
@@ -59,35 +59,21 @@ Rolling canary prereleases from the latest successful `main` build are published
 
 ### Build from source
 
-Install the latest Go-visible source version:
-
 ```bash
 go install github.com/mandotpro/mapture.dev/cmd/mapture@latest
 ```
 
-Install the current `main` branch from source:
+Install the current canary from source:
 
 ```bash
-go install github.com/mandotpro/mapture.dev/cmd/mapture@main
+go install github.com/mandotpro/mapture.dev/cmd/mapture@canary
 ```
-
-For a reproducible stable source install, prefer an explicit semver tag once the current `v0.x.y` line is published:
-
-```bash
-go install github.com/mandotpro/mapture.dev/cmd/mapture@v0.x.y
-```
-
-Notes:
-
-- Use `@main` for source-installed canary/dev builds. The canary channel also publishes release archives and Homebrew packages, but a moving `canary` git tag is not a reliable target for the public Go module proxy.
-- `@latest` follows the newest Go-visible module version. Until the next plain `v0.x.y` stable tag is published, that may still resolve to a recent `main` pseudo-version instead of the latest stable release.
-- Source installs use Go module version metadata. Release archives and Homebrew builds keep the channel version injected at build time.
 
 ## What Mapture does today
 
-- Validates teams, domains, and architecture references from a single repo config by default
+- Validates catalog ownership, domains, events, and architecture references
 - Scans Go, PHP, TypeScript, and JavaScript comment blocks for `@arch.*` and `@event.*` tags
-- Builds a normalized graph with deterministic node and edge identities, including event nodes derived from code comments
+- Builds a normalized graph with deterministic node and edge identities
 - Exports Mermaid diagrams for filtered graph views
 - Serves an interactive local explorer UI for browsing the graph
 - Ships example fixtures for demo, ecommerce, migration, and invalid validation cases
@@ -107,7 +93,7 @@ That means:
 
 - no heavy source instrumentation
 - no separate modeling tool to keep in sync
-- one small repo config for teams, domains, scanning, and UI defaults
+- one small catalog for ownership and canonical event/domain references
 - portable annotations that work across mixed-language repos
 
 ## Supported source languages

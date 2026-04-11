@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib.sh"
 
 if [[ $# -ne 4 ]]; then
   echo "usage: $0 <version> <goos> <goarch> <output-dir>" >&2
@@ -47,3 +47,4 @@ fi
 
 tar -C "$TMP_DIR" -czf "$OUTPUT_DIR/${archive_base}.tar.gz" "$binary_name" LICENSE README.md
 printf '%s\n' "$OUTPUT_DIR/${archive_base}.tar.gz"
+

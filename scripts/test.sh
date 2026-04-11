@@ -30,12 +30,12 @@ test -s "$graph_output"
 GOBIN="$install_output_dir" go install ./cmd/mapture
 test -x "$install_output_dir/mapture"
 
-./scripts/release-build.sh "v0.0.0-test" "linux" "amd64" "$release_output_dir" >/dev/null
+./scripts/release/release-build.sh "v0.0.0-test" "linux" "amd64" "$release_output_dir" >/dev/null
 test -f "$release_output_dir/mapture_v0.0.0-test_linux_amd64.tar.gz"
-./scripts/release-build.sh "v0.0.0-test" "windows" "amd64" "$release_output_dir" >/dev/null
+./scripts/release/release-build.sh "v0.0.0-test" "windows" "amd64" "$release_output_dir" >/dev/null
 test -f "$release_output_dir/mapture_v0.0.0-test_windows_amd64.zip"
 
-./scripts/generate-homebrew-formula.sh \
+./scripts/release/generate-homebrew-formula.sh \
   --formula-name mapture-canary \
   --class-name MaptureCanary \
   --formula-version 0.0.0-canary.20260409153413.c649dd6 \
@@ -47,7 +47,7 @@ grep -q 'class MaptureCanary < Formula' "$formula_output"
 ! grep -q 'conflicts_with' "$formula_output"
 grep -q 'assert_match "mapture version 0.0.0-canary.20260409+sha.c649dd6"' "$formula_output"
 
-./scripts/sync-homebrew-tap.sh \
+./scripts/release/sync-homebrew-tap.sh \
   --tap-dir "$tap_output_dir" \
   --tap-repo mandotpro/homebrew-mapture \
   --formula-name mapture-canary \
@@ -79,6 +79,7 @@ expect_scan_failure() {
 expect_failure examples/invalid/bad-config-role
 expect_failure examples/invalid/duplicate-team
 expect_failure examples/invalid/unknown-domain-owner
+expect_failure examples/invalid/invalid-event-status
 expect_failure examples/invalid/missing-teams-file
 expect_failure examples/invalid/comment-unknown-domain-ref
 expect_failure examples/invalid/comment-event-domain-mismatch

@@ -63,7 +63,7 @@ jobs:
       - name: Build release archive
         run: |
           mkdir -p dist
-          ./scripts/release-build.sh "${{ needs.prepare.outputs.version }}" "${{ matrix.goos }}" "${{ matrix.goarch }}" dist
+          ./scripts/release/release-build.sh "${{ needs.prepare.outputs.version }}" "${{ matrix.goos }}" "${{ matrix.goarch }}" dist
       - uses: actions/upload-artifact@v7
         with:
           name: canary-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -75,10 +75,6 @@ jobs:
       - build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ needs.prepare.outputs.sha }}
-          fetch-depth: 0
       - uses: actions/download-artifact@v8
         with:
           path: dist
@@ -96,11 +92,6 @@ jobs:
           CANARY_VERSION: ${{ needs.prepare.outputs.version }}
           CANARY_BUILT_AT: ${{ needs.prepare.outputs.built_at }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -f canary "$CANARY_SHA"
-          git push origin refs/tags/canary --force
-
           cat > canary-notes.md <<EOF
           Rolling canary build from \`main\`.
 
@@ -160,7 +151,7 @@ jobs:
 
           git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/${HOMEBREW_TAP_REPO}.git" "$RUNNER_TEMP/homebrew-tap"
 
-          ./scripts/sync-homebrew-tap.sh \
+          ./scripts/release/sync-homebrew-tap.sh \
             --tap-dir "$RUNNER_TEMP/homebrew-tap" \
             --tap-repo "$HOMEBREW_TAP_REPO" \
             --formula-name mapture-canary \
