@@ -205,10 +205,22 @@ export interface LaneOverlay {
   height: number;
 }
 
+export interface StageBandOverlay {
+  id: string;
+  label: string;
+  summary: string;
+  accent: string;
+  x: number;
+  width: number;
+  top: number;
+  height: number;
+}
+
 export interface PresentedGraph {
   nodes: PresentedNode[];
   edges: PresentedEdge[];
   lanes: LaneOverlay[];
+  stageBands: StageBandOverlay[];
 }
 
 export interface FlowPresentation {

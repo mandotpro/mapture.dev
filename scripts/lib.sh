@@ -74,7 +74,7 @@ build_binary() {
     -trimpath \
     -ldflags "-X github.com/mandotpro/mapture.dev/src/cmd.version=$version" \
     -o "$output" \
-    "$repo/src"
+    "$repo/cmd/mapture"
 }
 
 sha256_file() {

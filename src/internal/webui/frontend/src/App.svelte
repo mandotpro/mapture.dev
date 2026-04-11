@@ -25,6 +25,7 @@
   } from './lib/adapter';
   import { resolvePositions } from './lib/layout';
   import DomainLanesBackdrop from './lib/DomainLanesBackdrop.svelte';
+  import EventFlowBackdrop from './lib/EventFlowBackdrop.svelte';
   import FlowViewportController from './lib/FlowViewportController.svelte';
   import ApiNode from './lib/nodes/ApiNode.svelte';
   import BridgeNode from './lib/nodes/BridgeNode.svelte';
@@ -116,6 +117,7 @@
     nodes: [],
     edges: [],
     lanes: [],
+    stageBands: [],
   };
 
   const nodeTypes = {
@@ -1466,6 +1468,7 @@
     >
       <FlowViewportController request={fitViewRequest} padding={FIT_VIEW_PADDING} maxZoom={1.35} />
       <DomainLanesBackdrop lanes={presentedGraph.lanes} />
+      <EventFlowBackdrop bands={presentedGraph.stageBands} />
       <Background color="var(--canvas-grid)" gap={26} />
       <MiniMap position="bottom-left" pannable zoomable />
       <Controls position="bottom-right" />
