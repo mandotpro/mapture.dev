@@ -29,6 +29,9 @@ make audit-public
 go run src/main.go --help
 ```
 
+Release/distribution automation scripts are grouped under `scripts/release/`.
+
+
 Useful fixture commands:
 
 ```bash
@@ -49,6 +52,12 @@ If you change anything there:
 
 The committed bundle is part of the shipped single-binary experience.
 
+## Graph JSON Schema
+
+The exported graph JSON schema is stable. If making structural changes to the graph payload:
+- Bump the `schemaVersion` field across the project's Go structs, CUE schemas, and TypeScript interfaces.
+- Write a migration note for any breaking change inside the PR description.
+
 ## Pull request expectations
 
 - Keep PR titles and final squash-merge titles in Conventional Commit style:
@@ -62,7 +71,7 @@ The committed bundle is part of the shipped single-binary experience.
 
 ## Release notes and versioning
 
-Stable releases are managed through an automated release PR flow on `0.x` and published as plain `v0.x.y` semver tags. Canary builds are published separately from `main` through the moving `canary` tag.
+Stable releases are managed through an automated release PR flow on `0.x`. Canary builds are published separately from `main`.
 The Homebrew tap in `mandotpro/homebrew-mapture` is updated automatically from the same release pipelines when the required repository variable and token secret are present.
 
 If your change is user-visible, make sure the PR description explains:

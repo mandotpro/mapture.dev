@@ -38,3 +38,4 @@ case "$BUMP" in
 esac
 
 printf 'v%s.%s.%s\n' "$major" "$minor" "$patch"
+

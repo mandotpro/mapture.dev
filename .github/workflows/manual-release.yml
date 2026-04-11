@@ -25,7 +25,7 @@ jobs:
           fetch-depth: 0
       - id: version
         run: |
-          next_version="$(INITIAL_VERSION=v0.1.0 ./scripts/next-version.sh "${{ inputs.bump }}")"
+          next_version="$(INITIAL_VERSION=v0.1.0 ./scripts/release/next-version.sh "${{ inputs.bump }}")"
           echo "value=$next_version" >> "$GITHUB_OUTPUT"
       - name: Create release tag
         run: |

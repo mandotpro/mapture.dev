@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib.sh"
 
 usage() {
   cat <<'EOF' >&2
@@ -89,7 +89,7 @@ generate_args=(
   --repo "$repo"
 )
 
-"$(root_dir)/scripts/generate-homebrew-formula.sh" "${generate_args[@]}" > "$tap_dir/Formula/${formula_name}.rb"
+"$(root_dir)/scripts/release/generate-homebrew-formula.sh" "${generate_args[@]}" > "$tap_dir/Formula/${formula_name}.rb"
 
 stable_install='Stable formula will appear after the first semver release is published.'
 if [[ -f "$tap_dir/Formula/mapture.rb" ]]; then
@@ -127,3 +127,4 @@ Both release channels install the \`mapture\` binary. If you switch channels, un
 
 This repository is updated by the release automation in [${repo}](https://github.com/${repo}).
 EOF
+
