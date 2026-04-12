@@ -2,10 +2,17 @@ package updater
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
+
+func canaryAssetName(version string) string {
+	name := strings.ReplaceAll(version, "+", "_")
+	return fmt.Sprintf("mapture_%s_%s_%s.tar.gz", name, runtime.GOOS, runtime.GOARCH)
+}
 
 func TestDetectChannel(t *testing.T) {
 	t.Parallel()
@@ -220,7 +227,7 @@ func TestCheckVersionReportsOutdatedCanary(t *testing.T) {
 			return &release{
 				TagName: "canary",
 				Assets: []asset{
-					{Name: "mapture_0.0.0-canary.20260412_sha.1bd3598_darwin_arm64.tar.gz"},
+					{Name: canaryAssetName("0.0.0-canary.20260412+sha.1bd3598")},
 				},
 			}, nil
 		default:
@@ -265,7 +272,7 @@ func TestCheckVersionReportsCurrentStable(t *testing.T) {
 			return &release{
 				TagName: "canary",
 				Assets: []asset{
-					{Name: "mapture_0.0.0-canary.20260412_sha.1bd3598_darwin_arm64.tar.gz"},
+					{Name: canaryAssetName("0.0.0-canary.20260412+sha.1bd3598")},
 				},
 			}, nil
 		default:
