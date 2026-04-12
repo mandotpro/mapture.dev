@@ -33,6 +33,7 @@ That means:
 | 036 | Scenario presets for explorer workflows | Presets make the explorer easier to use once the data contract is stable. |
 | 037 | Cross-boundary validations | Policy enforcement should come after tags and the canonical export contract are settled. |
 | 038 | Configurable explorer UI defaults and visual tuning | Repo-level UI tuning is useful, but not more important than the shared data pipeline. |
+| 039 | CLI output polish, color system, and terminal UX | The terminal is part of the product and should become clearer before broader adoption. |
 
 ## Non-goals For This Slice
 

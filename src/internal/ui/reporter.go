@@ -5,13 +5,11 @@ package ui
 import (
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mandotpro/mapture.dev/src/internal/validator"
-	"golang.org/x/term"
 )
 
 type iconSet struct {
@@ -44,7 +42,7 @@ type styles struct {
 // NewReporter creates a reporter that auto-detects whether rich styling
 // should be enabled.
 func NewReporter(out, errOut io.Writer) *Reporter {
-	color := supportsColor(out) && supportsColor(errOut)
+	color := SupportsColor(out) && SupportsColor(errOut)
 	icons := iconSet{
 		stage:   "›",
 		success: "✓",
@@ -95,17 +93,6 @@ func buildStyles(color bool) styles {
 		summary: lipgloss.NewStyle().Bold(true),
 		code:    lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Bold(true),
 	}
-}
-
-func supportsColor(w io.Writer) bool {
-	if os.Getenv("NO_COLOR") != "" || os.Getenv("CI") != "" {
-		return false
-	}
-	file, ok := w.(*os.File)
-	if !ok {
-		return false
-	}
-	return term.IsTerminal(int(file.Fd()))
 }
 
 // Stage prints a step header.

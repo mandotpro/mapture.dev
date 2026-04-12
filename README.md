@@ -8,7 +8,7 @@
 [![Go Version](https://img.shields.io/github/go-mod/go-version/mandotpro/mapture.dev)](https://github.com/mandotpro/mapture.dev/blob/main/go.mod)
 [![License](https://img.shields.io/github/license/mandotpro/mapture.dev)](./LICENSE)
 
-Mapture is an experimental architecture graph tool for repositories that want a lightweight, reviewable source of truth for system structure. It combines a small YAML catalog with flat `@arch.*` and `@event.*` code comments, validates the result, and renders it as CLI output, Mermaid diagrams, and an interactive explorer.
+Mapture is an experimental architecture graph tool for repositories that want a lightweight, reviewable source of truth for system structure. It combines a small YAML catalog with flat `@arch.*` and `@event.*` code comments, validates the result, and renders it as a polished CLI, Mermaid diagrams, and an interactive explorer.
 
 > Status: early preview. Mapture is under active development and not production-ready yet, but the validator, graph pipeline, examples, and local explorer are ready for evaluation and feedback.
 
@@ -29,6 +29,8 @@ go run src/main.go serve examples/ecommerce
 Then open the local explorer and inspect the bundled example graph.
 For the repo’s day-to-day wrappers and testing helpers, run `make help`.
 Release packaging and distribution scripts live under `scripts/release/`.
+
+Once installed, `mapture --help` and `mapture --version` show the current version, detected release channel, install source, and whether a newer build is available for that channel.
 
 ## Install
 
@@ -108,6 +110,7 @@ Notes:
 - Homebrew installs delegate to `brew upgrade`
 - Go installs delegate to `go install`
 - Direct binary installs download the matching GitHub release asset and replace the current executable
+- `mapture --help` and `mapture --version` will suggest `Run: mapture update` when a newer build is available for the detected channel
 
 Examples:
 
@@ -116,6 +119,15 @@ mapture update
 mapture update --channel stable
 mapture update --channel canary
 ```
+
+For troubleshooting or quick confirmation:
+
+```bash
+mapture --version
+mapture version
+```
+
+That output includes the current version, channel, detected install source, and resolved binary path so it is easier to spot stale Homebrew canaries or older direct installs.
 ## What Mapture does today
 
 - Validates catalog ownership, domains, events, and architecture references
@@ -129,7 +141,7 @@ mapture update --channel canary
 
 - Comments-first only. No AST or Tree-sitter source analysis yet.
 - The public graph and UI are still evolving under pre-`v1.0.0` versioning.
-- HTML export and AI bundle export are planned, but not yet implemented.
+- AI bundle export is planned, but not yet implemented.
 - Release channels are early: canary builds are convenient for evaluation, not stability guarantees.
 
 ## Why comments-first

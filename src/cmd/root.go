@@ -5,6 +5,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,7 +16,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"strings"
 	"syscall"
+	"time"
 
 	"github.com/mandotpro/mapture.dev/src/internal/bootstrap"
 	"github.com/mandotpro/mapture.dev/src/internal/catalog"
@@ -38,18 +41,28 @@ import (
 var version string
 
 var (
-	commandStdout io.Writer = os.Stdout
-	commandStderr io.Writer = os.Stderr
-	runUpdateCmd            = updater.Run
+	commandStdout      io.Writer = os.Stdout
+	commandStderr      io.Writer = os.Stderr
+	runUpdateCmd                 = updater.Run
+	inspectRuntime               = updater.Inspect
+	checkVersionStatus           = updater.CheckVersion
 )
 
 var rootCmd = &cobra.Command{
 	Use:           "mapture",
-	Short:         "Repo-native architecture graph tool",
-	Long:          "Mapture turns catalog YAML and structured code comments into validated architecture graphs, diagrams, and AI-ready bundles.",
-	Version:       version,
+	Short:         "Repo-native architecture mapping that stays close to the code.",
 	SilenceErrors: true,
 	SilenceUsage:  true,
+	RunE: func(cmd *cobra.Command, _ []string) error {
+		showVersion, err := cmd.Flags().GetBool("version")
+		if err != nil {
+			return err
+		}
+		if showVersion {
+			return renderVersionInfo(cmd.OutOrStdout(), readBuildInfo())
+		}
+		return renderRootHelp(cmd)
+	},
 }
 
 // Execute runs the root command.
@@ -59,7 +72,6 @@ func Execute() error {
 
 func init() {
 	version = resolveVersion(version, readBuildInfo())
-	rootCmd.Version = version
 	rootCmd.AddCommand(
 		newInitCmd(),
 		newValidateCmd(),
@@ -68,9 +80,33 @@ func init() {
 		newServeCmd(),
 		newExportJSONCmd(),
 		newUpdateCmd(),
+		newVersionCmd(),
 		newExportHTMLCmd(),
 		newExportAICmd(),
 	)
+	rootCmd.Flags().BoolP("version", "v", false, "show version information")
+	rootCmd.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
+		if cmd == rootCmd {
+			_ = renderRootHelp(cmd)
+			return
+		}
+		_, _ = fmt.Fprint(cmd.OutOrStdout(), cmd.UsageString())
+	})
+	rootCmd.SetHelpCommand(&cobra.Command{
+		Use:   "help [command]",
+		Short: "Help about any command",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return renderRootHelp(rootCmd)
+			}
+			target, _, err := rootCmd.Find(args)
+			if err != nil {
+				return err
+			}
+			return target.Help()
+		},
+	})
 }
 
 var readBuildInfo = func() *debug.BuildInfo {
@@ -577,8 +613,87 @@ func newUpdateCmd() *cobra.Command {
 	return c
 }
 
+func newVersionCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Show the current Mapture version and release channel",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return renderVersionInfo(cmd.OutOrStdout(), readBuildInfo())
+		},
+	}
+}
+
 func bindScopeFlag(c *cobra.Command) {
 	c.Flags().StringSlice("scope", nil, "narrow scanning to one or more project-relative files or directories")
+}
+
+func renderRootHelp(cmd *cobra.Command) error {
+	out := cmd.OutOrStdout()
+	if err := writeProductHeader(out, readBuildInfo(), true); err != nil {
+		return err
+	}
+
+	clone := *cmd
+	clone.Short = ""
+	clone.Long = ""
+	_, err := io.WriteString(out, clone.UsageString())
+	return err
+}
+
+func renderVersionInfo(out io.Writer, info *debug.BuildInfo) error {
+	return writeProductHeader(out, info, true)
+}
+
+func writeProductHeader(out io.Writer, info *debug.BuildInfo, includeFreshness bool) error {
+	console := ui.NewConsole(out)
+
+	runtimeInfo, err := inspectRuntime(version, info)
+	if err != nil {
+		return err
+	}
+
+	if _, err := fmt.Fprintf(out, "%s - %s\n", console.Brand("mapture.dev"), console.Strong(displayProductVersion(runtimeInfo.Version))); err != nil {
+		return err
+	}
+
+	metaLine := console.Join(string(runtimeInfo.Channel), runtimeInfo.InstallMethod, runtimeInfo.ExecutablePath)
+	if metaLine != "" {
+		if _, err := fmt.Fprintln(out, metaLine); err != nil {
+			return err
+		}
+	}
+	if _, err := fmt.Fprintln(out, "Repo-native architecture mapping that stays close to the code."); err != nil {
+		return err
+	}
+
+	if includeFreshness {
+		status, err := bestEffortVersionStatus(info)
+		if err == nil && status.UpdateAvailable {
+			if _, err := fmt.Fprintf(out, "%s: %s\n", console.Warning("Update available"), console.Strong(status.LatestForChannel)); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(out, "%s\n", console.Accent("Run: mapture update")); err != nil {
+				return err
+			}
+		}
+	}
+
+	_, err = fmt.Fprintln(out)
+	return err
+}
+
+func bestEffortVersionStatus(info *debug.BuildInfo) (updater.VersionStatus, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	return checkVersionStatus(ctx, version, info)
+}
+
+func displayProductVersion(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return "unknown"
+	}
+	return value
 }
 
 func writeCommandf(w io.Writer, format string, args ...any) {

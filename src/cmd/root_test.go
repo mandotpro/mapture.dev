@@ -124,6 +124,95 @@ func TestUpdateCommandPassesThroughChannel(t *testing.T) {
 	}
 }
 
+func TestVersionCommandShowsBrandedRuntimeInfo(t *testing.T) {
+	originalInspect := inspectRuntime
+	originalCheck := checkVersionStatus
+	defer func() {
+		inspectRuntime = originalInspect
+		checkVersionStatus = originalCheck
+	}()
+
+	inspectRuntime = func(_ string, _ *debug.BuildInfo) (updater.RuntimeDetails, error) {
+		return updater.RuntimeDetails{
+			Version:        "0.0.0-canary.20260412+sha.1bd3598",
+			Channel:        updater.ChannelCanary,
+			InstallMethod:  "homebrew",
+			ExecutablePath: "/opt/homebrew/bin/mapture",
+		}, nil
+	}
+	checkVersionStatus = func(_ context.Context, _ string, _ *debug.BuildInfo) (updater.VersionStatus, error) {
+		return updater.VersionStatus{
+			UpdateAvailable:  true,
+			LatestForChannel: "0.0.0-canary.20260413+sha.abcdef0",
+		}, nil
+	}
+
+	var stdout bytes.Buffer
+	cmd := newVersionCmd()
+	cmd.SetOut(&stdout)
+	cmd.SetArgs(nil)
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	output := stdout.String()
+	for _, want := range []string{
+		"mapture.dev - 0.0.0-canary.20260412+sha.1bd3598",
+		"canary",
+		"homebrew",
+		"/opt/homebrew/bin/mapture",
+		"Repo-native architecture mapping that stays close to the code.",
+		"Update available",
+		"Run: mapture update",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("expected %q in output, got %q", want, output)
+		}
+	}
+}
+
+func TestRootHelpShowsBrandedHeader(t *testing.T) {
+	originalInspect := inspectRuntime
+	originalCheck := checkVersionStatus
+	defer func() {
+		inspectRuntime = originalInspect
+		checkVersionStatus = originalCheck
+	}()
+
+	inspectRuntime = func(_ string, _ *debug.BuildInfo) (updater.RuntimeDetails, error) {
+		return updater.RuntimeDetails{
+			Version:        "v0.3.0",
+			Channel:        updater.ChannelStable,
+			InstallMethod:  "direct binary",
+			ExecutablePath: "/usr/local/bin/mapture",
+		}, nil
+	}
+	checkVersionStatus = func(_ context.Context, _ string, _ *debug.BuildInfo) (updater.VersionStatus, error) {
+		return updater.VersionStatus{}, nil
+	}
+
+	var stdout bytes.Buffer
+	rootCmd.SetOut(&stdout)
+	rootCmd.SetErr(&stdout)
+	rootCmd.SetArgs([]string{"--help"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	output := stdout.String()
+	for _, want := range []string{
+		"mapture.dev - v0.3.0",
+		"stable",
+		"direct binary",
+		"Usage:",
+		"Available Commands:",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("expected %q in output, got %q", want, output)
+		}
+	}
+}
+
 func TestLoadProjectRejectsBrokenFixtures(t *testing.T) {
 	t.Parallel()
 
