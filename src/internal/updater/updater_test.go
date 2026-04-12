@@ -198,8 +198,6 @@ func TestInspectReportsHumanReadableRuntime(t *testing.T) {
 }
 
 func TestCheckVersionReportsOutdatedCanary(t *testing.T) {
-	t.Parallel()
-
 	originalExecutable := osExecutable
 	originalEvalSymlinks := evalSymlinks
 	originalFetch := fetchReleaseFn
@@ -245,8 +243,6 @@ func TestCheckVersionReportsOutdatedCanary(t *testing.T) {
 }
 
 func TestCheckVersionReportsCurrentStable(t *testing.T) {
-	t.Parallel()
-
 	originalExecutable := osExecutable
 	originalEvalSymlinks := evalSymlinks
 	originalFetch := fetchReleaseFn
