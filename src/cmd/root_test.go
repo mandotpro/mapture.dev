@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/mandotpro/mapture.dev/src/internal/config"
+	"github.com/mandotpro/mapture.dev/src/internal/updater"
 )
 
 func TestLoadProjectSuccess(t *testing.T) {
@@ -89,6 +91,33 @@ func TestResolveVersionFallsBackToRevisionWhenVersionMissing(t *testing.T) {
 	got := resolveVersion("", info)
 	if got != "0.0.0-dev+dirty.1234567" {
 		t.Fatalf("expected dirty revision fallback, got %q", got)
+	}
+}
+
+func TestUpdateCommandPassesThroughChannel(t *testing.T) {
+	t.Parallel()
+
+	original := runUpdateCmd
+	defer func() {
+		runUpdateCmd = original
+	}()
+
+	called := false
+	runUpdateCmd = func(_ context.Context, opts updater.Options) error {
+		called = true
+		if opts.RequestedChannel != updater.ChannelCanary {
+			t.Fatalf("RequestedChannel = %q, want %q", opts.RequestedChannel, updater.ChannelCanary)
+		}
+		return nil
+	}
+
+	cmd := newUpdateCmd()
+	cmd.SetArgs([]string{"--channel", "canary"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if !called {
+		t.Fatal("expected updater to be called")
 	}
 }
 

@@ -32,6 +32,29 @@ Release packaging and distribution scripts live under `scripts/release/`.
 
 ## Install
 
+### Quick install with curl
+
+Install the latest stable release into `~/.local/bin`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mandotpro/mapture.dev/main/scripts/install.sh | bash
+```
+
+Install the rolling canary channel:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mandotpro/mapture.dev/main/scripts/install.sh | bash -s -- --channel canary
+```
+
+Override the install directory when needed:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mandotpro/mapture.dev/main/scripts/install.sh | MAPTURE_INSTALL_DIR=/usr/local/bin bash
+```
+
+The curl installer supports macOS and Linux on `amd64` and `arm64`.
+If the latest stable release does not have prebuilt archives yet, the installer will tell you and you can use Homebrew, source install, or the canary channel until the next stable cut lands.
+
 ### Homebrew
 
 Tap the dedicated Homebrew repository once:
@@ -49,13 +72,10 @@ brew install mandotpro/mapture/mapture-canary
 Stable `mapture` Homebrew packages are published from semver releases cut on the `0.x` branch.
 Both channels install the same `mapture` binary, so switch channels by uninstalling the other formula first.
 
-### Stable releases
+### Prebuilt archives
 
-Download semver-tagged binaries from [GitHub Releases](https://github.com/mandotpro/mapture.dev/releases). Stable releases are prepared from the `0.x` branch through automated release PRs.
-
-### Canary builds
-
-Rolling canary prereleases from the latest successful `main` build are published at [the canary release](https://github.com/mandotpro/mapture.dev/releases/tag/canary).
+- Stable semver binaries are published on [GitHub Releases](https://github.com/mandotpro/mapture.dev/releases).
+- Rolling canary prereleases from the latest successful `main` build are published at [the canary release](https://github.com/mandotpro/mapture.dev/releases/tag/canary).
 
 ### Build from source
 
@@ -63,12 +83,39 @@ Rolling canary prereleases from the latest successful `main` build are published
 go install github.com/mandotpro/mapture.dev/cmd/mapture@latest
 ```
 
-Install the current canary from source:
+Install the current `main` branch from source:
 
 ```bash
-go install github.com/mandotpro/mapture.dev/cmd/mapture@canary
+GOPROXY=direct go install github.com/mandotpro/mapture.dev/cmd/mapture@main
 ```
 
+For a reproducible stable source install, prefer an explicit semver tag once the current `v0.x.y` line is published:
+
+```bash
+go install github.com/mandotpro/mapture.dev/cmd/mapture@v0.x.y
+```
+
+Notes:
+
+- Use `GOPROXY=direct` with `@main` for source-installed canary/dev builds. Branch installs are cached aggressively by the public Go proxy, so direct fetches are more predictable for the moving `main` branch.
+- `@latest` follows the newest Go-visible module version. Until the next plain `v0.x.y` stable tag is published, that may still resolve to a recent `main` pseudo-version instead of the latest stable release.
+- Source installs use Go module version metadata. Release archives and Homebrew builds keep the channel version injected at build time.
+
+### Upgrade an existing install
+
+`mapture update` upgrades the current binary in place and follows the active release channel by default.
+
+- Homebrew installs delegate to `brew upgrade`
+- Go installs delegate to `go install`
+- Direct binary installs download the matching GitHub release asset and replace the current executable
+
+Examples:
+
+```bash
+mapture update
+mapture update --channel stable
+mapture update --channel canary
+```
 ## What Mapture does today
 
 - Validates catalog ownership, domains, events, and architecture references

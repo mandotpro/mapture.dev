@@ -9,6 +9,7 @@ cd "$ROOT_DIR"
 
 ./scripts/test-go.sh
 go vet ./src/...
+bash -n ./scripts/install.sh
 go run src/main.go --help >/dev/null
 go run src/main.go validate examples/demo >/dev/null
 go run src/main.go validate examples/ecommerce >/dev/null
