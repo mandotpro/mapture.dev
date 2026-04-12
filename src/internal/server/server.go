@@ -22,9 +22,8 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/mandotpro/mapture.dev/src/internal/catalog"
 	"github.com/mandotpro/mapture.dev/src/internal/config"
+	exportercanonical "github.com/mandotpro/mapture.dev/src/internal/exporter/canonical"
 	"github.com/mandotpro/mapture.dev/src/internal/projectscope"
-	"github.com/mandotpro/mapture.dev/src/internal/scanner"
-	"github.com/mandotpro/mapture.dev/src/internal/validator"
 	"github.com/mandotpro/mapture.dev/src/internal/webui"
 )
 
@@ -39,6 +38,8 @@ type Options struct {
 	Addr string
 	// Scopes narrows scanning to one or more project-relative files/directories.
 	Scopes []string
+	// ToolVersion is embedded into the canonical export metadata.
+	ToolVersion string
 	// Watch enables fsnotify-based file watching + SSE reload.
 	Watch bool
 	// OnReady is invoked once the listener is bound, with the concrete
@@ -56,7 +57,7 @@ func Serve(ctx context.Context, opts Options) error {
 		addr = DefaultAddr
 	}
 
-	srv, err := newServer(opts.ConfigPath, opts.Scopes)
+	srv, err := newServer(opts.ConfigPath, opts.Scopes, opts.ToolVersion)
 	if err != nil {
 		return err
 	}
@@ -131,14 +132,16 @@ func Serve(ctx context.Context, opts Options) error {
 type explorer struct {
 	configPath  string
 	scopes      []string
+	toolVersion string
 	uiHandler   http.Handler
 	broadcaster *broadcaster
 }
 
-func newServer(configPath string, scopes []string) (*explorer, error) {
+func newServer(configPath string, scopes []string, toolVersion string) (*explorer, error) {
 	return &explorer{
 		configPath:  configPath,
 		scopes:      append([]string(nil), scopes...),
+		toolVersion: toolVersion,
 		uiHandler:   http.FileServer(http.FS(webui.FS())),
 		broadcaster: newBroadcaster(),
 	}, nil
@@ -146,6 +149,7 @@ func newServer(configPath string, scopes []string) (*explorer, error) {
 
 func (e *explorer) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/explorer", e.handleExplorer)
+	mux.HandleFunc("/api/export", e.handleExport)
 	mux.HandleFunc("/api/graph", e.handleGraph)
 	mux.HandleFunc("/api/catalog", e.handleCatalog)
 	mux.HandleFunc("/api/validate", e.handleValidate)
@@ -172,83 +176,17 @@ func (e *explorer) loadProject() (*config.Config, *catalog.Catalog, string, erro
 	return scoped.Config, cat, root, nil
 }
 
-func (e *explorer) buildResult() (*validator.Result, error) {
-	cfg, cat, root, err := e.loadProject()
-	if err != nil {
-		return nil, err
-	}
-	blocks, err := scanner.Scan(root, cfg)
-	if err != nil {
-		return nil, err
-	}
-	result, err := validator.Build(cfg, cat, blocks, validator.BuildOptions{
-		SourceRoot: root,
-		Scoped:     len(e.scopes) > 0,
+func (e *explorer) buildCanonicalExport() (*exportercanonical.Document, error) {
+	doc, err := exportercanonical.BuildProject(e.configPath, exportercanonical.ProjectOptions{
+		Scopes:      e.scopes,
+		ToolVersion: e.toolVersion,
+		Mode:        exportercanonical.ModeLive,
+		SourceLabel: projectscope.SourceLabel("live api", e.scopes),
 	})
-	if err != nil {
-		// Return the partial result so the UI can surface diagnostics.
-		var vErr *validator.ValidationError
-		if errors.As(err, &vErr) && vErr.Result != nil {
-			return vErr.Result, nil
-		}
+	if doc == nil {
 		return nil, err
 	}
-	return result, nil
-}
-
-func (e *explorer) buildExplorerPayload() (*ExplorerPayload, error) {
-	cfg, cat, root, err := e.loadProject()
-	if err != nil {
-		return nil, err
-	}
-
-	blocks, err := scanner.Scan(root, cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	result, err := validator.Build(cfg, cat, blocks, validator.BuildOptions{
-		SourceRoot: root,
-		Scoped:     len(e.scopes) > 0,
-	})
-	if err != nil {
-		var vErr *validator.ValidationError
-		if !errors.As(err, &vErr) || vErr.Result == nil {
-			return nil, err
-		}
-		result = vErr.Result
-	}
-
-	return &ExplorerPayload{
-		SchemaVersion: explorerPayloadSchemaVersion,
-		Graph:         result.Graph,
-		Catalog: ExplorerCatalog{
-			Teams:   cat.Teams,
-			Domains: cat.Domains,
-		},
-		Validation: ExplorerValidation{
-			Diagnostics: result.Diagnostics,
-			Summary: ValidationSummary{
-				Errors:   countDiagnostics(result.Diagnostics, "error"),
-				Warnings: countDiagnostics(result.Diagnostics, "warning"),
-				Nodes:    len(result.Graph.Nodes),
-				Edges:    len(result.Graph.Edges),
-			},
-		},
-		UI: cfg.UI,
-		Meta: ExplorerMeta{
-			ProjectID:   filepath.Dir(e.configPath),
-			SourceLabel: projectscope.SourceLabel("live api", scopedIncludes(cfg, len(e.scopes) > 0)),
-			Mode:        "live",
-		},
-	}, nil
-}
-
-func scopedIncludes(cfg *config.Config, scoped bool) []string {
-	if !scoped {
-		return nil
-	}
-	return append([]string(nil), cfg.Scan.Include...)
+	return doc, err
 }
 
 func (e *explorer) handleExplorer(w http.ResponseWriter, r *http.Request) {
@@ -256,12 +194,25 @@ func (e *explorer) handleExplorer(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	payload, err := e.buildExplorerPayload()
-	if err != nil {
+	doc, err := e.buildCanonicalExport()
+	if err != nil && doc == nil {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, payload)
+	writeJSON(w, explorerPayloadFromCanonical(doc))
+}
+
+func (e *explorer) handleExport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	doc, err := e.buildCanonicalExport()
+	if err != nil && doc == nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, doc)
 }
 
 func (e *explorer) handleGraph(w http.ResponseWriter, r *http.Request) {
@@ -269,12 +220,12 @@ func (e *explorer) handleGraph(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	result, err := e.buildResult()
-	if err != nil {
+	doc, err := e.buildCanonicalExport()
+	if err != nil && doc == nil {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, result.Graph)
+	writeJSON(w, doc.Graph)
 }
 
 func (e *explorer) handleValidate(w http.ResponseWriter, r *http.Request) {
@@ -282,12 +233,12 @@ func (e *explorer) handleValidate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	result, err := e.buildResult()
-	if err != nil {
+	doc, err := e.buildCanonicalExport()
+	if err != nil && doc == nil {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, result)
+	writeJSON(w, doc.Result())
 }
 
 func (e *explorer) handleCatalog(w http.ResponseWriter, r *http.Request) {
@@ -295,14 +246,14 @@ func (e *explorer) handleCatalog(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	_, cat, _, err := e.loadProject()
-	if err != nil {
+	doc, err := e.buildCanonicalExport()
+	if err != nil && doc == nil {
 		writeError(w, err)
 		return
 	}
 	writeJSON(w, ExplorerCatalog{
-		Teams:   cat.Teams,
-		Domains: cat.Domains,
+		Teams:   doc.Catalog.Teams,
+		Domains: doc.Catalog.Domains,
 	})
 }
 
@@ -406,16 +357,6 @@ func (e *explorer) watch(ctx context.Context) error {
 			_ = err
 		}
 	}
-}
-
-func countDiagnostics(diagnostics []validator.Diagnostic, severity string) int {
-	count := 0
-	for _, diagnostic := range diagnostics {
-		if diagnostic.Severity == severity {
-			count++
-		}
-	}
-	return count
 }
 
 func addWatchRoots(watcher *fsnotify.Watcher, root string, cfg *config.Config) error {

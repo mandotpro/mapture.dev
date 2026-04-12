@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,8 @@ import (
 	"testing"
 
 	"github.com/mandotpro/mapture.dev/src/internal/config"
+	exportercanonical "github.com/mandotpro/mapture.dev/src/internal/exporter/canonical"
+	"github.com/mandotpro/mapture.dev/src/internal/schema"
 	"github.com/mandotpro/mapture.dev/src/internal/updater"
 )
 
@@ -356,6 +359,37 @@ func TestGraphCommandWritesMermaidFile(t *testing.T) {
 		if !strings.Contains(output, want) {
 			t.Fatalf("expected %q in file output, got %q", want, output)
 		}
+	}
+}
+
+func TestExportJSONCommandWritesCanonicalDocument(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	cmd := newExportJSONCmd()
+	cmd.SetOut(&stdout)
+	cmd.SetArgs([]string{"../../examples/demo"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	output := stdout.Bytes()
+	if err := schema.ValidateJSON(schema.CanonicalDefinition, "stdout.json", output); err != nil {
+		t.Fatalf("canonical schema validation failed: %v", err)
+	}
+
+	var doc exportercanonical.Document
+	if err := json.Unmarshal(output, &doc); err != nil {
+		t.Fatalf("decode export: %v", err)
+	}
+	if doc.SchemaVersion != exportercanonical.SchemaVersion {
+		t.Fatalf("unexpected schema version: %d", doc.SchemaVersion)
+	}
+	if doc.Source.ConfigPath == "" || doc.Source.ProjectRoot == "" {
+		t.Fatalf("expected source metadata, got %+v", doc.Source)
+	}
+	if len(doc.Graph.Nodes) == 0 || len(doc.Catalog.Teams) == 0 || len(doc.Validation.Diagnostics) != 0 {
+		t.Fatalf("unexpected export payload: %+v", doc)
 	}
 }
 

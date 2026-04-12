@@ -2,7 +2,7 @@
 id: 030
 title: Canonical export JSON contract and shared build pipeline
 milestone: v0.3.0
-status: todo
+status: done
 prd: §17, §19, §29
 depends_on: [004, 005, 020]
 ---
@@ -122,6 +122,7 @@ Those all depend on this task and should not re-specify the export shape themsel
 ## Acceptance
 
 - `mapture export-json examples/ecommerce -o /tmp/ecommerce.json` produces a stable JSON file
+- `serve` can expose the same canonical envelope without rebuilding a separate project model
 - the export validates against a CUE schema
 - snapshot tests fail if a field changes without an intentional schema update
 - the export includes graph, diagnostics, team/domain metadata, and enough meta information for downstream consumers
