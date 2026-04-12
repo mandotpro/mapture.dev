@@ -21,6 +21,7 @@ import (
 	"github.com/mandotpro/mapture.dev/src/internal/catalog"
 	"github.com/mandotpro/mapture.dev/src/internal/config"
 	exportercanonical "github.com/mandotpro/mapture.dev/src/internal/exporter/canonical"
+	exporterhtml "github.com/mandotpro/mapture.dev/src/internal/exporter/html"
 	exportermermaid "github.com/mandotpro/mapture.dev/src/internal/exporter/mermaid"
 	"github.com/mandotpro/mapture.dev/src/internal/projectscope"
 	"github.com/mandotpro/mapture.dev/src/internal/scanner"
@@ -440,23 +441,40 @@ func newServeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-
-			configPath, err := config.Discover(target)
+			fromPath, err := cmd.Flags().GetString("from")
 			if err != nil {
 				return err
+			}
+			if fromPath != "" && len(scopes) > 0 {
+				return fmt.Errorf("--scope cannot be used with --from")
 			}
 
 			ctx, stop := signal.NotifyContext(cmd.Context(), serveSignals()...)
 			defer stop()
 
+			configPath := ""
+			readySource := fromPath
+			if fromPath == "" {
+				configPath, err = config.Discover(target)
+				if err != nil {
+					return err
+				}
+				readySource = configPath
+			}
+
 			opts := server.Options{
 				ConfigPath:  configPath,
+				FromPath:    fromPath,
 				Addr:        addr,
 				Scopes:      scopes,
 				ToolVersion: version,
-				Watch:       !noWatch,
+				Watch:       !noWatch && fromPath == "",
 				OnReady: func(url string) {
-					writeCommandf(commandStdout, "mapture serve: listening on %s (config=%s)\n", url, configPath)
+					label := "config"
+					if fromPath != "" {
+						label = "export"
+					}
+					writeCommandf(commandStdout, "mapture serve: listening on %s (%s=%s)\n", url, label, readySource)
 					if open {
 						if err := openBrowser(url); err != nil {
 							writeCommandf(commandStderr, "mapture serve: could not open browser: %v\n", err)
@@ -472,6 +490,7 @@ func newServeCmd() *cobra.Command {
 		},
 	}
 	c.Flags().String("addr", server.DefaultAddr, "listen address")
+	c.Flags().String("from", "", "serve a canonical export JSON file instead of scanning a repository")
 	c.Flags().Bool("no-watch", false, "disable filesystem watching and live reload")
 	c.Flags().Bool("open", false, "open the explorer in the default browser on start")
 	bindScopeFlag(c)
@@ -595,11 +614,44 @@ func openBrowser(url string) error {
 func newExportHTMLCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "export-html [path]",
-		Short: "Write a self-contained HTML architecture report",
+		Short: "Write a static explorer bundle with data.json",
 		Args:  cobra.MaximumNArgs(1),
-		RunE:  todo("export-html"),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			target := "."
+			if len(args) > 0 {
+				target = args[0]
+			}
+			outputDir, err := cmd.Flags().GetString("output")
+			if err != nil {
+				return err
+			}
+			scopes, err := cmd.Flags().GetStringSlice("scope")
+			if err != nil {
+				return err
+			}
+
+			configPath, err := config.Discover(target)
+			if err != nil {
+				return err
+			}
+
+			doc, buildErr := exportercanonical.BuildProject(configPath, exportercanonical.ProjectOptions{
+				Scopes:      scopes,
+				ToolVersion: version,
+				Mode:        exportercanonical.ModeStatic,
+				SourceLabel: "static build",
+			})
+			if doc == nil {
+				return buildErr
+			}
+			if err := exporterhtml.WriteBundle(outputDir, doc); err != nil {
+				return err
+			}
+			return buildErr
+		},
 	}
-	c.Flags().StringP("output", "o", "architecture-report.html", "output file")
+	c.Flags().StringP("output", "o", "mapture-explorer", "output directory")
+	bindScopeFlag(c)
 	return c
 }
 

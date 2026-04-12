@@ -61,10 +61,15 @@ export interface UIConfig {
   nodeColors?: UINodeColors;
 }
 
-export interface ExplorerMeta {
-  projectId: string;
+export interface CanonicalSource {
+  projectRoot: string;
+  configPath: string;
+  scopes?: string[];
+}
+
+export interface CanonicalMeta {
   sourceLabel: string;
-  mode: 'live' | 'offline';
+  mode: 'live' | 'offline' | 'static';
 }
 
 export interface CatalogPayload {
@@ -84,13 +89,16 @@ export interface ValidationSummary {
   edges: number;
 }
 
-export interface ExplorerPayload {
+export interface CanonicalExportDocument {
   schemaVersion: number;
+  generatedAt: string;
+  toolVersion: string;
+  source: CanonicalSource;
   graph: BackendGraph;
   catalog: CatalogPayload;
   validation: ValidationPayload;
   ui: UIConfig;
-  meta: ExplorerMeta;
+  meta: CanonicalMeta;
 }
 
 export interface GraphNode {
@@ -320,5 +328,5 @@ export interface NodeInspectorAction {
 }
 
 export interface WindowWithPayload extends Window {
-  __MAPTURE_DATA__?: ExplorerPayload;
+  __MAPTURE_DATA__?: CanonicalExportDocument;
 }

@@ -34,6 +34,8 @@ const DefaultAddr = "127.0.0.1:8765"
 type Options struct {
 	// ConfigPath is the absolute path to the project's mapture.yaml.
 	ConfigPath string
+	// FromPath is an exported canonical JSON document to serve directly.
+	FromPath string
 	// Addr is the listen address (e.g. "127.0.0.1:8765").
 	Addr string
 	// Scopes narrows scanning to one or more project-relative files/directories.
@@ -49,15 +51,18 @@ type Options struct {
 
 // Serve boots the explorer and blocks until ctx is cancelled.
 func Serve(ctx context.Context, opts Options) error {
-	if opts.ConfigPath == "" {
-		return errors.New("server: ConfigPath is required")
+	if opts.ConfigPath == "" && opts.FromPath == "" {
+		return errors.New("server: ConfigPath or FromPath is required")
+	}
+	if opts.ConfigPath != "" && opts.FromPath != "" {
+		return errors.New("server: ConfigPath and FromPath are mutually exclusive")
 	}
 	addr := opts.Addr
 	if addr == "" {
 		addr = DefaultAddr
 	}
 
-	srv, err := newServer(opts.ConfigPath, opts.Scopes, opts.ToolVersion)
+	srv, err := newServer(opts)
 	if err != nil {
 		return err
 	}
@@ -83,7 +88,7 @@ func Serve(ctx context.Context, opts Options) error {
 	watchCtx, cancelWatch := context.WithCancel(ctx)
 	defer cancelWatch()
 
-	if opts.Watch {
+	if opts.Watch && opts.FromPath == "" {
 		watcherWG.Add(1)
 		go func() {
 			defer watcherWG.Done()
@@ -131,24 +136,34 @@ func Serve(ctx context.Context, opts Options) error {
 
 type explorer struct {
 	configPath  string
+	fromPath    string
 	scopes      []string
 	toolVersion string
 	uiHandler   http.Handler
 	broadcaster *broadcaster
+	staticDoc   *exportercanonical.Document
 }
 
-func newServer(configPath string, scopes []string, toolVersion string) (*explorer, error) {
-	return &explorer{
-		configPath:  configPath,
-		scopes:      append([]string(nil), scopes...),
-		toolVersion: toolVersion,
+func newServer(opts Options) (*explorer, error) {
+	srv := &explorer{
+		configPath:  opts.ConfigPath,
+		fromPath:    opts.FromPath,
+		scopes:      append([]string(nil), opts.Scopes...),
+		toolVersion: opts.ToolVersion,
 		uiHandler:   http.FileServer(http.FS(webui.FS())),
 		broadcaster: newBroadcaster(),
-	}, nil
+	}
+	if opts.FromPath != "" {
+		doc, err := loadExportFromFile(opts.FromPath)
+		if err != nil {
+			return nil, err
+		}
+		srv.staticDoc = doc
+	}
+	return srv, nil
 }
 
 func (e *explorer) register(mux *http.ServeMux) {
-	mux.HandleFunc("/api/explorer", e.handleExplorer)
 	mux.HandleFunc("/api/export", e.handleExport)
 	mux.HandleFunc("/api/graph", e.handleGraph)
 	mux.HandleFunc("/api/catalog", e.handleCatalog)
@@ -177,6 +192,9 @@ func (e *explorer) loadProject() (*config.Config, *catalog.Catalog, string, erro
 }
 
 func (e *explorer) buildCanonicalExport() (*exportercanonical.Document, error) {
+	if e.staticDoc != nil {
+		return cloneDocument(e.staticDoc), nil
+	}
 	doc, err := exportercanonical.BuildProject(e.configPath, exportercanonical.ProjectOptions{
 		Scopes:      e.scopes,
 		ToolVersion: e.toolVersion,
@@ -187,19 +205,6 @@ func (e *explorer) buildCanonicalExport() (*exportercanonical.Document, error) {
 		return nil, err
 	}
 	return doc, err
-}
-
-func (e *explorer) handleExplorer(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	doc, err := e.buildCanonicalExport()
-	if err != nil && doc == nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, explorerPayloadFromCanonical(doc))
 }
 
 func (e *explorer) handleExport(w http.ResponseWriter, r *http.Request) {
@@ -251,7 +256,7 @@ func (e *explorer) handleCatalog(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, ExplorerCatalog{
+	writeJSON(w, exportercanonical.Catalog{
 		Teams:   doc.Catalog.Teams,
 		Domains: doc.Catalog.Domains,
 	})
