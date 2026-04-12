@@ -3,6 +3,7 @@ package server
 import (
 	"github.com/mandotpro/mapture.dev/src/internal/catalog"
 	"github.com/mandotpro/mapture.dev/src/internal/config"
+	exportercanonical "github.com/mandotpro/mapture.dev/src/internal/exporter/canonical"
 	"github.com/mandotpro/mapture.dev/src/internal/graph"
 	"github.com/mandotpro/mapture.dev/src/internal/validator"
 )
@@ -44,4 +45,34 @@ type ExplorerMeta struct {
 	ProjectID   string `json:"projectId"`
 	SourceLabel string `json:"sourceLabel"`
 	Mode        string `json:"mode"`
+}
+
+func explorerPayloadFromCanonical(doc *exportercanonical.Document) *ExplorerPayload {
+	if doc == nil {
+		return nil
+	}
+
+	return &ExplorerPayload{
+		SchemaVersion: explorerPayloadSchemaVersion,
+		Graph:         doc.Graph,
+		Catalog: ExplorerCatalog{
+			Teams:   append([]catalog.Team(nil), doc.Catalog.Teams...),
+			Domains: append([]catalog.Domain(nil), doc.Catalog.Domains...),
+		},
+		Validation: ExplorerValidation{
+			Diagnostics: append([]validator.Diagnostic(nil), doc.Validation.Diagnostics...),
+			Summary: ValidationSummary{
+				Errors:   doc.Validation.Summary.Errors,
+				Warnings: doc.Validation.Summary.Warnings,
+				Nodes:    doc.Validation.Summary.Nodes,
+				Edges:    doc.Validation.Summary.Edges,
+			},
+		},
+		UI: doc.UI,
+		Meta: ExplorerMeta{
+			ProjectID:   doc.Source.ProjectRoot,
+			SourceLabel: doc.Meta.SourceLabel,
+			Mode:        doc.Meta.Mode,
+		},
+	}
 }

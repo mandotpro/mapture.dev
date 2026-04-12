@@ -24,12 +24,13 @@ type Definition string
 
 // Embedded schema entrypoints used by the YAML decoders.
 const (
-	ConfigDefinition   Definition = "Config"
-	TeamsDefinition    Definition = "TeamsFile"
-	DomainsDefinition  Definition = "DomainsFile"
-	EventsDefinition   Definition = "EventsFile"
-	GraphDefinition    Definition = "Graph"
-	ExplorerDefinition Definition = "ExplorerPayload"
+	ConfigDefinition    Definition = "Config"
+	TeamsDefinition     Definition = "TeamsFile"
+	DomainsDefinition   Definition = "DomainsFile"
+	EventsDefinition    Definition = "EventsFile"
+	GraphDefinition     Definition = "Graph"
+	CanonicalDefinition Definition = "CanonicalExport"
+	ExplorerDefinition  Definition = "ExplorerPayload"
 )
 
 var (

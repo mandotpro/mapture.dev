@@ -20,6 +20,7 @@ import (
 	"github.com/mandotpro/mapture.dev/src/internal/bootstrap"
 	"github.com/mandotpro/mapture.dev/src/internal/catalog"
 	"github.com/mandotpro/mapture.dev/src/internal/config"
+	exportercanonical "github.com/mandotpro/mapture.dev/src/internal/exporter/canonical"
 	exportermermaid "github.com/mandotpro/mapture.dev/src/internal/exporter/mermaid"
 	"github.com/mandotpro/mapture.dev/src/internal/projectscope"
 	"github.com/mandotpro/mapture.dev/src/internal/scanner"
@@ -64,6 +65,7 @@ func init() {
 		newScanCmd(),
 		newGraphCmd(),
 		newServeCmd(),
+		newExportJSONCmd(),
 		newUpdateCmd(),
 		newExportHTMLCmd(),
 		newExportAICmd(),
@@ -448,10 +450,11 @@ func newServeCmd() *cobra.Command {
 			defer stop()
 
 			opts := server.Options{
-				ConfigPath: configPath,
-				Addr:       addr,
-				Scopes:     scopes,
-				Watch:      !noWatch,
+				ConfigPath:  configPath,
+				Addr:        addr,
+				Scopes:      scopes,
+				ToolVersion: version,
+				Watch:       !noWatch,
 				OnReady: func(url string) {
 					writeCommandf(commandStdout, "mapture serve: listening on %s (config=%s)\n", url, configPath)
 					if open {
@@ -471,6 +474,62 @@ func newServeCmd() *cobra.Command {
 	c.Flags().String("addr", server.DefaultAddr, "listen address")
 	c.Flags().Bool("no-watch", false, "disable filesystem watching and live reload")
 	c.Flags().Bool("open", false, "open the explorer in the default browser on start")
+	bindScopeFlag(c)
+	return c
+}
+
+func newExportJSONCmd() *cobra.Command {
+	c := &cobra.Command{
+		Use:   "export-json [path]",
+		Short: "Write the canonical Mapture JSON export",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			target := "."
+			if len(args) > 0 {
+				target = args[0]
+			}
+			outputPath, err := cmd.Flags().GetString("out")
+			if err != nil {
+				return err
+			}
+			scopes, err := cmd.Flags().GetStringSlice("scope")
+			if err != nil {
+				return err
+			}
+
+			configPath, err := config.Discover(target)
+			if err != nil {
+				return err
+			}
+
+			doc, buildErr := exportercanonical.BuildProject(configPath, exportercanonical.ProjectOptions{
+				Scopes:      scopes,
+				ToolVersion: version,
+				Mode:        exportercanonical.ModeStatic,
+			})
+			if doc == nil {
+				return buildErr
+			}
+
+			writer := cmd.OutOrStdout()
+			if outputPath != "" {
+				file, err := os.Create(outputPath)
+				if err != nil {
+					return err
+				}
+				defer func() { _ = file.Close() }()
+				writer = file
+			}
+
+			encoder := json.NewEncoder(writer)
+			encoder.SetIndent("", "  ")
+			if err := encoder.Encode(doc); err != nil {
+				return err
+			}
+			return buildErr
+		},
+	}
+	c.Flags().StringP("out", "o", "", "write canonical JSON export to file")
 	bindScopeFlag(c)
 	return c
 }

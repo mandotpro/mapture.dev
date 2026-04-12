@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	exportercanonical "github.com/mandotpro/mapture.dev/src/internal/exporter/canonical"
 	"github.com/mandotpro/mapture.dev/src/internal/graph"
 	"github.com/mandotpro/mapture.dev/src/internal/schema"
 	"github.com/mandotpro/mapture.dev/src/internal/validator"
@@ -51,10 +52,11 @@ func startTestServer(t *testing.T, watch bool, scopes ...string) (baseURL string
 
 	go func() {
 		done <- Serve(ctx, Options{
-			ConfigPath: ecommerceConfig(t),
-			Addr:       addr,
-			Scopes:     scopes,
-			Watch:      watch,
+			ConfigPath:  ecommerceConfig(t),
+			Addr:        addr,
+			Scopes:      scopes,
+			ToolVersion: graph.DefaultScannerVersion,
+			Watch:       watch,
 			OnReady: func(url string) {
 				select {
 				case ready <- url:
@@ -84,6 +86,43 @@ func startTestServer(t *testing.T, watch bool, scopes ...string) (baseURL string
 		t.Fatal("server did not become ready within 5s")
 	}
 	return "", func() {}
+}
+
+func TestServeExportEndpointReturnsCanonicalDocument(t *testing.T) {
+	baseURL, stop := startTestServer(t, false)
+	defer stop()
+
+	resp, err := http.Get(baseURL + "/api/export")
+	if err != nil {
+		t.Fatalf("GET /api/export: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected status: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read export payload: %v", err)
+	}
+	if err := schema.ValidateJSON(schema.CanonicalDefinition, "export.json", body); err != nil {
+		t.Fatalf("canonical schema validation failed: %v", err)
+	}
+
+	var doc exportercanonical.Document
+	if err := json.Unmarshal(body, &doc); err != nil {
+		t.Fatalf("decode export payload: %v", err)
+	}
+	if doc.SchemaVersion != exportercanonical.SchemaVersion {
+		t.Fatalf("unexpected schema version: %d", doc.SchemaVersion)
+	}
+	if doc.Meta.Mode != exportercanonical.ModeLive {
+		t.Fatalf("unexpected mode: %+v", doc.Meta)
+	}
+	if doc.Source.ConfigPath == "" || doc.Source.ProjectRoot == "" {
+		t.Fatalf("expected source metadata, got %+v", doc.Source)
+	}
 }
 
 func TestServeGraphEndpointReturnsGraph(t *testing.T) {
