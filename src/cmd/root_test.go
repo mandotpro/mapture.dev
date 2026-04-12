@@ -393,6 +393,30 @@ func TestExportJSONCommandWritesCanonicalDocument(t *testing.T) {
 	}
 }
 
+func TestExportHTMLCommandWritesStaticBundle(t *testing.T) {
+	t.Parallel()
+
+	outputDir := filepath.Join(t.TempDir(), "bundle")
+	cmd := newExportHTMLCmd()
+	cmd.SetArgs([]string{"../../examples/demo", "-o", outputDir})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	for _, name := range []string{"index.html", "app.js", "styles.css", "data.json"} {
+		if _, err := os.Stat(filepath.Join(outputDir, name)); err != nil {
+			t.Fatalf("expected %s in bundle: %v", name, err)
+		}
+	}
+
+	data, err := os.ReadFile(filepath.Join(outputDir, "data.json"))
+	if err != nil {
+		t.Fatalf("ReadFile(data.json): %v", err)
+	}
+	if err := schema.ValidateJSON(schema.CanonicalDefinition, "data.json", data); err != nil {
+		t.Fatalf("canonical schema validation failed: %v", err)
+	}
+}
 func TestReportServeErrorIncludesPortBusyHint(t *testing.T) {
 	t.Parallel()
 

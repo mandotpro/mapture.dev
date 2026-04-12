@@ -12,7 +12,12 @@
     type Node,
     type NodeTypes,
   } from '@xyflow/svelte';
-  import { loadGraphFromApi } from './lib/api';
+  import {
+    isNotFoundError,
+    loadCanonicalExport,
+    loadGraphFromApi,
+    parseCanonicalExport,
+  } from './lib/api';
   import {
     buildFlowPresentation,
     domainName,
@@ -40,6 +45,7 @@
   import TokenBadge from './lib/ui/TokenBadge.svelte';
   import type {
     ExplorerSettings,
+    CanonicalExportDocument,
     DensityMode,
     Filters,
     GraphModel,
@@ -67,6 +73,7 @@
     icon: string;
     tone: string;
   };
+  type BootSourceKind = 'injected' | 'query' | 'api' | 'bundle' | 'file' | 'none';
 
   const GITHUB_URL = 'https://github.com/mandotpro/mapture.dev';
   const STORAGE_PREFIX = 'mapture-layout';
@@ -160,6 +167,7 @@
   let live = $state(false);
   let loadError = $state('');
   let sourceLabel = $state('api');
+  let sourceKind = $state<BootSourceKind>('none');
   let activePopover = $state<PopoverKind>(null);
   let selectedNodeId = $state<string | null>(null);
   let viewMode = $state<ViewMode>(viewModeFromLayout(emptyModel.ui.defaultLayout));
@@ -177,6 +185,7 @@
   let boundaryFocus = $state(false);
   let aggregateCrossDomain = $state(false);
   let explorerSettings = $state.raw<ExplorerSettings>(defaultExplorerSettings);
+  let attachInput: HTMLInputElement | null = null;
   let systemPrefersDark = $state(false);
   let lastStorageKey = '';
   let refreshVersion = 0;
@@ -236,6 +245,7 @@
     top: Math.ceil(toolbarSize.height + 72),
     left: Math.ceil(toolbarSize.width + 72),
   });
+  const canAttachJSON = $derived(!loading && !live && model.nodes.length === 0);
 
   $effect(() => {
     const nodeIDs = presentedGraph.nodes.map((node) => node.id);
@@ -333,26 +343,70 @@
   async function boot(): Promise<void> {
     loading = true;
     loadError = '';
+    live = false;
 
     try {
       const injected = (window as WindowWithPayload).__MAPTURE_DATA__;
       if (injected) {
-        model = normalizeGraph(injected);
-        viewMode = viewModeFromLayout(model.ui.defaultLayout);
-        sourceLabel = injected.meta.sourceLabel;
-      } else {
+        applyLoadedDocument(injected, 'injected');
+        return;
+      }
+
+      const dataURL = readDataURL();
+      if (dataURL) {
+        const payload = await loadCanonicalExport(dataURL);
+        applyLoadedDocument(payload, 'query');
+        return;
+      }
+
+      try {
         const payload = await loadGraphFromApi();
-        model = normalizeGraph(payload);
-        viewMode = viewModeFromLayout(model.ui.defaultLayout);
-        sourceLabel = payload.meta.sourceLabel;
+        applyLoadedDocument(payload, 'api');
         bindLiveReload();
+        return;
+      } catch (error) {
+        if (!isNotFoundError(error)) {
+          throw error;
+        }
+      }
+
+      try {
+        const payload = await loadCanonicalExport('./data.json');
+        applyLoadedDocument(payload, 'bundle');
+        return;
+      } catch (error) {
+        if (!isNotFoundError(error)) {
+          throw error;
+        }
       }
     } catch (error) {
       loadError = error instanceof Error ? error.message : String(error);
       model = emptyModel;
+      sourceKind = 'none';
+      sourceLabel = 'offline';
     } finally {
       loading = false;
     }
+  }
+
+  function applyLoadedDocument(doc: CanonicalExportDocument, kind: BootSourceKind): void {
+    model = normalizeGraph(doc);
+    viewMode = viewModeFromLayout(model.ui.defaultLayout);
+    sourceLabel = doc.meta.sourceLabel;
+    sourceKind = kind;
+    live = kind === 'api';
+    loadError = '';
+  }
+
+  function readDataURL(): string | null {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+    const value = new URL(window.location.href).searchParams.get('data');
+    if (!value) {
+      return null;
+    }
+    return value;
   }
 
   function readExplorerSettings(): ExplorerSettings {
@@ -411,8 +465,7 @@
     stream.addEventListener('graph', async () => {
       try {
         const payload = await loadGraphFromApi();
-        model = normalizeGraph(payload);
-        loadError = '';
+        applyLoadedDocument(payload, 'api');
       } catch (error) {
         loadError = error instanceof Error ? error.message : String(error);
       }
@@ -427,14 +480,23 @@
     if (loadError) {
       return 'Load failed';
     }
+    if (canAttachJSON) {
+      return 'Attach JSON';
+    }
     if (loading) {
       return 'Loading';
     }
-    if (sourceLabel.startsWith('file:') || sourceLabel === 'static build') {
-      return 'Offline';
-    }
     if (live) {
       return 'API connected';
+    }
+    if (sourceKind === 'file') {
+      return 'Local JSON';
+    }
+    if (sourceKind === 'query') {
+      return 'Remote JSON';
+    }
+    if (sourceKind === 'bundle' || sourceKind === 'injected') {
+      return 'Offline JSON';
     }
     return 'Offline';
   }
@@ -443,10 +505,48 @@
     if (loadError) {
       return 'error';
     }
+    if (canAttachJSON) {
+      return 'ok';
+    }
     if (summary.warnings > 0) {
       return 'warning';
     }
     return 'ok';
+  }
+
+  function openAttachDialog(): void {
+    attachInput?.click();
+  }
+
+  async function handleAttachJSON(event: Event): Promise<void> {
+    const input = event.currentTarget as HTMLInputElement | null;
+    const file = input?.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    loading = true;
+    loadError = '';
+    try {
+      const raw = JSON.parse(await file.text()) as unknown;
+      const doc = parseCanonicalExport(raw, {
+        sourceLabel: `file: ${file.name}`,
+        mode: 'offline',
+      });
+      applyLoadedDocument(doc, 'file');
+      closeTransientUI();
+      refocusVersion += 1;
+    } catch (error) {
+      loadError = error instanceof Error ? error.message : String(error);
+      model = emptyModel;
+      sourceKind = 'none';
+      sourceLabel = 'offline';
+    } finally {
+      if (input) {
+        input.value = '';
+      }
+      loading = false;
+    }
   }
 
   function resetFilters(): void {
@@ -1383,6 +1483,13 @@
 </script>
 
 <main class="app-shell" style={paletteStyle} data-theme={resolvedTheme}>
+  <input
+    bind:this={attachInput}
+    type="file"
+    accept="application/json,.json"
+    class="sr-only"
+    onchange={handleAttachJSON}
+  />
   <header class="page-header">
     <div class="page-header__brand">
       <span class="wordmark">Mapture</span>
@@ -1391,10 +1498,21 @@
     </div>
 
     <div class="page-header__actions">
-      <span class={['header-pill', 'status-pill', connectionTone()].join(' ')}>
-        <span class="status-dot"></span>
-        {connectionLabel()}
-      </span>
+      {#if canAttachJSON}
+        <button
+          type="button"
+          class={['header-pill', 'status-pill', 'header-button', connectionTone()].join(' ')}
+          onclick={openAttachDialog}
+        >
+          <span class="status-dot"></span>
+          {connectionLabel()}
+        </button>
+      {:else}
+        <span class={['header-pill', 'status-pill', connectionTone()].join(' ')}>
+          <span class="status-dot"></span>
+          {connectionLabel()}
+        </span>
+      {/if}
       <a
         class="header-pill header-link icon-pill"
         href={GITHUB_URL}

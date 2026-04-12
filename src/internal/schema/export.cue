@@ -13,9 +13,18 @@ package schema
 	edges:    int & >=0
 })
 
+#CanonicalDiagnostic: close({
+	severity: string & != ""
+	layer:    int & >=0
+	code:     string & != ""
+	message:  string & != ""
+	file?:    string
+	line?:    int & >=0
+})
+
 #CanonicalValidation: close({
 	summary:     #CanonicalValidationSummary
-	diagnostics?: [...#ExplorerDiagnostic]
+	diagnostics?: [...#CanonicalDiagnostic]
 })
 
 #CanonicalMeta: close({

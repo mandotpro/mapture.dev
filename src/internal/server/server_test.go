@@ -161,81 +161,103 @@ func TestServeGraphEndpointReturnsGraph(t *testing.T) {
 	}
 }
 
-func TestServeExplorerEndpointReturnsCanonicalPayload(t *testing.T) {
-	baseURL, stop := startTestServer(t, false)
-	defer stop()
-
-	resp, err := http.Get(baseURL + "/api/explorer")
-	if err != nil {
-		t.Fatalf("GET /api/explorer: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("unexpected status: %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read explorer payload: %v", err)
-	}
-	if err := schema.ValidateJSON(schema.ExplorerDefinition, "explorer.json", body); err != nil {
-		t.Fatalf("explorer schema validation failed: %v", err)
-	}
-
-	var payload ExplorerPayload
-	if err := json.Unmarshal(body, &payload); err != nil {
-		t.Fatalf("decode explorer payload: %v", err)
-	}
-
-	if payload.SchemaVersion != explorerPayloadSchemaVersion {
-		t.Fatalf("unexpected schema version: %d", payload.SchemaVersion)
-	}
-	if payload.Graph.SchemaVersion != graph.SchemaVersion {
-		t.Fatalf("unexpected nested graph schema version: %d", payload.Graph.SchemaVersion)
-	}
-	if len(payload.Graph.Nodes) == 0 {
-		t.Fatal("expected graph nodes in explorer payload")
-	}
-	if len(payload.Catalog.Teams) == 0 || len(payload.Catalog.Domains) == 0 {
-		t.Fatalf("expected catalog in explorer payload, got %+v", payload.Catalog)
-	}
-	if payload.UI.NodeColors.Service == "" || payload.UI.NodeColors.Event == "" {
-		t.Fatalf("expected ui node colors in explorer payload, got %+v", payload.UI.NodeColors)
-	}
-	if payload.UI.DefaultLayout == "" {
-		t.Fatalf("expected ui default layout in explorer payload, got %+v", payload.UI)
-	}
-	if payload.Meta.ProjectID == "" || payload.Meta.Mode != "live" || payload.Meta.SourceLabel == "" {
-		t.Fatalf("unexpected explorer meta: %+v", payload.Meta)
-	}
-}
-
-func TestServeExplorerEndpointWithScopeReturnsSubsetMetadata(t *testing.T) {
+func TestServeExportEndpointWithScopeReturnsSubsetMetadata(t *testing.T) {
 	baseURL, stop := startTestServer(t, false, "./src/php/orders")
 	defer stop()
 
-	resp, err := http.Get(baseURL + "/api/explorer")
+	resp, err := http.Get(baseURL + "/api/export")
 	if err != nil {
-		t.Fatalf("GET /api/explorer: %v", err)
+		t.Fatalf("GET /api/export: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	var payload ExplorerPayload
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		t.Fatalf("decode explorer payload: %v", err)
+	var doc exportercanonical.Document
+	if err := json.NewDecoder(resp.Body).Decode(&doc); err != nil {
+		t.Fatalf("decode export payload: %v", err)
 	}
 
-	if !strings.Contains(payload.Meta.SourceLabel, "scoped") {
-		t.Fatalf("expected scoped source label, got %+v", payload.Meta)
+	if !strings.Contains(doc.Meta.SourceLabel, "scoped") {
+		t.Fatalf("expected scoped source label, got %+v", doc.Meta)
 	}
 
-	for _, node := range payload.Graph.Nodes {
+	for _, node := range doc.Graph.Nodes {
 		if node.ID == "api:payment-api" && node.File == "" {
 			return
 		}
 	}
-	t.Fatalf("expected scoped explorer graph to include inferred boundary node, got %#v", payload.Graph.Nodes)
+	t.Fatalf("expected scoped export graph to include inferred boundary node, got %#v", doc.Graph.Nodes)
+}
+
+func TestServeFromExportFile(t *testing.T) {
+	tmp := t.TempDir()
+	exportPath := filepath.Join(tmp, "ecommerce.json")
+
+	doc, err := exportercanonical.BuildProject(ecommerceConfig(t), exportercanonical.ProjectOptions{
+		ToolVersion: graph.DefaultScannerVersion,
+		Mode:        exportercanonical.ModeStatic,
+		SourceLabel: "static build",
+	})
+	if err != nil {
+		t.Fatalf("BuildProject: %v", err)
+	}
+	data, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent: %v", err)
+	}
+	if err := os.WriteFile(exportPath, append(data, '\n'), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	addr := freePort(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	ready := make(chan string, 1)
+	done := make(chan error, 1)
+	go func() {
+		done <- Serve(ctx, Options{
+			FromPath: exportPath,
+			Addr:     addr,
+			Watch:    true,
+			OnReady: func(url string) {
+				ready <- url
+			},
+		})
+	}()
+	var baseURL string
+	select {
+	case baseURL = <-ready:
+	case err := <-done:
+		t.Fatalf("server exited before ready: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("server did not become ready within 5s")
+	}
+	defer func() {
+		cancel()
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Errorf("server returned error: %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Error("server did not shut down within 5s")
+		}
+	}()
+
+	resp, err := http.Get(baseURL + "/api/export")
+	if err != nil {
+		t.Fatalf("GET /api/export: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var served exportercanonical.Document
+	if err := json.NewDecoder(resp.Body).Decode(&served); err != nil {
+		t.Fatalf("decode served export: %v", err)
+	}
+	if served.Meta.Mode != exportercanonical.ModeOffline {
+		t.Fatalf("expected offline mode, got %+v", served.Meta)
+	}
+	if len(served.Graph.Nodes) == 0 {
+		t.Fatal("expected graph nodes in served export")
+	}
 }
 
 func TestServeValidateEndpointReturnsResult(t *testing.T) {

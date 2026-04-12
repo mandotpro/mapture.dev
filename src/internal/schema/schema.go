@@ -30,7 +30,6 @@ const (
 	EventsDefinition    Definition = "EventsFile"
 	GraphDefinition     Definition = "Graph"
 	CanonicalDefinition Definition = "CanonicalExport"
-	ExplorerDefinition  Definition = "ExplorerPayload"
 )
 
 var (

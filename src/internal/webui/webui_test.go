@@ -39,9 +39,11 @@ func TestAppJSContainsExpectedAPI(t *testing.T) {
 	}
 	body := string(data)
 	for _, needle := range []string{
-		"/api/explorer",
+		"/api/export",
+		"./data.json",
 		"/api/events",
 		"__MAPTURE_DATA__",
+		"Attach JSON",
 	} {
 		if !strings.Contains(body, needle) {
 			t.Errorf("app.js missing reference to %q", needle)

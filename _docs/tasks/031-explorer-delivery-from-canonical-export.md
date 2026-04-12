@@ -2,7 +2,7 @@
 id: 031
 title: Explorer delivery modes from canonical export JSON
 milestone: v0.3.0
-status: todo
+status: done
 prd: §18, §19, §29
 depends_on: [030]
 ---

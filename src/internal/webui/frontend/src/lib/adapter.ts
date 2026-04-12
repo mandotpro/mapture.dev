@@ -1,9 +1,9 @@
 import { MarkerType, Position, type Edge, type Node } from '@xyflow/svelte';
 import type {
   BackendGraph,
+  CanonicalExportDocument,
   DensityMode,
   Diagnostic,
-  ExplorerPayload,
   Filters,
   FlowPresentation,
   GraphEdge,
@@ -100,7 +100,7 @@ const EDGE_COLORS: Record<string, string> = {
   aggregate: '#8c6d44',
 };
 
-export function normalizeGraph(payload: ExplorerPayload): GraphModel {
+export function normalizeGraph(payload: CanonicalExportDocument): GraphModel {
   const rawGraph = normalizeBackendGraph(payload.graph ?? {});
   const diagnostics = payload.validation.diagnostics ?? [];
   const nodes = rawGraph.nodes.map((node) => ({
@@ -137,9 +137,9 @@ export function normalizeGraph(payload: ExplorerPayload): GraphModel {
       defaultLayout: resolveDefaultLayout(payload.ui),
       nodeColors: resolveNodeColors(payload.ui),
     },
-    projectId: payload.meta.projectId,
+    projectId: payload.source.projectRoot,
     sourceLabel: payload.meta.sourceLabel,
-    mode: payload.meta.mode,
+    mode: payload.meta.mode === 'live' ? 'live' : 'offline',
     summary: payload.validation.summary ?? {
       errors: diagnostics.filter((diagnostic) => diagnostic.severity === 'error').length,
       warnings: diagnostics.filter((diagnostic) => diagnostic.severity === 'warning').length,
