@@ -417,7 +417,6 @@ func TestExportHTMLCommandWritesStaticBundle(t *testing.T) {
 		t.Fatalf("canonical schema validation failed: %v", err)
 	}
 }
-
 func TestReportServeErrorIncludesPortBusyHint(t *testing.T) {
 	t.Parallel()
 
