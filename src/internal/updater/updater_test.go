@@ -1,10 +1,18 @@
 package updater
 
 import (
+	"context"
+	"fmt"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
+
+func canaryAssetName(version string) string {
+	name := strings.ReplaceAll(version, "+", "_")
+	return fmt.Sprintf("mapture_%s_%s_%s.tar.gz", name, runtime.GOOS, runtime.GOARCH)
+}
 
 func TestDetectChannel(t *testing.T) {
 	t.Parallel()
@@ -164,5 +172,123 @@ func TestSameFilepath(t *testing.T) {
 	right := filepath.Join("tmp", binaryNameFor(runtime.GOOS))
 	if !sameFilepath(left, right) {
 		t.Fatal("expected paths to normalize to the same path")
+	}
+}
+
+func TestInspectReportsHumanReadableRuntime(t *testing.T) {
+
+	originalExecutable := osExecutable
+	originalEvalSymlinks := evalSymlinks
+	defer func() {
+		osExecutable = originalExecutable
+		evalSymlinks = originalEvalSymlinks
+	}()
+
+	osExecutable = func() (string, error) {
+		return "/opt/homebrew/Cellar/mapture-canary/0.0.0/bin/mapture", nil
+	}
+	evalSymlinks = func(path string) (string, error) {
+		return path, nil
+	}
+
+	details, err := Inspect("0.0.0-canary.20260412+sha.1bd3598", nil)
+	if err != nil {
+		t.Fatalf("Inspect returned error: %v", err)
+	}
+	if details.Channel != ChannelCanary {
+		t.Fatalf("Channel = %q, want %q", details.Channel, ChannelCanary)
+	}
+	if details.InstallMethod != "homebrew" {
+		t.Fatalf("InstallMethod = %q", details.InstallMethod)
+	}
+}
+
+func TestCheckVersionReportsOutdatedCanary(t *testing.T) {
+	originalExecutable := osExecutable
+	originalEvalSymlinks := evalSymlinks
+	originalFetch := fetchReleaseFn
+	defer func() {
+		osExecutable = originalExecutable
+		evalSymlinks = originalEvalSymlinks
+		fetchReleaseFn = originalFetch
+	}()
+
+	osExecutable = func() (string, error) {
+		return "/opt/homebrew/Cellar/mapture-canary/0.0.0/bin/mapture", nil
+	}
+	evalSymlinks = func(path string) (string, error) {
+		return path, nil
+	}
+	fetchReleaseFn = func(_ context.Context, channel Channel) (*release, error) {
+		switch channel {
+		case ChannelStable:
+			return &release{TagName: "v0.3.0"}, nil
+		case ChannelCanary:
+			return &release{
+				TagName: "canary",
+				Assets: []asset{
+					{Name: canaryAssetName("0.0.0-canary.20260412+sha.1bd3598")},
+				},
+			}, nil
+		default:
+			t.Fatalf("unexpected channel: %q", channel)
+			return nil, nil
+		}
+	}
+
+	status, err := CheckVersion(context.Background(), "0.0.0-canary.20260409+sha.c649dd6", nil)
+	if err != nil {
+		t.Fatalf("CheckVersion returned error: %v", err)
+	}
+	if !status.UpdateAvailable {
+		t.Fatal("expected update to be available")
+	}
+	if status.LatestForChannel != "0.0.0-canary.20260412+sha.1bd3598" {
+		t.Fatalf("LatestForChannel = %q", status.LatestForChannel)
+	}
+}
+
+func TestCheckVersionReportsCurrentStable(t *testing.T) {
+	originalExecutable := osExecutable
+	originalEvalSymlinks := evalSymlinks
+	originalFetch := fetchReleaseFn
+	defer func() {
+		osExecutable = originalExecutable
+		evalSymlinks = originalEvalSymlinks
+		fetchReleaseFn = originalFetch
+	}()
+
+	osExecutable = func() (string, error) {
+		return "/usr/local/bin/mapture", nil
+	}
+	evalSymlinks = func(path string) (string, error) {
+		return path, nil
+	}
+	fetchReleaseFn = func(_ context.Context, channel Channel) (*release, error) {
+		switch channel {
+		case ChannelStable:
+			return &release{TagName: "v0.3.0"}, nil
+		case ChannelCanary:
+			return &release{
+				TagName: "canary",
+				Assets: []asset{
+					{Name: canaryAssetName("0.0.0-canary.20260412+sha.1bd3598")},
+				},
+			}, nil
+		default:
+			t.Fatalf("unexpected channel: %q", channel)
+			return nil, nil
+		}
+	}
+
+	status, err := CheckVersion(context.Background(), "v0.3.0", nil)
+	if err != nil {
+		t.Fatalf("CheckVersion returned error: %v", err)
+	}
+	if status.UpdateAvailable {
+		t.Fatal("expected stable version to be current")
+	}
+	if status.LatestStable != "v0.3.0" {
+		t.Fatalf("LatestStable = %q", status.LatestStable)
 	}
 }

@@ -24,8 +24,6 @@ That means:
 
 | ID | Story | Why it comes now |
 | --- | --- | --- |
-| 030 | Canonical export JSON contract and shared build pipeline | This is the foundation for every remaining consumer. |
-| 031 | Explorer delivery modes from canonical export JSON | The server, offline explorer, and static bundle should all load the same artifact. |
 | 032 | Export-driven Mermaid and diagnostics outputs | Mermaid and CI diagnostics should read from the same export/diagnostics model instead of bespoke code paths. |
 | 033 | First-class tags support | Tags are broadly useful metadata and should land before heavier policy work. |
 | 034 | AI export from canonical export JSON | AI artifacts should be generated from the shared export, not from a second traversal. |
@@ -33,6 +31,7 @@ That means:
 | 036 | Scenario presets for explorer workflows | Presets make the explorer easier to use once the data contract is stable. |
 | 037 | Cross-boundary validations | Policy enforcement should come after tags and the canonical export contract are settled. |
 | 038 | Configurable explorer UI defaults and visual tuning | Repo-level UI tuning is useful, but not more important than the shared data pipeline. |
+| 039 | CLI output polish, color system, and terminal UX | The terminal is part of the product and should become clearer before broader adoption. |
 
 ## Non-goals For This Slice
 
@@ -46,3 +45,4 @@ That means:
 - Task IDs are intentionally contiguous again so the active queue reads in execution order.
 - Older backlog sketches were folded into the stories below instead of kept as parallel docs.
 - `tags` and `scenario presets` stay in the backlog as requested.
+- Completed stories live under `_docs/tasks/done/`.

@@ -20,6 +20,8 @@ import (
 	"runtime/debug"
 	"strings"
 	"time"
+
+	"github.com/mandotpro/mapture.dev/src/internal/ui"
 )
 
 const (
@@ -65,6 +67,23 @@ type runtimeInfo struct {
 	HomebrewFormula string
 }
 
+// RuntimeDetails describes the currently running binary in user-facing terms.
+type RuntimeDetails struct {
+	Version        string
+	Channel        Channel
+	InstallMethod  string
+	ExecutablePath string
+}
+
+// VersionStatus captures whether a newer version is available for the current channel.
+type VersionStatus struct {
+	Runtime          RuntimeDetails
+	LatestStable     string
+	LatestCanary     string
+	LatestForChannel string
+	UpdateAvailable  bool
+}
+
 type release struct {
 	TagName string  `json:"tag_name"`
 	Name    string  `json:"name"`
@@ -83,9 +102,10 @@ var (
 	httpClientFactory = func() *http.Client {
 		return &http.Client{Timeout: 45 * time.Second}
 	}
-	osExecutable  = os.Executable
-	evalSymlinks  = filepath.EvalSymlinks
-	commandRunner = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+	osExecutable   = os.Executable
+	evalSymlinks   = filepath.EvalSymlinks
+	fetchReleaseFn = fetchRelease
+	commandRunner  = func(ctx context.Context, name string, args ...string) *exec.Cmd {
 		return exec.CommandContext(ctx, name, args...)
 	}
 )
@@ -96,6 +116,7 @@ func Run(ctx context.Context, opts Options) error {
 	if out == nil {
 		out = io.Discard
 	}
+	console := ui.NewConsole(out)
 
 	current, err := detectRuntime(opts.CurrentVersion, opts.BuildInfo)
 	if err != nil {
@@ -113,8 +134,12 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("unsupported update channel %q", targetChannel)
 	}
 
-	writef(out, "mapture update: detected %s install (%s)\n", current.InstallMethod, current.ExecutablePath)
-	writef(out, "mapture update: current version %s, channel %s\n", displayVersion(current.Version), targetChannel)
+	writef(out, "%s - %s\n", console.Brand("mapture.dev"), console.Strong(displayVersion(current.Version)))
+	writef(out, "%s\n", console.Join(string(targetChannel), humanInstallMethod(current.InstallMethod), current.ExecutablePath))
+	if status, statusErr := CheckVersion(ctx, opts.CurrentVersion, opts.BuildInfo); statusErr == nil && status.UpdateAvailable {
+		writef(out, "%s: %s\n", console.Warning("Update available"), status.LatestForChannel)
+		writef(out, "%s\n", console.Accent("Run: mapture update"))
+	}
 
 	switch current.InstallMethod {
 	case installMethodHomebrew:
@@ -145,9 +170,6 @@ func detectRuntime(currentVersion string, info *debug.BuildInfo) (runtimeInfo, e
 
 	method, formula := detectInstallMethod(exe)
 	channel := detectChannel(currentVersion, moduleVersion, method, formula)
-	if channel == ChannelAuto {
-		channel = ChannelStable
-	}
 
 	return runtimeInfo{
 		Version:         currentVersion,
@@ -157,6 +179,15 @@ func detectRuntime(currentVersion string, info *debug.BuildInfo) (runtimeInfo, e
 		ExecutablePath:  exe,
 		HomebrewFormula: formula,
 	}, nil
+}
+
+// Inspect reports the current runtime metadata without performing any mutation.
+func Inspect(currentVersion string, info *debug.BuildInfo) (RuntimeDetails, error) {
+	current, err := detectRuntime(currentVersion, info)
+	if err != nil {
+		return RuntimeDetails{}, err
+	}
+	return runtimeDetailsFrom(current), nil
 }
 
 func detectInstallMethod(executablePath string) (installMethod, string) {
@@ -235,6 +266,45 @@ func detectChannel(version string, moduleVersion string, method installMethod, f
 		return ChannelCanary
 	}
 	return ChannelAuto
+}
+
+// CheckVersion compares the current runtime against the latest release for its channel.
+func CheckVersion(ctx context.Context, currentVersion string, info *debug.BuildInfo) (VersionStatus, error) {
+	current, err := detectRuntime(currentVersion, info)
+	if err != nil {
+		return VersionStatus{}, err
+	}
+
+	status := VersionStatus{
+		Runtime: runtimeDetailsFrom(current),
+	}
+
+	stable, err := fetchReleaseFn(ctx, ChannelStable)
+	if err != nil {
+		return status, err
+	}
+	status.LatestStable = stable.displayVersion(ChannelStable)
+
+	canary, err := fetchReleaseFn(ctx, ChannelCanary)
+	if err != nil {
+		return status, err
+	}
+	status.LatestCanary = canary.displayVersion(ChannelCanary)
+
+	switch current.Channel {
+	case ChannelCanary:
+		status.LatestForChannel = status.LatestCanary
+	case ChannelStable:
+		status.LatestForChannel = status.LatestStable
+	default:
+		return status, nil
+	}
+
+	if current.Version == "" || status.LatestForChannel == "" {
+		return status, nil
+	}
+	status.UpdateAvailable = current.Version != status.LatestForChannel
+	return status, nil
 }
 
 func looksLikeStableSemver(value string) bool {
@@ -329,7 +399,7 @@ func mustExecutablePath() string {
 }
 
 func upgradeDirectBinary(ctx context.Context, current runtimeInfo, channel Channel, out io.Writer) error {
-	release, err := fetchRelease(ctx, channel)
+	release, err := fetchReleaseFn(ctx, channel)
 	if err != nil {
 		return err
 	}
@@ -406,6 +476,18 @@ func fetchRelease(ctx context.Context, channel Channel) (*release, error) {
 		return nil, fmt.Errorf("decode release metadata: %w", err)
 	}
 	return &release, nil
+}
+
+func (r *release) displayVersion(channel Channel) string {
+	if r == nil {
+		return ""
+	}
+	switch channel {
+	case ChannelCanary:
+		return r.binaryVersion(runtime.GOOS, runtime.GOARCH)
+	default:
+		return r.TagName
+	}
 }
 
 func (r *release) findAsset(goos, goarch string) (*asset, error) {
@@ -606,6 +688,28 @@ func displayVersion(version string) string {
 		return "unknown"
 	}
 	return version
+}
+
+func runtimeDetailsFrom(current runtimeInfo) RuntimeDetails {
+	return RuntimeDetails{
+		Version:        current.Version,
+		Channel:        current.Channel,
+		InstallMethod:  humanInstallMethod(current.InstallMethod),
+		ExecutablePath: current.ExecutablePath,
+	}
+}
+
+func humanInstallMethod(method installMethod) string {
+	switch method {
+	case installMethodHomebrew:
+		return "homebrew"
+	case installMethodGo:
+		return "go install"
+	case installMethodDirect:
+		return "direct binary"
+	default:
+		return "unknown"
+	}
 }
 
 func writef(w io.Writer, format string, args ...any) {

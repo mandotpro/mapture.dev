@@ -27,7 +27,8 @@ go run src/main.go graph examples/ecommerce --domain billing -o "$graph_output"
 test -s "$graph_output"
 
 ./scripts/build.sh >/dev/null
-./build/mapture --version | grep -q "0.0.0-dev"
+build_version="$(./build/mapture --version)"
+[[ "$build_version" == *"0.0.0-dev"* ]]
 GOBIN="$install_output_dir" go install ./cmd/mapture
 test -x "$install_output_dir/mapture"
 
