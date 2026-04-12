@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-01-02T03:04:05Z",
+  "toolVersion": "dev",
+  "source": {
+    "projectRoot": "/repo/examples/demo",
+    "configPath": "/repo/examples/demo/mapture.yaml"
+  },
+  "catalog": {
+    "teams": [
+      {
+        "id": "team-billing",
+        "name": "Billing Team",
+        "email": "billing@example.com"
+      },
+      {
+        "id": "team-commerce",
+        "name": "Commerce Team",
+        "email": "commerce@example.com"
+      }
+    ],
+    "domains": [
+      {
+        "id": "billing",
+        "name": "Billing",
+        "ownerTeams": [
+          "team-billing"
+        ]
+      },
+      {
+        "id": "orders",
+        "name": "Orders",
+        "ownerTeams": [
+          "team-commerce"
+        ]
+      }
+    ]
+  },
+  "validation": {
+    "summary": {
+      "errors": 0,
+      "warnings": 0,
+      "nodes": 4,
+      "edges": 4
+    }
+  },
+  "graph": {
+    "schemaVersion": 1,
+    "metadata": {
+      "generatedAt": "2026-01-02T03:04:05Z",
+      "scannerVersion": "dev",
+      "sourceRoot": "/repo/examples/demo"
+    },
+    "nodes": [
+      {
+        "id": "api:payment-api",
+        "type": "api",
+        "name": "Payment API",
+        "domain": "billing",
+        "owner": "team-billing",
+        "file": "src/ts/PaymentApiClient.ts",
+        "line": 1
+      },
+      {
+        "id": "database:orders-db",
+        "type": "database",
+        "name": "Orders Database",
+        "domain": "orders",
+        "owner": "team-commerce",
+        "file": "src/go/ordersdb/ordersdb.go",
+        "line": 1
+      },
+      {
+        "id": "event:order.placed",
+        "type": "event",
+        "name": "Order Placed",
+        "domain": "orders",
+        "owner": "team-commerce",
+        "file": "src/php/CheckoutService.php",
+        "line": 16
+      },
+      {
+        "id": "service:checkout-service",
+        "type": "service",
+        "name": "Checkout Service",
+        "domain": "orders",
+        "owner": "team-commerce",
+        "file": "src/php/CheckoutService.php",
+        "line": 3
+      }
+    ],
+    "edges": [
+      {
+        "from": "event:order.placed",
+        "to": "api:payment-api",
+        "type": "consumes"
+      },
+      {
+        "from": "service:checkout-service",
+        "to": "api:payment-api",
+        "type": "calls"
+      },
+      {
+        "from": "service:checkout-service",
+        "to": "database:orders-db",
+        "type": "stores_in"
+      },
+      {
+        "from": "service:checkout-service",
+        "to": "event:order.placed",
+        "type": "emits"
+      }
+    ]
+  },
+  "ui": {
+    "defaultLayout": "elk-horizontal",
+    "nodeColors": {
+      "service": "#2563eb",
+      "api": "#0f766e",
+      "database": "#b45309",
+      "event": "#be185d"
+    }
+  },
+  "meta": {
+    "sourceLabel": "static",
+    "mode": "static"
+  }
+}
