@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Support and usage questions
-    url: https://github.com/mandotpro/mapture.dev/blob/main/SUPPORT.md
+    url: https://mapture.dev/github
     about: Read the support guide before opening a non-bug issue.
   - name: Security reporting
-    url: https://github.com/mandotpro/mapture.dev/blob/main/SECURITY.md
+    url: https://mapture.dev/github
     about: Please use the private security process for vulnerabilities.

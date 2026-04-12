@@ -25,7 +25,7 @@ func TestIndexHTMLReferencesBundle(t *testing.T) {
 		t.Fatalf("read index.html: %v", err)
 	}
 	body := string(data)
-	for _, needle := range []string{"app.js", "styles.css", "Mapture Explorer"} {
+	for _, needle := range []string{"app.js", "styles.css", "mapture.dev Explorer"} {
 		if !strings.Contains(body, needle) {
 			t.Errorf("index.html missing reference to %q", needle)
 		}

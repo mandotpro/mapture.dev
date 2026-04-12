@@ -2,7 +2,7 @@
 
 ## Our standard
 
-Mapture is an open-source project. We expect contributors and maintainers to keep the project respectful, constructive, and safe for people with different levels of experience, backgrounds, and viewpoints.
+mapture.dev is an open-source project. We expect contributors and maintainers to keep the project respectful, constructive, and safe for people with different levels of experience, backgrounds, and viewpoints.
 
 Examples of expected behavior:
 

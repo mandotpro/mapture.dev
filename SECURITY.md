@@ -1,8 +1,8 @@
-# Security Policy
+# mapture.dev security policy
 
 ## Supported versions
 
-Mapture is still pre-`v1.0.0`.
+mapture.dev is still pre-`v1.0.0`.
 
 The project currently supports:
 
@@ -36,4 +36,4 @@ The project aims to:
 - reproduce and assess the issue
 - coordinate a fix before public disclosure when possible
 
-Because Mapture is pre-1.0, fixes may ship as either a stable release or a canary build first, depending on severity and scope.
+Because mapture.dev is pre-1.0, fixes may ship as either a stable release or a canary build first, depending on severity and scope.

@@ -1,8 +1,8 @@
-# Contributing to Mapture
+# Contributing to mapture.dev
 
-Thanks for contributing to Mapture.
+Thanks for contributing to mapture.dev.
 
-Mapture is an experimental, comments-first architecture graph tool. The repo is public, but the project is still early. Contributions that improve correctness, usability, release quality, examples, and docs are especially valuable.
+mapture.dev is an experimental, comments-first architecture graph tool. The repo is public, but the project is still early. Contributions that improve correctness, usability, release quality, examples, and docs are especially valuable.
 
 ## Before you open a PR
 

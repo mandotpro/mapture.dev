@@ -325,7 +325,7 @@ func TestServeIndexHTML(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read body: %v", err)
 	}
-	if !strings.Contains(string(body), "Mapture Explorer") {
+	if !strings.Contains(string(body), "mapture.dev Explorer") {
 		t.Fatalf("index.html missing expected content: %s", body)
 	}
 }

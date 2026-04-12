@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"strings"
 	"syscall"
 
 	"github.com/mandotpro/mapture.dev/src/internal/bootstrap"
@@ -43,10 +44,15 @@ var (
 	runUpdateCmd            = updater.Run
 )
 
+const (
+	productSiteURL   = "https://mapture.dev"
+	productGitHubURL = "https://mapture.dev/github"
+)
+
 var rootCmd = &cobra.Command{
 	Use:           "mapture",
-	Short:         "Repo-native architecture graph tool",
-	Long:          "Mapture turns catalog YAML and structured code comments into validated architecture graphs, diagrams, and AI-ready bundles.",
+	Short:         "mapture.dev repo-native architecture graph tool",
+	Long:          "mapture.dev turns catalog YAML and structured code comments into validated architecture graphs, diagrams, and AI-ready bundles.",
 	Version:       version,
 	SilenceErrors: true,
 	SilenceUsage:  true,
@@ -60,6 +66,10 @@ func Execute() error {
 func init() {
 	version = resolveVersion(version, readBuildInfo())
 	rootCmd.Version = version
+	rootCmd.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
+		writeCommandf(cmd.OutOrStdout(), "%s\n\n%s", cliBrandBlock(), cmd.UsageString())
+	})
+	rootCmd.SetVersionTemplate(cliBrandBlock() + "\n")
 	rootCmd.AddCommand(
 		newInitCmd(),
 		newValidateCmd(),
@@ -71,6 +81,15 @@ func init() {
 		newExportHTMLCmd(),
 		newExportAICmd(),
 	)
+}
+
+func cliBrandBlock() string {
+	return strings.Join([]string{
+		fmt.Sprintf("mapture.dev - %s", version),
+		"Repo-native architecture mapping that stays close to the code.",
+		fmt.Sprintf("Site: %s", productSiteURL),
+		fmt.Sprintf("GitHub: %s", productGitHubURL),
+	}, "\n")
 }
 
 var readBuildInfo = func() *debug.BuildInfo {
@@ -500,7 +519,7 @@ func newServeCmd() *cobra.Command {
 func newExportJSONCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "export-json [path]",
-		Short: "Write the canonical Mapture JSON export",
+		Short: "Write the canonical mapture.dev JSON export",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			target := "."

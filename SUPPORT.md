@@ -1,4 +1,4 @@
-# Support
+# mapture.dev support
 
 Use the right channel so the project stays easy to maintain.
 
@@ -19,7 +19,7 @@ Good requests explain:
 
 - the problem you are trying to solve
 - why the current workflow is not enough
-- what outcome you need from Mapture
+- what outcome you need from mapture.dev
 
 ## Usage questions
 

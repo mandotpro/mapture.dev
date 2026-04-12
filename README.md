@@ -1,18 +1,21 @@
-# Mapture
+# mapture.dev
 
 > Repo-native architecture mapping that stays close to the code.
 
-[![CI](https://github.com/mandotpro/mapture.dev/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/mandotpro/mapture.dev/actions/workflows/ci.yml)
-[![Canary](https://github.com/mandotpro/mapture.dev/actions/workflows/canary.yml/badge.svg?branch=main)](https://github.com/mandotpro/mapture.dev/actions/workflows/canary.yml)
-[![Release](https://img.shields.io/github/v/release/mandotpro/mapture.dev?display_name=tag)](https://github.com/mandotpro/mapture.dev/releases)
+[![CI](https://github.com/mandotpro/mapture.dev/actions/workflows/ci.yml/badge.svg?branch=main)](https://mapture.dev/github)
+[![Canary](https://github.com/mandotpro/mapture.dev/actions/workflows/canary.yml/badge.svg?branch=main)](https://mapture.dev/github)
+[![Release](https://img.shields.io/github/v/release/mandotpro/mapture.dev?display_name=tag)](https://mapture.dev/github)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/mandotpro/mapture.dev)](https://github.com/mandotpro/mapture.dev/blob/main/go.mod)
 [![License](https://img.shields.io/github/license/mandotpro/mapture.dev)](./LICENSE)
 
-Mapture is an experimental architecture graph tool for repositories that want a lightweight, reviewable source of truth for system structure. It combines a small YAML catalog with flat `@arch.*` and `@event.*` code comments, validates the result, and renders it as CLI output, Mermaid diagrams, and an interactive explorer.
+`mapture.dev` is an experimental architecture graph tool for repositories that want a lightweight, reviewable source of truth for system structure. It combines a small YAML catalog with flat `@arch.*` and `@event.*` code comments, validates the result, and renders the result as CLI output, Mermaid diagrams, and an interactive explorer.
 
-> Status: early preview. Mapture is under active development and not production-ready yet, but the validator, graph pipeline, examples, and local explorer are ready for evaluation and feedback.
+> Status: early preview. `mapture.dev` is under active development and not production-ready yet, but the validator, graph pipeline, examples, and local explorer are ready for evaluation and feedback.
 
-![Mapture explorer on the ecommerce example](./.github/assets/explorer-ecommerce-hero.png)
+![mapture.dev explorer on the ecommerce example](./.github/assets/explorer-ecommerce-hero.png)
+
+Home: [mapture.dev](https://mapture.dev)  
+GitHub: [mapture.dev/github](https://mapture.dev/github)
 
 ## 3-minute quickstart
 
@@ -74,8 +77,8 @@ Both channels install the same `mapture` binary, so switch channels by uninstall
 
 ### Prebuilt archives
 
-- Stable semver binaries are published on [GitHub Releases](https://github.com/mandotpro/mapture.dev/releases).
-- Rolling canary prereleases are published at [the canary release](https://github.com/mandotpro/mapture.dev/releases/tag/canary).
+- Stable semver binaries are published on GitHub and linked from [mapture.dev/github](https://mapture.dev/github).
+- Rolling canary prereleases are published on GitHub and linked from [mapture.dev/github](https://mapture.dev/github).
 
 ### Build from source
 
@@ -116,7 +119,7 @@ mapture update
 mapture update --channel stable
 mapture update --channel canary
 ```
-## What Mapture does today
+## What mapture.dev does today
 
 - Validates catalog ownership, domains, events, and architecture references
 - Scans Go, PHP, TypeScript, and JavaScript comment blocks for `@arch.*` and `@event.*` tags
@@ -134,7 +137,7 @@ mapture update --channel canary
 
 ## Why comments-first
 
-Mapture is designed for teams that want architecture metadata to live close to the code and stay reviewable in pull requests.
+`mapture.dev` is designed for teams that want architecture metadata to live close to the code and stay reviewable in pull requests.
 
 That means:
 

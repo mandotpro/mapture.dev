@@ -124,6 +124,64 @@ func TestUpdateCommandPassesThroughChannel(t *testing.T) {
 	}
 }
 
+func TestRootHelpIncludesMaptureDotDevLinks(t *testing.T) {
+	var stdout bytes.Buffer
+	previousOut := rootCmd.OutOrStdout()
+	previousErr := rootCmd.ErrOrStderr()
+	defer func() {
+		rootCmd.SetOut(previousOut)
+		rootCmd.SetErr(previousErr)
+		rootCmd.SetArgs(nil)
+	}()
+	rootCmd.SetOut(&stdout)
+	rootCmd.SetErr(&stdout)
+	rootCmd.SetArgs([]string{"--help"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	output := stdout.String()
+	for _, needle := range []string{
+		"mapture.dev - ",
+		"https://mapture.dev",
+		"https://mapture.dev/github",
+	} {
+		if !strings.Contains(output, needle) {
+			t.Fatalf("expected help output to contain %q, got %q", needle, output)
+		}
+	}
+}
+
+func TestRootVersionIncludesMaptureDotDevLinks(t *testing.T) {
+	var stdout bytes.Buffer
+	previousOut := rootCmd.OutOrStdout()
+	previousErr := rootCmd.ErrOrStderr()
+	defer func() {
+		rootCmd.SetOut(previousOut)
+		rootCmd.SetErr(previousErr)
+		rootCmd.SetArgs(nil)
+	}()
+	rootCmd.SetOut(&stdout)
+	rootCmd.SetErr(&stdout)
+	rootCmd.SetArgs([]string{"--version"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	output := stdout.String()
+	for _, needle := range []string{
+		"mapture.dev - ",
+		"https://mapture.dev",
+		"https://mapture.dev/github",
+	} {
+		if !strings.Contains(output, needle) {
+			t.Fatalf("expected version output to contain %q, got %q", needle, output)
+		}
+	}
+}
+
 func TestLoadProjectRejectsBrokenFixtures(t *testing.T) {
 	t.Parallel()
 

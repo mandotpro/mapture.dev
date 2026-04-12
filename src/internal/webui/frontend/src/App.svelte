@@ -75,7 +75,8 @@
   };
   type BootSourceKind = 'injected' | 'query' | 'api' | 'bundle' | 'file' | 'none';
 
-  const GITHUB_URL = 'https://github.com/mandotpro/mapture.dev';
+  const HOME_URL = 'https://mapture.dev';
+  const GITHUB_URL = 'https://mapture.dev/github';
   const STORAGE_PREFIX = 'mapture-layout';
   const SETTINGS_STORAGE_KEY = 'mapture-explorer-settings';
   const FIT_VIEW_PADDING = 0.72;
@@ -1492,7 +1493,7 @@
   />
   <header class="page-header">
     <div class="page-header__brand">
-      <span class="wordmark">Mapture</span>
+      <a class="wordmark" href={HOME_URL} target="_blank" rel="noreferrer">mapture.dev</a>
       <TokenBadge label="Nodes" count={visible.nodes} interactive={false} quiet compact className="header-token" />
       <TokenBadge label="Edges" count={visible.edges} interactive={false} quiet compact className="header-token" />
     </div>
