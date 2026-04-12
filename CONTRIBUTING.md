@@ -64,15 +64,21 @@ The exported graph JSON schema is stable. If making structural changes to the gr
   - `fix: ...`
   - `feat: ...`
   - `feat!: ...`
-- Stable releases are automated from squash-merged titles on `main`
 - Include tests or fixture coverage for behavior changes
 - Update docs and examples when behavior changes
 - Keep generated assets in sync
 
 ## Release notes and versioning
 
-Stable releases are managed through an automated release PR flow on `0.x`. Canary builds are published separately from `main`.
-The Homebrew tap in `mandotpro/homebrew-mapture` is updated automatically from the same release pipelines when the required repository variable and token secret are present.
+- `main` feeds the nightly canary channel only, and only when `main` changed since the previous canary build.
+- Stable releases are cut from maintenance branches such as `0.x` and `1.x`.
+- Stable tags are created intentionally:
+  - merge a PR titled `release: patch`
+  - merge a PR titled `release: minor`
+  - or merge a PR titled `release: vX.Y.Z`
+- Manual fallback is available in GitHub Actions through the `Stable Release` workflow.
+- `./scripts/release/plan-release.sh <branch> <patch|minor>` prints the next version and the matching PR title.
+- The Homebrew tap in `mandotpro/homebrew-mapture` is updated automatically from the same release pipelines when the required repository variable and token secret are present.
 
 If your change is user-visible, make sure the PR description explains:
 

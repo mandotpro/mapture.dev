@@ -1,12 +1,15 @@
 name: Canary
 
 on:
-  workflow_run:
-    workflows:
-      - CI
-    types:
-      - completed
+  schedule:
+    - cron: "30 1 * * *"
   workflow_dispatch:
+    inputs:
+      force:
+        description: Publish canary even if main has not changed since the last canary
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -17,27 +20,44 @@ concurrency:
 
 jobs:
   prepare:
-    if: ${{ (github.event_name == 'workflow_dispatch' && github.ref_name == 'main') || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') }}
     runs-on: ubuntu-latest
     outputs:
+      should_publish: ${{ steps.meta.outputs.should_publish }}
       version: ${{ steps.meta.outputs.version }}
       sha: ${{ steps.meta.outputs.sha }}
       built_at: ${{ steps.meta.outputs.built_at }}
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.event.workflow_run.head_sha }}
+          ref: main
+          fetch-depth: 0
       - id: meta
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          FORCE_PUBLISH: ${{ inputs.force && 'true' || 'false' }}
         run: |
           short_sha="$(git rev-parse --short HEAD)"
           built_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           version="0.0.0-canary.$(date -u +%Y%m%d)+sha.${short_sha}"
+          current_sha="$(git rev-parse HEAD)"
+          should_publish="true"
+
+          if [[ "${{ github.event_name }}" == "schedule" || "$FORCE_PUBLISH" != "true" ]]; then
+            previous_sha="$(gh api "repos/${GH_REPO}/releases/tags/canary" --jq '.target_commitish' 2>/dev/null || true)"
+            if [[ -n "$previous_sha" && "$previous_sha" == "$current_sha" ]]; then
+              should_publish="false"
+            fi
+          fi
+
+          echo "should_publish=$should_publish" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "sha=$current_sha" >> "$GITHUB_OUTPUT"
           echo "built_at=$built_at" >> "$GITHUB_OUTPUT"
 
   build:
     needs: prepare
+    if: ${{ needs.prepare.outputs.should_publish == 'true' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -73,6 +93,7 @@ jobs:
     needs:
       - prepare
       - build
+    if: ${{ needs.prepare.outputs.should_publish == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v8
@@ -98,6 +119,7 @@ jobs:
           - Commit: \`$CANARY_SHA\`
           - Version: \`$CANARY_VERSION\`
           - Built at (UTC): \`$CANARY_BUILT_AT\`
+          - Cadence: nightly, only when \`main\` changed since the previous canary
           EOF
 
           if gh release view canary >/dev/null 2>&1; then
@@ -123,7 +145,7 @@ jobs:
     needs:
       - prepare
       - publish
-    if: ${{ vars.HOMEBREW_TAP_REPO != '' }}
+    if: ${{ needs.prepare.outputs.should_publish == 'true' && vars.HOMEBREW_TAP_REPO != '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

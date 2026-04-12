@@ -36,6 +36,9 @@ test -x "$install_output_dir/mapture"
 test -f "$release_output_dir/mapture_v0.0.0-test_linux_amd64.tar.gz"
 ./scripts/release/release-build.sh "v0.0.0-test" "windows" "amd64" "$release_output_dir" >/dev/null
 test -f "$release_output_dir/mapture_v0.0.0-test_windows_amd64.zip"
+[[ "$(./scripts/release/next-version.sh patch 0.x)" == v0.* ]]
+[[ "$(./scripts/release/next-version.sh minor 1.x)" == v1.* ]]
+./scripts/release/plan-release.sh 0.x patch >/dev/null
 
 ./scripts/release/generate-homebrew-formula.sh \
   --formula-name mapture-canary \
