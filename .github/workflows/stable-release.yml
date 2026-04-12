@@ -1,0 +1,129 @@
+name: Stable Release
+
+on:
+  pull_request_target:
+    types:
+      - closed
+    branches:
+      - "*.x"
+  workflow_dispatch:
+    inputs:
+      release_branch:
+        description: Release branch line, for example 0.x or 1.x
+        required: true
+        default: 0.x
+        type: string
+      bump:
+        description: Version bump to apply when version is not provided
+        required: false
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+      version:
+        description: Explicit version tag to create, for example v0.3.2
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: stable-release-${{ github.event_name == 'workflow_dispatch' && inputs.release_branch || github.event.pull_request.base.ref }}
+  cancel-in-progress: false
+
+jobs:
+  tag-release:
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event.pull_request.merged == true &&
+          startsWith(github.event.pull_request.title, 'release: ')
+        )
+      }}
+    runs-on: ubuntu-latest
+    outputs:
+      release_branch: ${{ steps.meta.outputs.release_branch }}
+      release_version: ${{ steps.meta.outputs.release_version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_branch || github.event.pull_request.merge_commit_sha || github.event.pull_request.base.ref }}
+          fetch-depth: 0
+
+      - id: meta
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_BRANCH: ${{ inputs.release_branch }}
+          INPUT_BUMP: ${{ inputs.bump }}
+          INPUT_VERSION: ${{ inputs.version }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+        run: |
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            release_branch="$INPUT_BRANCH"
+            release_version="$INPUT_VERSION"
+            bump="$INPUT_BUMP"
+          else
+            release_branch="$BASE_BRANCH"
+            release_version=""
+            bump=""
+            title="$PR_TITLE"
+            case "$title" in
+              "release: patch")
+                bump="patch"
+                ;;
+              "release: minor")
+                bump="minor"
+                ;;
+              release:\ v*)
+                release_version="${title#release: }"
+                ;;
+              *)
+                echo "PR title does not request a release; skipping."
+                echo "release_branch=" >> "$GITHUB_OUTPUT"
+                echo "release_version=" >> "$GITHUB_OUTPUT"
+                exit 0
+                ;;
+            esac
+          fi
+
+          if [[ ! "$release_branch" =~ ^([0-9]+)\.x$ ]]; then
+            echo "release branch must look like <major>.x, got: $release_branch" >&2
+            exit 1
+          fi
+          release_major="${BASH_REMATCH[1]}"
+
+          if [[ -z "$release_version" ]]; then
+            release_version="$(./scripts/release/next-version.sh "$bump" "$release_branch")"
+          fi
+
+          if [[ ! "$release_version" =~ ^v([0-9]+)\.[0-9]+\.[0-9]+$ ]]; then
+            echo "release version must look like v<major>.<minor>.<patch>, got: $release_version" >&2
+            exit 1
+          fi
+
+          if [[ "${BASH_REMATCH[1]}" != "$release_major" ]]; then
+            echo "release version $release_version does not match branch line $release_branch" >&2
+            exit 1
+          fi
+
+          echo "release_branch=$release_branch" >> "$GITHUB_OUTPUT"
+          echo "release_version=$release_version" >> "$GITHUB_OUTPUT"
+
+      - name: Create release tag
+        if: ${{ steps.meta.outputs.release_version != '' }}
+        env:
+          RELEASE_VERSION: ${{ steps.meta.outputs.release_version }}
+        run: |
+          if git rev-parse "$RELEASE_VERSION" >/dev/null 2>&1; then
+            echo "Tag $RELEASE_VERSION already exists; skipping."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$RELEASE_VERSION" -m "Release $RELEASE_VERSION"
+          git push origin "$RELEASE_VERSION"

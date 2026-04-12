@@ -75,7 +75,7 @@ Both channels install the same `mapture` binary, so switch channels by uninstall
 ### Prebuilt archives
 
 - Stable semver binaries are published on [GitHub Releases](https://github.com/mandotpro/mapture.dev/releases).
-- Rolling canary prereleases from the latest successful `main` build are published at [the canary release](https://github.com/mandotpro/mapture.dev/releases/tag/canary).
+- Rolling canary prereleases are published at [the canary release](https://github.com/mandotpro/mapture.dev/releases/tag/canary).
 
 ### Build from source
 
@@ -159,11 +159,33 @@ That means:
 
 ## Release channels
 
-- Stable semver releases are cut from the `0.x` branch and published through automated release PRs.
-- Merges into `main` do not produce stable tags; they update the rolling canary channel only.
-- Canary builds are rolling prereleases from the latest successful `main` build.
+- Stable semver releases are cut from maintenance branches such as `0.x` and `1.x`.
+- Merges into `main` do not publish immediately; one canary build is published nightly if `main` changed since the previous canary.
+- Stable releases are intentional: merge a PR into `0.x` or `1.x` with title `release: patch`, `release: minor`, or `release: vX.Y.Z`, or run the manual stable-release workflow.
 - Homebrew canary installs are synced to `mandotpro/mapture` from the canary workflow.
-- Stable version bumps are driven by Conventional Commit style squash-merge titles on `0.x`.
+- Stable release assets and the stable Homebrew formula are published after the tag is created.
+
+## Maintainer release flow
+
+For the next stable version on a maintenance branch:
+
+```bash
+./scripts/release/plan-release.sh 0.x patch
+```
+
+That prints the next version and the PR title to use.
+
+Recommended flow:
+
+1. Merge the intended changes into `0.x` or `1.x`.
+2. Merge a PR into that branch with title `release: patch`, `release: minor`, or `release: vX.Y.Z`.
+3. The merged PR creates the tag.
+4. The `Release` workflow publishes the archives and updates Homebrew.
+
+Manual fallback:
+
+- Run the `Stable Release` workflow from GitHub Actions.
+- Provide the target branch and either a bump or an explicit version.
 
 ## Contributing and support
 
