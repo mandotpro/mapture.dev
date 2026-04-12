@@ -169,7 +169,6 @@ func TestSameFilepath(t *testing.T) {
 }
 
 func TestInspectReportsHumanReadableRuntime(t *testing.T) {
-	t.Parallel()
 
 	originalExecutable := osExecutable
 	originalEvalSymlinks := evalSymlinks
