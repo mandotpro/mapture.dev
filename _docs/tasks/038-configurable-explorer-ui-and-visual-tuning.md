@@ -45,7 +45,7 @@ Bad candidates:
 - last pan/zoom
 - personal workbench positions
 
-### 3. Carry defaults through the canonical export
+### 3. Carry defaults through the export pipeline
 The backend should pass repo-level UI defaults through the export so every consumer sees the same starting contract.
 
 ### 4. Preserve design-system direction
@@ -54,7 +54,7 @@ Any config added here should remain compatible with the existing token-based UI 
 ## Acceptance
 
 - `mapture.yaml` can define optional explorer defaults without becoming required
-- those defaults appear in the canonical export and are applied by the explorer
+- those defaults appear in the JGF metadata and the derived visualisation export, then are applied by the explorer
 - user session state remains local, not written into repo config
 - old repos with no new keys continue to render unchanged
 

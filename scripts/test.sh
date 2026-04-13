@@ -17,7 +17,7 @@ go run src/main.go validate examples/demo >/dev/null
 go run src/main.go validate examples/ecommerce >/dev/null
 go run src/main.go scan examples/demo >/dev/null
 go run src/main.go scan examples/ecommerce >/dev/null
-go run src/main.go graph examples/demo >/dev/null
+go run src/main.go export-json-graph examples/demo >/dev/null
 
 graph_output="$(mktemp)"
 release_output_dir="$(mktemp -d)"
@@ -28,7 +28,7 @@ help_plain_output="$(mktemp)"
 help_color_output="$(mktemp)"
 go_help_color_output="$(mktemp)"
 trap 'rm -f "$graph_output" "$formula_output" "$help_plain_output" "$help_color_output" "$go_help_color_output"; rm -rf "$release_output_dir" "$tap_output_dir" "$install_output_dir"' EXIT
-go run src/main.go graph examples/ecommerce --domain billing -o "$graph_output"
+go run src/main.go export-json-graph examples/ecommerce -o "$graph_output"
 test -s "$graph_output"
 
 mapture_print_section "Release helper checks"

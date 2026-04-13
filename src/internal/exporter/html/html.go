@@ -1,4 +1,4 @@
-// Package html writes static explorer bundles backed by canonical export JSON.
+// Package html writes static explorer bundles backed by visualization JSON.
 package html
 
 import (
@@ -8,12 +8,12 @@ import (
 	"os"
 	"path/filepath"
 
-	exportercanonical "github.com/mandotpro/mapture.dev/src/internal/exporter/canonical"
+	exportervis "github.com/mandotpro/mapture.dev/src/internal/exporter/visualization"
 	"github.com/mandotpro/mapture.dev/src/internal/webui"
 )
 
 // WriteBundle writes the static explorer bundle and sibling data.json into outputDir.
-func WriteBundle(outputDir string, doc *exportercanonical.Document) error {
+func WriteBundle(outputDir string, doc *exportervis.Document) error {
 	if doc == nil {
 		return fmt.Errorf("export html: document is required")
 	}

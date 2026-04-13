@@ -8,7 +8,7 @@ depends_on: [030]
 ---
 
 ## Goal
-Add centrally defined tags to `mapture.yaml`, validate their use in code comments, and carry them through the canonical export so filtering and future policy work can rely on them.
+Add centrally defined tags to `mapture.yaml`, validate their use in code comments, and carry them through the JGF export plus derived visualisation export so filtering and future policy work can rely on them.
 
 ## Why
 Domains and owners are not enough once a repo grows. Teams need cross-cutting metadata such as:
@@ -46,7 +46,7 @@ Expected behavior:
 - duplicated tag on a node -> normalized away or warned once, but never duplicated in export
 
 ### 4. Export tags everywhere they matter
-The canonical export should include:
+The JGF export should include:
 
 - allowed tag definitions from config
 - normalized per-node tags in the graph
@@ -63,7 +63,7 @@ This makes tags available to:
 - `mapture.yaml` can declare allowed tags
 - `@arch.tags` is scanned and validated
 - unknown tags fail validation with a dedicated code
-- tags appear in the canonical export and in the explorer filters
+- tags appear in the JGF export and in the explorer filters
 - output ordering is deterministic
 
 ## Notes

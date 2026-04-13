@@ -7,6 +7,8 @@ prd: §18, §19, §29
 depends_on: [030]
 ---
 
+> Superseded by the JGF-first export model. The explorer is now delivered from the derived visualisation export, which is produced from the canonical JGF artifact.
+
 ## Goal
 Make the explorer consume the canonical export JSON directly in every delivery mode:
 

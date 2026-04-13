@@ -13,7 +13,8 @@ import (
 	"testing"
 
 	"github.com/mandotpro/mapture.dev/src/internal/config"
-	exportercanonical "github.com/mandotpro/mapture.dev/src/internal/exporter/canonical"
+	exporterjgf "github.com/mandotpro/mapture.dev/src/internal/exporter/jgf"
+	exportervis "github.com/mandotpro/mapture.dev/src/internal/exporter/visualization"
 	"github.com/mandotpro/mapture.dev/src/internal/schema"
 	"github.com/mandotpro/mapture.dev/src/internal/ui"
 	"github.com/mandotpro/mapture.dev/src/internal/updater"
@@ -504,55 +505,11 @@ func TestRunValidateOutputsDiagnosticsOnFailure(t *testing.T) {
 	}
 }
 
-func TestGraphCommandWritesMermaidToStdout(t *testing.T) {
+func TestExportJSONGraphCommandWritesJGFDocument(t *testing.T) {
 	t.Parallel()
 
 	var stdout bytes.Buffer
-	commandStdout = &stdout
-	t.Cleanup(func() { commandStdout = os.Stdout })
-
-	cmd := newGraphCmd()
-	cmd.SetArgs([]string{"../../examples/demo"})
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute returned error: %v", err)
-	}
-
-	output := stdout.String()
-	for _, want := range []string{"flowchart LR", "Checkout Service", "|calls|", "Order Placed"} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("expected %q in output, got %q", want, output)
-		}
-	}
-}
-
-func TestGraphCommandWritesMermaidFile(t *testing.T) {
-	t.Parallel()
-
-	outputPath := filepath.Join(t.TempDir(), "ecommerce.mmd")
-
-	cmd := newGraphCmd()
-	cmd.SetArgs([]string{"../../examples/ecommerce", "-o", outputPath, "--domain", "billing"})
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute returned error: %v", err)
-	}
-
-	data, err := os.ReadFile(outputPath)
-	if err != nil {
-		t.Fatalf("ReadFile returned error: %v", err)
-	}
-	output := string(data)
-	for _, want := range []string{"flowchart LR", "Billing", "Payment Service"} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("expected %q in file output, got %q", want, output)
-		}
-	}
-}
-
-func TestExportJSONCommandWritesCanonicalDocument(t *testing.T) {
-	t.Parallel()
-
-	var stdout bytes.Buffer
-	cmd := newExportJSONCmd()
+	cmd := newExportJSONGraphCmd()
 	cmd.SetOut(&stdout)
 	cmd.SetArgs([]string{"../../examples/demo"})
 	if err := cmd.Execute(); err != nil {
@@ -560,21 +517,52 @@ func TestExportJSONCommandWritesCanonicalDocument(t *testing.T) {
 	}
 
 	output := stdout.Bytes()
-	if err := schema.ValidateJSON(schema.CanonicalDefinition, "stdout.json", output); err != nil {
-		t.Fatalf("canonical schema validation failed: %v", err)
+	if err := schema.ValidateJSON(schema.JSONGraphDefinition, "stdout.json", output); err != nil {
+		t.Fatalf("json graph schema validation failed: %v", err)
 	}
 
-	var doc exportercanonical.Document
+	var doc exporterjgf.Document
 	if err := json.Unmarshal(output, &doc); err != nil {
 		t.Fatalf("decode export: %v", err)
 	}
-	if doc.SchemaVersion != exportercanonical.SchemaVersion {
+	if doc.Graph.Metadata.Mapture.SchemaVersion != exporterjgf.SchemaVersion {
+		t.Fatalf("unexpected schema version: %d", doc.Graph.Metadata.Mapture.SchemaVersion)
+	}
+	if doc.Graph.Metadata.Mapture.Source.ConfigPath == "" || doc.Graph.Metadata.Mapture.Source.ProjectRoot == "" {
+		t.Fatalf("expected source metadata, got %+v", doc.Graph.Metadata.Mapture.Source)
+	}
+	if len(doc.Graph.Nodes) == 0 || len(doc.Graph.Metadata.Mapture.Catalog.Teams) == 0 || len(doc.Graph.Metadata.Mapture.Validation.Diagnostics) != 0 {
+		t.Fatalf("unexpected export payload: %+v", doc)
+	}
+}
+
+func TestExportJSONVisualizationCommandWritesVisualizationDocument(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	cmd := newExportJSONVisualizationCmd()
+	cmd.SetOut(&stdout)
+	cmd.SetArgs([]string{"../../examples/demo"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	output := stdout.Bytes()
+	if err := schema.ValidateJSON(schema.VisualizationDefinition, "stdout.json", output); err != nil {
+		t.Fatalf("visualization schema validation failed: %v", err)
+	}
+
+	var doc exportervis.Document
+	if err := json.Unmarshal(output, &doc); err != nil {
+		t.Fatalf("decode export: %v", err)
+	}
+	if doc.SchemaVersion != exportervis.SchemaVersion {
 		t.Fatalf("unexpected schema version: %d", doc.SchemaVersion)
 	}
 	if doc.Source.ConfigPath == "" || doc.Source.ProjectRoot == "" {
 		t.Fatalf("expected source metadata, got %+v", doc.Source)
 	}
-	if len(doc.Graph.Nodes) == 0 || len(doc.Catalog.Teams) == 0 || len(doc.Validation.Diagnostics) != 0 {
+	if len(doc.Graph.Nodes) == 0 || len(doc.Catalog.Teams) == 0 {
 		t.Fatalf("unexpected export payload: %+v", doc)
 	}
 }
@@ -599,10 +587,39 @@ func TestExportHTMLCommandWritesStaticBundle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile(data.json): %v", err)
 	}
-	if err := schema.ValidateJSON(schema.CanonicalDefinition, "data.json", data); err != nil {
-		t.Fatalf("canonical schema validation failed: %v", err)
+	if err := schema.ValidateJSON(schema.VisualizationDefinition, "data.json", data); err != nil {
+		t.Fatalf("visualization schema validation failed: %v", err)
 	}
 }
+
+func TestRootHelpListsNewExportCommandsOnly(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	rootCmd.SetOut(&stdout)
+	rootCmd.SetArgs([]string{"--help"})
+	t.Cleanup(func() {
+		rootCmd.SetOut(os.Stdout)
+		rootCmd.SetArgs(nil)
+	})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	output := stdout.String()
+	for _, want := range []string{"export-json-graph", "export-json-visualisation", "export-html", "export-ai"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("expected %q in help output, got %q", want, output)
+		}
+	}
+	for _, unwanted := range []string{"\ngraph ", "\nexport-json "} {
+		if strings.Contains(output, unwanted) {
+			t.Fatalf("did not expect %q in help output, got %q", unwanted, output)
+		}
+	}
+}
+
 func TestReportServeErrorIncludesPortBusyHint(t *testing.T) {
 	t.Parallel()
 

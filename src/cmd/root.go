@@ -23,9 +23,9 @@ import (
 	"github.com/mandotpro/mapture.dev/src/internal/bootstrap"
 	"github.com/mandotpro/mapture.dev/src/internal/catalog"
 	"github.com/mandotpro/mapture.dev/src/internal/config"
-	exportercanonical "github.com/mandotpro/mapture.dev/src/internal/exporter/canonical"
 	exporterhtml "github.com/mandotpro/mapture.dev/src/internal/exporter/html"
-	exportermermaid "github.com/mandotpro/mapture.dev/src/internal/exporter/mermaid"
+	exporterjgf "github.com/mandotpro/mapture.dev/src/internal/exporter/jgf"
+	exportervis "github.com/mandotpro/mapture.dev/src/internal/exporter/visualization"
 	"github.com/mandotpro/mapture.dev/src/internal/projectscope"
 	"github.com/mandotpro/mapture.dev/src/internal/scanner"
 	"github.com/mandotpro/mapture.dev/src/internal/server"
@@ -82,9 +82,9 @@ func init() {
 		newInitCmd(),
 		newValidateCmd(),
 		newScanCmd(),
-		newGraphCmd(),
 		newServeCmd(),
-		newExportJSONCmd(),
+		newExportJSONGraphCmd(),
+		newExportJSONVisualizationCmd(),
 		newUpdateCmd(),
 		newVersionCmd(),
 		newExportHTMLCmd(),
@@ -210,23 +210,6 @@ func resolveVersion(injected string, info *debug.BuildInfo) string {
 		return fmt.Sprintf("%s+dirty.%s", devVersion, revision)
 	}
 	return fmt.Sprintf("%s+sha.%s", devVersion, revision)
-}
-
-// todo is a placeholder body used while v0.1 commands are scaffolded.
-// Each caller should be replaced by a real implementation in the
-// matching src/internal/* package.
-func todo(name string) func(*cobra.Command, []string) error {
-	return func(cmd *cobra.Command, args []string) error {
-		path := "."
-		if len(args) > 0 {
-			path = args[0]
-		}
-		console := ui.NewConsole(commandStderr, currentColorMode(cmd))
-		return console.Warning(
-			fmt.Sprintf("%s not implemented yet", console.Code("mapture "+name)),
-			fmt.Sprintf("target=%s", console.Path(path)),
-		)
-	}
 }
 
 func newInitCmd() *cobra.Command {
@@ -443,73 +426,6 @@ func newScanCmd() *cobra.Command {
 	return c
 }
 
-func newGraphCmd() *cobra.Command {
-	c := &cobra.Command{
-		Use:   "graph [path]",
-		Short: "Produce graph-oriented exports (JSON, Mermaid)",
-		Args:  cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			target := "."
-			if len(args) > 0 {
-				target = args[0]
-			}
-			scopes, err := cmd.Flags().GetStringSlice("scope")
-			if err != nil {
-				return err
-			}
-
-			configPath, cfg, c, err := loadProject(target)
-			if err != nil {
-				return err
-			}
-			blocks, result, err := validateProject(filepath.Dir(configPath), cfg, c, scopes)
-			_ = blocks
-			if err != nil {
-				return err
-			}
-
-			domains, err := cmd.Flags().GetStringSlice("domain")
-			if err != nil {
-				return err
-			}
-			teams, err := cmd.Flags().GetStringSlice("team")
-			if err != nil {
-				return err
-			}
-			nodeTypes, err := cmd.Flags().GetStringSlice("type")
-			if err != nil {
-				return err
-			}
-			outputPath, err := cmd.Flags().GetString("output")
-			if err != nil {
-				return err
-			}
-
-			rendered, err := exportermermaid.Render(&result.Graph, exportermermaid.Options{
-				Domains:   domains,
-				Teams:     teams,
-				NodeTypes: nodeTypes,
-			})
-			if err != nil {
-				return err
-			}
-
-			if outputPath == "" {
-				_, err = io.WriteString(commandStdout, rendered)
-				return err
-			}
-
-			return os.WriteFile(outputPath, []byte(rendered), 0o644)
-		},
-	}
-	c.Flags().StringP("output", "o", "", "write Mermaid output to file")
-	c.Flags().StringSlice("domain", nil, "include only nodes in the given domain ids")
-	c.Flags().StringSlice("team", nil, "include only nodes owned by the given team ids")
-	c.Flags().StringSlice("type", nil, "include only nodes of the given node types")
-	bindScopeFlag(c)
-	return c
-}
-
 func newServeCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "serve [path]",
@@ -587,17 +503,17 @@ func newServeCmd() *cobra.Command {
 		},
 	}
 	c.Flags().String("addr", server.DefaultAddr, "listen address")
-	c.Flags().String("from", "", "serve a canonical export JSON file instead of scanning a repository")
+	c.Flags().String("from", "", "serve a visualization JSON file instead of scanning a repository")
 	c.Flags().Bool("no-watch", false, "disable filesystem watching and live reload")
 	c.Flags().Bool("open", false, "open the explorer in the default browser on start")
 	bindScopeFlag(c)
 	return c
 }
 
-func newExportJSONCmd() *cobra.Command {
+func newExportJSONGraphCmd() *cobra.Command {
 	c := &cobra.Command{
-		Use:   "export-json [path]",
-		Short: "Write the canonical Mapture JSON export",
+		Use:   "export-json-graph [path]",
+		Short: "Write the shareable JGF graph export",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			target := "."
@@ -618,10 +534,10 @@ func newExportJSONCmd() *cobra.Command {
 				return err
 			}
 
-			doc, buildErr := exportercanonical.BuildProject(configPath, exportercanonical.ProjectOptions{
+			doc, buildErr := exporterjgf.BuildProject(configPath, exporterjgf.ProjectOptions{
 				Scopes:      scopes,
 				ToolVersion: version,
-				Mode:        exportercanonical.ModeStatic,
+				Mode:        exporterjgf.ModeStatic,
 			})
 			if doc == nil {
 				return buildErr
@@ -645,7 +561,67 @@ func newExportJSONCmd() *cobra.Command {
 			return buildErr
 		},
 	}
-	c.Flags().StringP("out", "o", "", "write canonical JSON export to file")
+	c.Flags().StringP("out", "o", "", "write JGF JSON export to file")
+	bindScopeFlag(c)
+	return c
+}
+
+func newExportJSONVisualizationCmd() *cobra.Command {
+	c := &cobra.Command{
+		Use:   "export-json-visualisation [path]",
+		Short: "Write the explorer-facing visualisation JSON export",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			target := "."
+			if len(args) > 0 {
+				target = args[0]
+			}
+			outputPath, err := cmd.Flags().GetString("out")
+			if err != nil {
+				return err
+			}
+			scopes, err := cmd.Flags().GetStringSlice("scope")
+			if err != nil {
+				return err
+			}
+
+			configPath, err := config.Discover(target)
+			if err != nil {
+				return err
+			}
+
+			jgfDoc, buildErr := exporterjgf.BuildProject(configPath, exporterjgf.ProjectOptions{
+				Scopes:      scopes,
+				ToolVersion: version,
+				Mode:        exporterjgf.ModeStatic,
+			})
+			if jgfDoc == nil {
+				return buildErr
+			}
+			doc, err := exportervis.FromJGF(jgfDoc)
+			if err != nil {
+				return err
+			}
+
+			writer := cmd.OutOrStdout()
+			if outputPath != "" {
+				file, err := os.Create(outputPath)
+				if err != nil {
+					return err
+				}
+				defer func() { _ = file.Close() }()
+				writer = file
+			}
+
+			encoder := json.NewEncoder(writer)
+			encoder.SetIndent("", "  ")
+			if err := encoder.Encode(doc); err != nil {
+				return err
+			}
+			return buildErr
+		},
+	}
+	c.Flags().StringP("out", "o", "", "write visualisation JSON export to file")
 	bindScopeFlag(c)
 	return c
 }
@@ -803,14 +779,18 @@ func newExportHTMLCmd() *cobra.Command {
 				return err
 			}
 
-			doc, buildErr := exportercanonical.BuildProject(configPath, exportercanonical.ProjectOptions{
+			jgfDoc, buildErr := exporterjgf.BuildProject(configPath, exporterjgf.ProjectOptions{
 				Scopes:      scopes,
 				ToolVersion: version,
-				Mode:        exportercanonical.ModeStatic,
+				Mode:        exporterjgf.ModeStatic,
 				SourceLabel: "static build",
 			})
-			if doc == nil {
+			if jgfDoc == nil {
 				return buildErr
+			}
+			doc, err := exportervis.FromJGF(jgfDoc)
+			if err != nil {
+				return err
 			}
 			if err := exporterhtml.WriteBundle(outputDir, doc); err != nil {
 				return err
@@ -826,8 +806,18 @@ func newExportHTMLCmd() *cobra.Command {
 func newExportAICmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "export-ai [path]",
-		Short: "Write an AI-ready bundle under .mapture/ai/",
+		Short: "Placeholder for future AI export built from JGF",
 		Args:  cobra.MaximumNArgs(1),
-		RunE:  todo("export-ai"),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path := "."
+			if len(args) > 0 {
+				path = args[0]
+			}
+			console := ui.NewConsole(commandStderr, currentColorMode(cmd))
+			return console.Warning(
+				"export-ai is not implemented yet",
+				fmt.Sprintf("planned input=%s (JGF-first AI bundle)", console.Path(path)),
+			)
+		},
 	}
 }

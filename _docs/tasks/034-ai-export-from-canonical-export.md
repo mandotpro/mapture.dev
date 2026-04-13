@@ -1,6 +1,6 @@
 ---
 id: 034
-title: AI export from canonical export JSON
+title: AI export from JGF graph export
 milestone: v0.4.0
 status: todo
 prd: §19, §20
@@ -8,7 +8,7 @@ depends_on: [030, 033]
 ---
 
 ## Goal
-Generate AI-friendly files from the canonical export JSON so LLM workflows can understand the architecture without rescanning the repository.
+Generate AI-friendly files from the JGF graph export so LLM workflows can understand the architecture without rescanning the repository.
 
 ## Why
 AI export is only valuable if it is trustworthy and repeatable. That means:
@@ -17,7 +17,7 @@ AI export is only valuable if it is trustworthy and repeatable. That means:
 - no second validator
 - no AI-specific graph builder
 
-The AI bundle should be a view over the canonical export, not a second product.
+The AI bundle should be a view over the JGF export, not a second product.
 
 ## Scope
 
@@ -29,7 +29,7 @@ mapture export-ai examples/ecommerce
 mapture export-ai --from /tmp/ecommerce.json
 ```
 
-The first command builds the canonical export first. The second reuses an existing one.
+The first command builds the JGF export first. The second reuses an existing one.
 
 ### 2. Bundle layout
 Expected output:
@@ -43,7 +43,7 @@ Expected output:
   glossary.md
 ```
 
-The bundle should include the raw canonical export so downstream tools can choose structured JSON or Markdown.
+The bundle should include the raw JGF export so downstream tools can choose structured JSON or Markdown.
 
 ### 3. Generated materials
 
@@ -56,16 +56,16 @@ The bundle should include the raw canonical export so downstream tools can choos
 ### 4. Use export metadata, not ad hoc inference
 Node summaries may be enriched for readability, but they must be grounded in:
 
-- canonical node metadata
+- JGF node metadata
 - validation diagnostics
 - graph relationships
 - repo-configured teams/domains/tags
 
 ## Acceptance
 
-- AI bundle generation works from either a live repo path or an existing canonical export file
+- AI bundle generation works from either a live repo path or an existing JGF export file
 - generated files are deterministic across runs
-- the bundle contains the raw canonical export plus derived Markdown views
+- the bundle contains the raw JGF export plus derived Markdown views
 - no scanner or validator logic is duplicated inside the AI exporter
 
 ## Out of scope

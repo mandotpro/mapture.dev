@@ -1,4 +1,4 @@
-package canonical_test
+package jgf_test
 
 import (
 	"encoding/json"
@@ -10,7 +10,8 @@ import (
 
 	"github.com/mandotpro/mapture.dev/src/internal/catalog"
 	"github.com/mandotpro/mapture.dev/src/internal/config"
-	"github.com/mandotpro/mapture.dev/src/internal/exporter/canonical"
+	"github.com/mandotpro/mapture.dev/src/internal/exporter/jgf"
+	exportervis "github.com/mandotpro/mapture.dev/src/internal/exporter/visualization"
 	"github.com/mandotpro/mapture.dev/src/internal/graph"
 	"github.com/mandotpro/mapture.dev/src/internal/scanner"
 	"github.com/mandotpro/mapture.dev/src/internal/schema"
@@ -49,8 +50,8 @@ func TestFixtureExportsMatchSchemaAndGoldens(t *testing.T) {
 			t.Parallel()
 
 			got := marshalFixtureExport(t, tc.fixtureRel, tc.configPath, tc.projectRoot)
-			if err := schema.ValidateJSON(schema.CanonicalDefinition, tc.golden, got); err != nil {
-				t.Fatalf("canonical schema validation failed: %v", err)
+			if err := schema.ValidateJSON(schema.JSONGraphDefinition, tc.golden, got); err != nil {
+				t.Fatalf("json graph schema validation failed: %v", err)
 			}
 
 			want, err := os.ReadFile(tc.golden)
@@ -58,21 +59,41 @@ func TestFixtureExportsMatchSchemaAndGoldens(t *testing.T) {
 				t.Fatalf("read golden: %v", err)
 			}
 			if string(got) != string(want) {
-				t.Fatalf("unexpected canonical JSON\nwant:\n%s\ngot:\n%s", want, got)
+				t.Fatalf("unexpected json graph export\nwant:\n%s\ngot:\n%s", want, got)
 			}
 		})
 	}
 }
 
-func TestCanonicalSchemaVersionIsStable(t *testing.T) {
+func TestVisualizationConversionMatchesSchema(t *testing.T) {
 	t.Parallel()
 
-	if canonical.SchemaVersion != 1 {
-		t.Fatalf("SchemaVersion = %d, want 1", canonical.SchemaVersion)
+	doc := buildFixtureJGF(t, "../../../../examples/demo", "/repo/examples/demo/mapture.yaml", "/repo/examples/demo")
+	vis, err := exportervis.FromJGF(doc)
+	if err != nil {
+		t.Fatalf("FromJGF: %v", err)
+	}
+	data, err := json.MarshalIndent(vis, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent: %v", err)
+	}
+	if err := schema.ValidateJSON(schema.VisualizationDefinition, "visualization.json", data); err != nil {
+		t.Fatalf("visualization schema validation failed: %v", err)
 	}
 }
 
 func marshalFixtureExport(t *testing.T, rel string, configPath string, sourceRoot string) []byte {
+	t.Helper()
+
+	doc := buildFixtureJGF(t, rel, configPath, sourceRoot)
+	data, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent: %v", err)
+	}
+	return append(data, '\n')
+}
+
+func buildFixtureJGF(t *testing.T, rel string, configPath string, sourceRoot string) *jgf.Document {
 	t.Helper()
 
 	root, err := fixtureAbs(rel)
@@ -101,7 +122,7 @@ func marshalFixtureExport(t *testing.T, rel string, configPath string, sourceRoo
 		t.Fatalf("validator.Build: %v", err)
 	}
 
-	doc, err := canonical.Build(canonical.BuildOptions{
+	doc, err := jgf.Build(jgf.BuildOptions{
 		ConfigPath:  configPath,
 		ProjectRoot: sourceRoot,
 		Scopes:      nil,
@@ -110,18 +131,13 @@ func marshalFixtureExport(t *testing.T, rel string, configPath string, sourceRoo
 		Result:      result,
 		ToolVersion: graph.DefaultScannerVersion,
 		GeneratedAt: time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC),
-		Mode:        canonical.ModeStatic,
+		Mode:        jgf.ModeStatic,
 		SourceLabel: "static",
 	})
 	if err != nil {
-		t.Fatalf("canonical.Build: %v", err)
+		t.Fatalf("jgf.Build: %v", err)
 	}
-
-	data, err := json.MarshalIndent(doc, "", "  ")
-	if err != nil {
-		t.Fatalf("MarshalIndent: %v", err)
-	}
-	return append(data, '\n')
+	return doc
 }
 
 func fixtureAbs(rel string) (string, error) {

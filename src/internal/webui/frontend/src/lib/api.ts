@@ -1,4 +1,4 @@
-import type { BackendGraph, CanonicalExportDocument } from './types';
+import type { BackendGraph, VisualizationExportDocument } from './types';
 
 export class ExportLoadError extends Error {
   status?: number;
@@ -12,46 +12,46 @@ export class ExportLoadError extends Error {
 
 type CanonicalFallbackOptions = {
   sourceLabel: string;
-  mode?: CanonicalExportDocument['meta']['mode'];
+  mode?: VisualizationExportDocument['meta']['mode'];
 };
 
-export async function loadGraphFromApi(fetcher: typeof fetch = fetch): Promise<CanonicalExportDocument> {
-  return await loadCanonicalExport('/api/export', fetcher);
+export async function loadGraphFromApi(fetcher: typeof fetch = fetch): Promise<VisualizationExportDocument> {
+  return await loadVisualizationExport('/api/export', fetcher);
 }
 
-export async function loadCanonicalExport(url: string, fetcher: typeof fetch = fetch): Promise<CanonicalExportDocument> {
+export async function loadVisualizationExport(url: string, fetcher: typeof fetch = fetch): Promise<VisualizationExportDocument> {
   const response = await fetcher(url, { cache: 'no-store' });
   if (!response.ok) {
     throw new ExportLoadError(`export request failed: ${response.status}`, response.status);
   }
-  return parseCanonicalExport(await response.json(), {
+  return parseVisualizationExport(await response.json(), {
     sourceLabel: sourceLabelForURL(url),
     mode: 'offline',
   });
 }
 
-export function parseCanonicalExport(
+export function parseVisualizationExport(
   input: unknown,
   fallback: CanonicalFallbackOptions,
-): CanonicalExportDocument {
-  if (isCanonicalExport(input)) {
+): VisualizationExportDocument {
+  if (isVisualizationExport(input)) {
     return input;
   }
   if (isGraphPayload(input)) {
-    return wrapGraphAsCanonical(input, fallback);
+    return wrapGraphAsVisualization(input, fallback);
   }
-  throw new ExportLoadError('unsupported JSON format: expected a canonical export or graph JSON');
+  throw new ExportLoadError('unsupported JSON format: expected a visualization export or graph JSON');
 }
 
 export function isNotFoundError(error: unknown): boolean {
   return error instanceof ExportLoadError && error.status === 404;
 }
 
-function isCanonicalExport(input: unknown): input is CanonicalExportDocument {
+function isVisualizationExport(input: unknown): input is VisualizationExportDocument {
   if (!input || typeof input !== 'object') {
     return false;
   }
-  const value = input as Partial<CanonicalExportDocument>;
+  const value = input as Partial<VisualizationExportDocument>;
   return typeof value.schemaVersion === 'number'
     && typeof value.generatedAt === 'string'
     && typeof value.toolVersion === 'string'
@@ -73,7 +73,7 @@ function isGraphPayload(input: unknown): input is BackendGraph {
     && Array.isArray(value.edges);
 }
 
-function wrapGraphAsCanonical(graph: BackendGraph, fallback: CanonicalFallbackOptions): CanonicalExportDocument {
+function wrapGraphAsVisualization(graph: BackendGraph, fallback: CanonicalFallbackOptions): VisualizationExportDocument {
   return {
     schemaVersion: 1,
     generatedAt: graph.metadata?.generatedAt ?? new Date().toISOString(),
