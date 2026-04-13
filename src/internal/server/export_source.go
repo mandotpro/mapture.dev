@@ -6,33 +6,33 @@ import (
 	"os"
 	"path/filepath"
 
-	exportercanonical "github.com/mandotpro/mapture.dev/src/internal/exporter/canonical"
+	exportervis "github.com/mandotpro/mapture.dev/src/internal/exporter/visualization"
 	"github.com/mandotpro/mapture.dev/src/internal/schema"
 )
 
-func loadExportFromFile(path string) (*exportercanonical.Document, error) {
+func loadVisualizationFromFile(path string) (*exportervis.Document, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read export file %s: %w", path, err)
 	}
-	if err := schema.ValidateJSON(schema.CanonicalDefinition, filepath.Base(path), data); err != nil {
+	if err := schema.ValidateJSON(schema.VisualizationDefinition, filepath.Base(path), data); err != nil {
 		return nil, err
 	}
 
-	var doc exportercanonical.Document
+	var doc exportervis.Document
 	if err := json.Unmarshal(data, &doc); err != nil {
 		return nil, fmt.Errorf("decode export file %s: %w", path, err)
 	}
 
 	if doc.Meta.Mode == "" {
-		doc.Meta.Mode = exportercanonical.ModeOffline
+		doc.Meta.Mode = "offline"
 	}
-	doc.Meta.Mode = exportercanonical.ModeOffline
+	doc.Meta.Mode = "offline"
 	doc.Meta.SourceLabel = fmt.Sprintf("file: %s", filepath.Base(path))
 	return &doc, nil
 }
 
-func cloneDocument(doc *exportercanonical.Document) *exportercanonical.Document {
+func cloneVisualizationDocument(doc *exportervis.Document) *exportervis.Document {
 	if doc == nil {
 		return nil
 	}

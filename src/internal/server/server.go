@@ -22,7 +22,8 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/mandotpro/mapture.dev/src/internal/catalog"
 	"github.com/mandotpro/mapture.dev/src/internal/config"
-	exportercanonical "github.com/mandotpro/mapture.dev/src/internal/exporter/canonical"
+	exporterjgf "github.com/mandotpro/mapture.dev/src/internal/exporter/jgf"
+	exportervis "github.com/mandotpro/mapture.dev/src/internal/exporter/visualization"
 	"github.com/mandotpro/mapture.dev/src/internal/projectscope"
 	"github.com/mandotpro/mapture.dev/src/internal/webui"
 )
@@ -34,13 +35,13 @@ const DefaultAddr = "127.0.0.1:8765"
 type Options struct {
 	// ConfigPath is the absolute path to the project's mapture.yaml.
 	ConfigPath string
-	// FromPath is an exported canonical JSON document to serve directly.
+	// FromPath is an exported visualization JSON document to serve directly.
 	FromPath string
 	// Addr is the listen address (e.g. "127.0.0.1:8765").
 	Addr string
 	// Scopes narrows scanning to one or more project-relative files/directories.
 	Scopes []string
-	// ToolVersion is embedded into the canonical export metadata.
+	// ToolVersion is embedded into the exported metadata.
 	ToolVersion string
 	// Watch enables fsnotify-based file watching + SSE reload.
 	Watch bool
@@ -141,7 +142,7 @@ type explorer struct {
 	toolVersion string
 	uiHandler   http.Handler
 	broadcaster *broadcaster
-	staticDoc   *exportercanonical.Document
+	staticDoc   *exportervis.Document
 }
 
 func newServer(opts Options) (*explorer, error) {
@@ -154,7 +155,7 @@ func newServer(opts Options) (*explorer, error) {
 		broadcaster: newBroadcaster(),
 	}
 	if opts.FromPath != "" {
-		doc, err := loadExportFromFile(opts.FromPath)
+		doc, err := loadVisualizationFromFile(opts.FromPath)
 		if err != nil {
 			return nil, err
 		}
@@ -165,6 +166,7 @@ func newServer(opts Options) (*explorer, error) {
 
 func (e *explorer) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/export", e.handleExport)
+	mux.HandleFunc("/api/json-graph", e.handleJSONGraph)
 	mux.HandleFunc("/api/graph", e.handleGraph)
 	mux.HandleFunc("/api/catalog", e.handleCatalog)
 	mux.HandleFunc("/api/validate", e.handleValidate)
@@ -191,14 +193,34 @@ func (e *explorer) loadProject() (*config.Config, *catalog.Catalog, string, erro
 	return scoped.Config, cat, root, nil
 }
 
-func (e *explorer) buildCanonicalExport() (*exportercanonical.Document, error) {
+func (e *explorer) buildVisualizationExport() (*exportervis.Document, error) {
 	if e.staticDoc != nil {
-		return cloneDocument(e.staticDoc), nil
+		return cloneVisualizationDocument(e.staticDoc), nil
 	}
-	doc, err := exportercanonical.BuildProject(e.configPath, exportercanonical.ProjectOptions{
+	jgfDoc, err := exporterjgf.BuildProject(e.configPath, exporterjgf.ProjectOptions{
 		Scopes:      e.scopes,
 		ToolVersion: e.toolVersion,
-		Mode:        exportercanonical.ModeLive,
+		Mode:        exporterjgf.ModeLive,
+		SourceLabel: projectscope.SourceLabel("live api", e.scopes),
+	})
+	if jgfDoc == nil {
+		return nil, err
+	}
+	doc, transformErr := exportervis.FromJGF(jgfDoc)
+	if transformErr != nil {
+		return nil, transformErr
+	}
+	return doc, err
+}
+
+func (e *explorer) buildJSONGraphExport() (*exporterjgf.Document, error) {
+	if e.staticDoc != nil {
+		return nil, fmt.Errorf("json graph endpoint is unavailable in --from mode")
+	}
+	doc, err := exporterjgf.BuildProject(e.configPath, exporterjgf.ProjectOptions{
+		Scopes:      e.scopes,
+		ToolVersion: e.toolVersion,
+		Mode:        exporterjgf.ModeLive,
 		SourceLabel: projectscope.SourceLabel("live api", e.scopes),
 	})
 	if doc == nil {
@@ -212,7 +234,20 @@ func (e *explorer) handleExport(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	doc, err := e.buildCanonicalExport()
+	doc, err := e.buildVisualizationExport()
+	if err != nil && doc == nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, doc)
+}
+
+func (e *explorer) handleJSONGraph(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	doc, err := e.buildJSONGraphExport()
 	if err != nil && doc == nil {
 		writeError(w, err)
 		return
@@ -225,7 +260,7 @@ func (e *explorer) handleGraph(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	doc, err := e.buildCanonicalExport()
+	doc, err := e.buildVisualizationExport()
 	if err != nil && doc == nil {
 		writeError(w, err)
 		return
@@ -238,7 +273,7 @@ func (e *explorer) handleValidate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	doc, err := e.buildCanonicalExport()
+	doc, err := e.buildVisualizationExport()
 	if err != nil && doc == nil {
 		writeError(w, err)
 		return
@@ -251,12 +286,15 @@ func (e *explorer) handleCatalog(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	doc, err := e.buildCanonicalExport()
+	doc, err := e.buildVisualizationExport()
 	if err != nil && doc == nil {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, exportercanonical.Catalog{
+	writeJSON(w, struct {
+		Teams   []catalog.Team   `json:"teams"`
+		Domains []catalog.Domain `json:"domains"`
+	}{
 		Teams:   doc.Catalog.Teams,
 		Domains: doc.Catalog.Domains,
 	})

@@ -1,7 +1,6 @@
 import { MarkerType, Position, type Edge, type Node } from '@xyflow/svelte';
 import type {
   BackendGraph,
-  CanonicalExportDocument,
   DensityMode,
   Diagnostic,
   Filters,
@@ -22,6 +21,7 @@ import type {
   StageBandOverlay,
   TypeSummary,
   UIConfig,
+  VisualizationExportDocument,
   ViewMode,
 } from './types';
 import { NODE_HEIGHT, NODE_WIDTH, layoutGraph } from './layout';
@@ -100,7 +100,7 @@ const EDGE_COLORS: Record<string, string> = {
   aggregate: '#8c6d44',
 };
 
-export function normalizeGraph(payload: CanonicalExportDocument): GraphModel {
+export function normalizeGraph(payload: VisualizationExportDocument): GraphModel {
   const rawGraph = normalizeBackendGraph(payload.graph ?? {});
   const diagnostics = payload.validation.diagnostics ?? [];
   const nodes = rawGraph.nodes.map((node) => ({

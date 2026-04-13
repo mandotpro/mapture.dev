@@ -14,9 +14,9 @@
   } from '@xyflow/svelte';
   import {
     isNotFoundError,
-    loadCanonicalExport,
+    loadVisualizationExport,
     loadGraphFromApi,
-    parseCanonicalExport,
+    parseVisualizationExport,
   } from './lib/api';
   import {
     buildFlowPresentation,
@@ -45,7 +45,6 @@
   import TokenBadge from './lib/ui/TokenBadge.svelte';
   import type {
     ExplorerSettings,
-    CanonicalExportDocument,
     DensityMode,
     Filters,
     GraphModel,
@@ -56,6 +55,7 @@
     ResolvedTheme,
     SettingsSectionConfig,
     ThemePreference,
+    VisualizationExportDocument,
     ViewMode,
     WindowWithPayload,
   } from './lib/types';
@@ -75,7 +75,7 @@
   };
   type BootSourceKind = 'injected' | 'query' | 'api' | 'bundle' | 'file' | 'none';
 
-  const GITHUB_URL = 'https://github.com/mandotpro/mapture.dev';
+  const GITHUB_URL = 'https://mapture.dev/github';
   const STORAGE_PREFIX = 'mapture-layout';
   const SETTINGS_STORAGE_KEY = 'mapture-explorer-settings';
   const FIT_VIEW_PADDING = 0.72;
@@ -354,7 +354,7 @@
 
       const dataURL = readDataURL();
       if (dataURL) {
-        const payload = await loadCanonicalExport(dataURL);
+        const payload = await loadVisualizationExport(dataURL);
         applyLoadedDocument(payload, 'query');
         return;
       }
@@ -371,7 +371,7 @@
       }
 
       try {
-        const payload = await loadCanonicalExport('./data.json');
+        const payload = await loadVisualizationExport('./data.json');
         applyLoadedDocument(payload, 'bundle');
         return;
       } catch (error) {
@@ -389,7 +389,7 @@
     }
   }
 
-  function applyLoadedDocument(doc: CanonicalExportDocument, kind: BootSourceKind): void {
+  function applyLoadedDocument(doc: VisualizationExportDocument, kind: BootSourceKind): void {
     model = normalizeGraph(doc);
     viewMode = viewModeFromLayout(model.ui.defaultLayout);
     sourceLabel = doc.meta.sourceLabel;
@@ -529,7 +529,7 @@
     loadError = '';
     try {
       const raw = JSON.parse(await file.text()) as unknown;
-      const doc = parseCanonicalExport(raw, {
+      const doc = parseVisualizationExport(raw, {
         sourceLabel: `file: ${file.name}`,
         mode: 'offline',
       });
@@ -1492,7 +1492,7 @@
   />
   <header class="page-header">
     <div class="page-header__brand">
-      <span class="wordmark">Mapture</span>
+      <span class="wordmark">mapture.dev</span>
       <TokenBadge label="Nodes" count={visible.nodes} interactive={false} quiet compact className="header-token" />
       <TokenBadge label="Edges" count={visible.edges} interactive={false} quiet compact className="header-token" />
     </div>

@@ -7,6 +7,8 @@ prd: §17, §19, §29
 depends_on: [004, 005, 020]
 ---
 
+> Superseded by the JGF-first export model. The current implementation uses JGF as the shareable graph artifact and a derived visualisation export for the explorer.
+
 ## Goal
 Define one stable exported JSON envelope for Mapture and make the scanner/validator pipeline produce it as the single source of truth for downstream consumers.
 

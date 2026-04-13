@@ -43,12 +43,12 @@ Likely relation families:
 - `emits`
 - `consumes`
 
-### 3. Export violations through the canonical diagnostics model
+### 3. Export violations through the shared diagnostics model
 Boundary violations should appear like any other validation diagnostic so they are visible in:
 
 - `validate --format text`
 - `validate --format json`
-- the canonical export
+- the JGF export and derived visualisation export
 - the explorer
 - AI and MCP consumers later
 
@@ -57,7 +57,7 @@ Boundary violations should appear like any other validation diagnostic so they a
 - a repo can define allowed/disallowed cross-boundary relationships
 - illegal relationships fail validation with clear diagnostics
 - legal migration exceptions can be modeled explicitly
-- violations appear in the canonical export diagnostics block
+- violations appear in the exported diagnostics block
 
 ## Notes
 

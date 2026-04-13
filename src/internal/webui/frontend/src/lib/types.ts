@@ -61,13 +61,13 @@ export interface UIConfig {
   nodeColors?: UINodeColors;
 }
 
-export interface CanonicalSource {
+export interface VisualizationSource {
   projectRoot: string;
   configPath: string;
   scopes?: string[];
 }
 
-export interface CanonicalMeta {
+export interface VisualizationMeta {
   sourceLabel: string;
   mode: 'live' | 'offline' | 'static';
 }
@@ -89,16 +89,16 @@ export interface ValidationSummary {
   edges: number;
 }
 
-export interface CanonicalExportDocument {
+export interface VisualizationExportDocument {
   schemaVersion: number;
   generatedAt: string;
   toolVersion: string;
-  source: CanonicalSource;
+  source: VisualizationSource;
   graph: BackendGraph;
   catalog: CatalogPayload;
   validation: ValidationPayload;
   ui: UIConfig;
-  meta: CanonicalMeta;
+  meta: VisualizationMeta;
 }
 
 export interface GraphNode {
@@ -328,5 +328,5 @@ export interface NodeInspectorAction {
 }
 
 export interface WindowWithPayload extends Window {
-  __MAPTURE_DATA__?: CanonicalExportDocument;
+  __MAPTURE_DATA__?: VisualizationExportDocument;
 }

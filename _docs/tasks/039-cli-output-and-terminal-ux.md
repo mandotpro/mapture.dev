@@ -53,7 +53,7 @@ Focus on commands users run most often:
 - `validate`
 - `serve`
 - `graph`
-- `export-json`
+- `export-json-graph`
 - `version`
 - `update`
 
@@ -82,7 +82,7 @@ Human formatting must never leak into structured outputs.
 
 That means:
 
-- JSON written by `export-json` stays pure JSON
+- JSON written by `export-json-graph` and `export-json-visualisation` stays pure JSON
 - Mermaid output stays plain Mermaid
 - only human-facing status/progress/reporting paths use colors and terminal formatting
 
@@ -169,5 +169,5 @@ Potential formatting patterns:
 ## Non-goals
 
 - building a full interactive TUI
-- changing JSON, Mermaid, or canonical export payloads
+- changing JSON, Mermaid, JGF, or visualisation payloads
 - adding per-user CLI theme configuration in `mapture.yaml`

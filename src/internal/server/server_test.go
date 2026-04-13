@@ -15,7 +15,8 @@ import (
 	"testing"
 	"time"
 
-	exportercanonical "github.com/mandotpro/mapture.dev/src/internal/exporter/canonical"
+	exporterjgf "github.com/mandotpro/mapture.dev/src/internal/exporter/jgf"
+	exportervis "github.com/mandotpro/mapture.dev/src/internal/exporter/visualization"
 	"github.com/mandotpro/mapture.dev/src/internal/graph"
 	"github.com/mandotpro/mapture.dev/src/internal/schema"
 	"github.com/mandotpro/mapture.dev/src/internal/validator"
@@ -88,7 +89,7 @@ func startTestServer(t *testing.T, watch bool, scopes ...string) (baseURL string
 	return "", func() {}
 }
 
-func TestServeExportEndpointReturnsCanonicalDocument(t *testing.T) {
+func TestServeExportEndpointReturnsVisualizationDocument(t *testing.T) {
 	baseURL, stop := startTestServer(t, false)
 	defer stop()
 
@@ -106,22 +107,52 @@ func TestServeExportEndpointReturnsCanonicalDocument(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read export payload: %v", err)
 	}
-	if err := schema.ValidateJSON(schema.CanonicalDefinition, "export.json", body); err != nil {
-		t.Fatalf("canonical schema validation failed: %v", err)
+	if err := schema.ValidateJSON(schema.VisualizationDefinition, "export.json", body); err != nil {
+		t.Fatalf("visualization schema validation failed: %v", err)
 	}
 
-	var doc exportercanonical.Document
+	var doc exportervis.Document
 	if err := json.Unmarshal(body, &doc); err != nil {
 		t.Fatalf("decode export payload: %v", err)
 	}
-	if doc.SchemaVersion != exportercanonical.SchemaVersion {
+	if doc.SchemaVersion != exportervis.SchemaVersion {
 		t.Fatalf("unexpected schema version: %d", doc.SchemaVersion)
 	}
-	if doc.Meta.Mode != exportercanonical.ModeLive {
+	if doc.Meta.Mode != exporterjgf.ModeLive {
 		t.Fatalf("unexpected mode: %+v", doc.Meta)
 	}
 	if doc.Source.ConfigPath == "" || doc.Source.ProjectRoot == "" {
 		t.Fatalf("expected source metadata, got %+v", doc.Source)
+	}
+}
+
+func TestServeJSONGraphEndpointReturnsJGFDocument(t *testing.T) {
+	baseURL, stop := startTestServer(t, false)
+	defer stop()
+
+	resp, err := http.Get(baseURL + "/api/json-graph")
+	if err != nil {
+		t.Fatalf("GET /api/json-graph: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read json graph payload: %v", err)
+	}
+	if err := schema.ValidateJSON(schema.JSONGraphDefinition, "graph.jgf.json", body); err != nil {
+		t.Fatalf("json graph schema validation failed: %v", err)
+	}
+
+	var doc exporterjgf.Document
+	if err := json.Unmarshal(body, &doc); err != nil {
+		t.Fatalf("decode json graph payload: %v", err)
+	}
+	if doc.Graph.Metadata.Mapture.SchemaVersion != exporterjgf.SchemaVersion {
+		t.Fatalf("unexpected schema version: %d", doc.Graph.Metadata.Mapture.SchemaVersion)
+	}
+	if len(doc.Graph.Nodes) == 0 || len(doc.Graph.Edges) == 0 {
+		t.Fatalf("expected populated jgf payload: %+v", doc.Graph)
 	}
 }
 
@@ -171,7 +202,7 @@ func TestServeExportEndpointWithScopeReturnsSubsetMetadata(t *testing.T) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	var doc exportercanonical.Document
+	var doc exportervis.Document
 	if err := json.NewDecoder(resp.Body).Decode(&doc); err != nil {
 		t.Fatalf("decode export payload: %v", err)
 	}
@@ -192,13 +223,17 @@ func TestServeFromExportFile(t *testing.T) {
 	tmp := t.TempDir()
 	exportPath := filepath.Join(tmp, "ecommerce.json")
 
-	doc, err := exportercanonical.BuildProject(ecommerceConfig(t), exportercanonical.ProjectOptions{
+	jgfDoc, err := exporterjgf.BuildProject(ecommerceConfig(t), exporterjgf.ProjectOptions{
 		ToolVersion: graph.DefaultScannerVersion,
-		Mode:        exportercanonical.ModeStatic,
+		Mode:        exporterjgf.ModeStatic,
 		SourceLabel: "static build",
 	})
 	if err != nil {
 		t.Fatalf("BuildProject: %v", err)
+	}
+	doc, err := exportervis.FromJGF(jgfDoc)
+	if err != nil {
+		t.Fatalf("FromJGF: %v", err)
 	}
 	data, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
@@ -248,11 +283,11 @@ func TestServeFromExportFile(t *testing.T) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	var served exportercanonical.Document
+	var served exportervis.Document
 	if err := json.NewDecoder(resp.Body).Decode(&served); err != nil {
 		t.Fatalf("decode served export: %v", err)
 	}
-	if served.Meta.Mode != exportercanonical.ModeOffline {
+	if served.Meta.Mode != exporterjgf.ModeOffline {
 		t.Fatalf("expected offline mode, got %+v", served.Meta)
 	}
 	if len(served.Graph.Nodes) == 0 {
@@ -325,7 +360,7 @@ func TestServeIndexHTML(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read body: %v", err)
 	}
-	if !strings.Contains(string(body), "Mapture Explorer") {
+	if !strings.Contains(string(body), "mapture.dev explorer") {
 		t.Fatalf("index.html missing expected content: %s", body)
 	}
 }

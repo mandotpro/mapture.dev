@@ -1,7 +1,7 @@
 # Active Backlog
 
 ## Product Goal
-Mapture should produce one trustworthy architecture model from source comments and repo config, then reuse that same exported JSON everywhere:
+Mapture should produce one trustworthy architecture model from source comments and repo config, then reuse the same exported JSON Graph Format artifact everywhere:
 
 1. validate and inspect architecture locally
 2. serve the explorer from live repo data or a saved export
@@ -16,9 +16,9 @@ The rule for the remaining backlog is simple:
 That means:
 
 - the scanner and validator remain the only source-of-truth builders
-- every downstream surface should consume the same exported JSON envelope
+- every downstream surface should consume the same JGF export or a derived transform from it
 - no consumer should invent its own private graph shape
-- UI work should sit on top of the canonical export, not bypass it
+- UI work should sit on top of the JGF export via a shared visualisation transform, not bypass it
 
 ## Ordered Work Queue
 
@@ -26,10 +26,10 @@ That means:
 | --- | --- | --- |
 | 032 | Export-driven Mermaid and diagnostics outputs | Mermaid and CI diagnostics should read from the same export/diagnostics model instead of bespoke code paths. |
 | 033 | First-class tags support | Tags are broadly useful metadata and should land before heavier policy work. |
-| 034 | AI export from canonical export JSON | AI artifacts should be generated from the shared export, not from a second traversal. |
-| 035 | MCP server over canonical export JSON | Chat-with-your-architecture depends on the canonical export existing first. |
+| 034 | AI export from JGF graph export | AI artifacts should be generated from the shared JGF export, not from a second traversal. |
+| 035 | MCP server over JGF graph export | Chat-with-your-architecture depends on the JGF export existing first. |
 | 036 | Scenario presets for explorer workflows | Presets make the explorer easier to use once the data contract is stable. |
-| 037 | Cross-boundary validations | Policy enforcement should come after tags and the canonical export contract are settled. |
+| 037 | Cross-boundary validations | Policy enforcement should come after tags and the JGF export contract are settled. |
 | 038 | Configurable explorer UI defaults and visual tuning | Repo-level UI tuning is useful, but not more important than the shared data pipeline. |
 | 039 | CLI output polish, color system, and terminal UX | The terminal is part of the product and should become clearer before broader adoption. |
 

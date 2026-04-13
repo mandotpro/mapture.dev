@@ -1,0 +1,724 @@
+{
+  "graph": {
+    "id": "ecommerce",
+    "type": "mapture.graph",
+    "label": "ecommerce",
+    "directed": true,
+    "nodes": {
+      "api:carrier-api": {
+        "label": "Carrier API",
+        "metadata": {
+          "id": "api:carrier-api",
+          "type": "api",
+          "domain": "shipping",
+          "owner": "team-operations",
+          "file": "src/ts/shipping/CarrierApiClient.ts",
+          "line": 1,
+          "summary": "Outbound integration for buying carrier labels and fetching tracking numbers from the shipping vendor. It is called once payment clears, and vendor-side timeouts are the failure mode shipping must recover from cleanly."
+        }
+      },
+      "api:email-api": {
+        "label": "Email API",
+        "metadata": {
+          "id": "api:email-api",
+          "type": "api",
+          "domain": "notifications",
+          "owner": "team-engagement",
+          "file": "src/ts/notifications/EmailApiClient.ts",
+          "line": 1,
+          "summary": "Outbound transactional email provider client used by notification-service. It accepts rendered templates and recipient metadata, and provider throttling is the failure mode that needs explicit retry handling."
+        }
+      },
+      "api:payment-api": {
+        "label": "Payment API",
+        "metadata": {
+          "id": "api:payment-api",
+          "type": "api",
+          "domain": "billing",
+          "owner": "team-commerce",
+          "file": "src/go/billing/paymentapi/payment_api.go",
+          "line": 3,
+          "summary": "Thin internal HTTP boundary that accepts checkout payment requests and forwards them to payment-service. Its primary input is an order ready for capture, and the main failure mode is surfacing gateway rejections without duplicating charge attempts."
+        }
+      },
+      "api:stripe-webhook-api": {
+        "label": "Stripe Webhook API",
+        "metadata": {
+          "id": "api:stripe-webhook-api",
+          "type": "api",
+          "domain": "billing",
+          "owner": "team-commerce",
+          "file": "src/go/billing/stripebridge/stripe_bridge.go",
+          "line": 3,
+          "summary": "Ingress for raw Stripe callbacks before they are normalized for payment-service. Its primary input is an external webhook payload, and the key failure mode is accepting malformed gateway traffic into billing state."
+        }
+      },
+      "database:billing-db": {
+        "label": "Billing Database",
+        "metadata": {
+          "id": "database:billing-db",
+          "type": "database",
+          "domain": "billing",
+          "owner": "team-commerce",
+          "file": "src/go/billing/billingdb/billing_db.go",
+          "line": 3,
+          "summary": "Stores payment intents, capture attempts, and gateway reconciliation references written by payment-service. It is read during retry and webhook handling, and inconsistent gateway state is the failure mode operators inspect here first."
+        }
+      },
+      "database:inventory-db": {
+        "label": "Inventory Database",
+        "metadata": {
+          "id": "database:inventory-db",
+          "type": "database",
+          "domain": "inventory",
+          "owner": "team-operations",
+          "file": "src/ts/inventory/InventoryDatabase.ts",
+          "line": 1,
+          "summary": "Holds per-SKU availability snapshots and reservation counters used by inventory-service. It is updated during reserve and release flows, and lock contention on hot stock is the failure mode the inventory path has to survive."
+        }
+      },
+      "database:orders-db": {
+        "label": "Orders Database",
+        "metadata": {
+          "id": "database:orders-db",
+          "type": "database",
+          "domain": "orders",
+          "owner": "team-commerce",
+          "file": "src/php/orders/OrdersDatabase.php",
+          "line": 5,
+          "summary": "Primary relational store for checkout writes and order lifecycle state. It is written before any event fan-out begins, and stale transaction state is the failure mode the orders flow must avoid."
+        }
+      },
+      "event:inventory.released": {
+        "label": "Inventory Released",
+        "metadata": {
+          "id": "event:inventory.released",
+          "type": "event",
+          "domain": "inventory",
+          "owner": "team-operations",
+          "file": "src/ts/inventory/InventoryService.ts",
+          "line": 51,
+          "summary": "This release event makes the stock correction visible to any future consumers after inventory finishes the asynchronous unwind."
+        }
+      },
+      "event:inventory.reserved": {
+        "label": "Inventory Reserved",
+        "metadata": {
+          "id": "event:inventory.reserved",
+          "type": "event",
+          "domain": "inventory",
+          "owner": "team-operations",
+          "file": "src/ts/inventory/InventoryService.ts",
+          "line": 28,
+          "summary": "Inventory emits this reservation signal so downstream consumers can react without reading reservation state directly from the database."
+        }
+      },
+      "event:notification.sent": {
+        "label": "Notification Sent Event",
+        "metadata": {
+          "id": "event:notification.sent",
+          "type": "event",
+          "domain": "notifications",
+          "owner": "team-engagement",
+          "file": "src/ts/contracts/DomainEvents.ts",
+          "line": 59,
+          "summary": "Internal delivery contract published after notification-service hands work to the messaging pipeline. Subscribers use it for telemetry and support timelines, and delivery payload drift is the failure mode this shared definition prevents."
+        }
+      },
+      "event:order.cancelled": {
+        "label": "Order Cancelled",
+        "metadata": {
+          "id": "event:order.cancelled",
+          "type": "event",
+          "domain": "orders",
+          "owner": "team-commerce",
+          "file": "src/php/orders/CheckoutService.php",
+          "line": 38,
+          "summary": "Checkout publishes cancellations so inventory can release held stock and downstream customer messaging can stop before fulfillment advances."
+        }
+      },
+      "event:order.placed": {
+        "label": "Order Placed Event",
+        "metadata": {
+          "id": "event:order.placed",
+          "type": "event",
+          "domain": "orders",
+          "owner": "team-commerce",
+          "file": "src/ts/contracts/DomainEvents.ts",
+          "line": 5,
+          "summary": "Shared contract emitted when checkout commits a new order and downstream commerce workflows should begin. Billing, inventory, and notifications all depend on it, and version drift is the failure mode this contract keeps visible."
+        }
+      },
+      "event:payment.captured": {
+        "label": "Payment Captured Event",
+        "metadata": {
+          "id": "event:payment.captured",
+          "type": "event",
+          "domain": "billing",
+          "owner": "team-commerce",
+          "file": "src/ts/contracts/DomainEvents.ts",
+          "line": 23,
+          "summary": "Shared contract for a successfully captured payment after billing durably records the gateway result. Shipping and notifications consume it next, and schema drift would create duplicate shipment or messaging side effects."
+        }
+      },
+      "event:payment.failed": {
+        "label": "Payment Failed",
+        "metadata": {
+          "id": "event:payment.failed",
+          "type": "event",
+          "domain": "billing",
+          "owner": "team-commerce",
+          "file": "src/go/billing/paymentservice/payment_service.go",
+          "line": 41,
+          "summary": "Payment failures are published so notification-service can prompt the customer to retry without coupling email rendering into billing code."
+        }
+      },
+      "event:shipment.created": {
+        "label": "Shipment Created Event",
+        "metadata": {
+          "id": "event:shipment.created",
+          "type": "event",
+          "domain": "shipping",
+          "owner": "team-operations",
+          "file": "src/ts/contracts/DomainEvents.ts",
+          "line": 41,
+          "summary": "Shared shipment contract emitted once shipping stores a carrier label and tracking number. Notifications rely on it for customer updates, and missing tracking fields are the failure mode this contract makes explicit."
+        }
+      },
+      "event:stripe.webhook.received": {
+        "label": "Stripe Webhook Received",
+        "metadata": {
+          "id": "event:stripe.webhook.received",
+          "type": "event",
+          "domain": "billing",
+          "owner": "team-commerce",
+          "file": "src/go/billing/stripebridge/stripe_bridge.go",
+          "line": 15,
+          "summary": "This bridge-in marks the exact point where external Stripe traffic becomes an internal billing signal that payment-service can validate and reconcile."
+        }
+      },
+      "service:checkout-service": {
+        "label": "Checkout Service",
+        "metadata": {
+          "id": "service:checkout-service",
+          "type": "service",
+          "domain": "orders",
+          "owner": "team-commerce",
+          "file": "src/php/orders/CheckoutService.php",
+          "line": 5,
+          "summary": "Accepts a validated storefront cart, persists the order, and kicks off billing, inventory, and notification work. Its primary input is the checkout cart plus buyer context, and the critical failure mode is preventing any downstream side effects before the order commit succeeds."
+        }
+      },
+      "service:inventory-service": {
+        "label": "Inventory Service",
+        "metadata": {
+          "id": "service:inventory-service",
+          "type": "service",
+          "domain": "inventory",
+          "owner": "team-operations",
+          "file": "src/ts/inventory/InventoryService.ts",
+          "line": 3,
+          "summary": "Consumes order lifecycle events to reserve or release sellable stock in the inventory store. Its primary triggers are new orders and cancellations, and overselling due to missed releases is the failure mode it is designed to prevent."
+        }
+      },
+      "service:notification-audit-projector": {
+        "label": "Notification Audit Projector",
+        "metadata": {
+          "id": "service:notification-audit-projector",
+          "type": "service",
+          "domain": "notifications",
+          "owner": "team-engagement",
+          "file": "src/ts/notifications/NotificationAuditProjector.ts",
+          "line": 5,
+          "summary": "Builds internal delivery timelines from published notification lifecycle events. Its primary input is notification.sent, and lagging projections are the failure mode support tooling notices first."
+        }
+      },
+      "service:notification-service": {
+        "label": "Notification Service",
+        "metadata": {
+          "id": "service:notification-service",
+          "type": "service",
+          "domain": "notifications",
+          "owner": "team-engagement",
+          "file": "src/ts/notifications/NotificationService.ts",
+          "line": 7,
+          "summary": "Transforms commerce and operations events into customer-facing email requests. It starts from order, payment, and shipment events, and the critical failure mode is avoiding customer sends when upstream data is incomplete or the delivery vendor rejects the payload."
+        }
+      },
+      "service:payment-service": {
+        "label": "Payment Service",
+        "metadata": {
+          "id": "service:payment-service",
+          "type": "service",
+          "domain": "billing",
+          "owner": "team-commerce",
+          "file": "src/go/billing/paymentservice/payment_service.go",
+          "line": 3,
+          "summary": "Turns placed orders and gateway callbacks into durable payment records and commerce events. It starts from order.placed and Stripe webhook input, and the critical failure mode is preventing duplicate captures when retries race with reconciliation."
+        }
+      },
+      "service:shipping-service": {
+        "label": "Shipping Service",
+        "metadata": {
+          "id": "service:shipping-service",
+          "type": "service",
+          "domain": "shipping",
+          "owner": "team-operations",
+          "file": "src/ts/shipping/ShippingService.ts",
+          "line": 3,
+          "summary": "Turns captured payments into shipments and carrier label requests. Its primary trigger is payment.captured, and the key failure mode is avoiding duplicate labels when retries race with warehouse processing."
+        }
+      }
+    },
+    "edges": [
+      {
+        "source": "api:payment-api",
+        "target": "service:payment-service",
+        "relation": "calls",
+        "directed": true,
+        "metadata": {
+          "id": "calls:api:payment-api:service:payment-service"
+        }
+      },
+      {
+        "source": "api:stripe-webhook-api",
+        "target": "service:payment-service",
+        "relation": "calls",
+        "directed": true,
+        "metadata": {
+          "id": "calls:api:stripe-webhook-api:service:payment-service"
+        }
+      },
+      {
+        "source": "event:notification.sent",
+        "target": "service:notification-audit-projector",
+        "relation": "consumes",
+        "directed": true,
+        "metadata": {
+          "id": "consumes:event:notification.sent:service:notification-audit-projector"
+        }
+      },
+      {
+        "source": "event:order.cancelled",
+        "target": "service:inventory-service",
+        "relation": "consumes",
+        "directed": true,
+        "metadata": {
+          "id": "consumes:event:order.cancelled:service:inventory-service"
+        }
+      },
+      {
+        "source": "event:order.placed",
+        "target": "service:inventory-service",
+        "relation": "consumes",
+        "directed": true,
+        "metadata": {
+          "id": "consumes:event:order.placed:service:inventory-service"
+        }
+      },
+      {
+        "source": "event:order.placed",
+        "target": "service:notification-service",
+        "relation": "consumes",
+        "directed": true,
+        "metadata": {
+          "id": "consumes:event:order.placed:service:notification-service"
+        }
+      },
+      {
+        "source": "event:order.placed",
+        "target": "service:payment-service",
+        "relation": "consumes",
+        "directed": true,
+        "metadata": {
+          "id": "consumes:event:order.placed:service:payment-service"
+        }
+      },
+      {
+        "source": "event:payment.captured",
+        "target": "service:shipping-service",
+        "relation": "consumes",
+        "directed": true,
+        "metadata": {
+          "id": "consumes:event:payment.captured:service:shipping-service"
+        }
+      },
+      {
+        "source": "event:payment.failed",
+        "target": "service:notification-service",
+        "relation": "consumes",
+        "directed": true,
+        "metadata": {
+          "id": "consumes:event:payment.failed:service:notification-service"
+        }
+      },
+      {
+        "source": "event:shipment.created",
+        "target": "service:notification-service",
+        "relation": "consumes",
+        "directed": true,
+        "metadata": {
+          "id": "consumes:event:shipment.created:service:notification-service"
+        }
+      },
+      {
+        "source": "event:stripe.webhook.received",
+        "target": "api:stripe-webhook-api",
+        "relation": "consumes",
+        "directed": true,
+        "metadata": {
+          "id": "consumes:event:stripe.webhook.received:api:stripe-webhook-api"
+        }
+      },
+      {
+        "source": "service:checkout-service",
+        "target": "api:payment-api",
+        "relation": "calls",
+        "directed": true,
+        "metadata": {
+          "id": "calls:service:checkout-service:api:payment-api"
+        }
+      },
+      {
+        "source": "service:checkout-service",
+        "target": "database:orders-db",
+        "relation": "stores_in",
+        "directed": true,
+        "metadata": {
+          "id": "stores_in:service:checkout-service:database:orders-db"
+        }
+      },
+      {
+        "source": "service:checkout-service",
+        "target": "event:order.cancelled",
+        "relation": "emits",
+        "directed": true,
+        "metadata": {
+          "id": "emits:service:checkout-service:event:order.cancelled"
+        }
+      },
+      {
+        "source": "service:checkout-service",
+        "target": "event:order.placed",
+        "relation": "depends_on",
+        "directed": true,
+        "metadata": {
+          "id": "depends_on:service:checkout-service:event:order.placed"
+        }
+      },
+      {
+        "source": "service:checkout-service",
+        "target": "event:order.placed",
+        "relation": "emits",
+        "directed": true,
+        "metadata": {
+          "id": "emits:service:checkout-service:event:order.placed"
+        }
+      },
+      {
+        "source": "service:checkout-service",
+        "target": "service:inventory-service",
+        "relation": "calls",
+        "directed": true,
+        "metadata": {
+          "id": "calls:service:checkout-service:service:inventory-service"
+        }
+      },
+      {
+        "source": "service:checkout-service",
+        "target": "service:notification-service",
+        "relation": "calls",
+        "directed": true,
+        "metadata": {
+          "id": "calls:service:checkout-service:service:notification-service"
+        }
+      },
+      {
+        "source": "service:inventory-service",
+        "target": "database:inventory-db",
+        "relation": "reads_from",
+        "directed": true,
+        "metadata": {
+          "id": "reads_from:service:inventory-service:database:inventory-db"
+        }
+      },
+      {
+        "source": "service:inventory-service",
+        "target": "database:inventory-db",
+        "relation": "stores_in",
+        "directed": true,
+        "metadata": {
+          "id": "stores_in:service:inventory-service:database:inventory-db"
+        }
+      },
+      {
+        "source": "service:inventory-service",
+        "target": "event:inventory.released",
+        "relation": "emits",
+        "directed": true,
+        "metadata": {
+          "id": "emits:service:inventory-service:event:inventory.released"
+        }
+      },
+      {
+        "source": "service:inventory-service",
+        "target": "event:inventory.reserved",
+        "relation": "emits",
+        "directed": true,
+        "metadata": {
+          "id": "emits:service:inventory-service:event:inventory.reserved"
+        }
+      },
+      {
+        "source": "service:inventory-service",
+        "target": "event:order.placed",
+        "relation": "depends_on",
+        "directed": true,
+        "metadata": {
+          "id": "depends_on:service:inventory-service:event:order.placed"
+        }
+      },
+      {
+        "source": "service:notification-audit-projector",
+        "target": "service:notification-service",
+        "relation": "depends_on",
+        "directed": true,
+        "metadata": {
+          "id": "depends_on:service:notification-audit-projector:service:notification-service"
+        }
+      },
+      {
+        "source": "service:notification-service",
+        "target": "api:email-api",
+        "relation": "calls",
+        "directed": true,
+        "metadata": {
+          "id": "calls:service:notification-service:api:email-api"
+        }
+      },
+      {
+        "source": "service:notification-service",
+        "target": "event:notification.sent",
+        "relation": "depends_on",
+        "directed": true,
+        "metadata": {
+          "id": "depends_on:service:notification-service:event:notification.sent"
+        }
+      },
+      {
+        "source": "service:notification-service",
+        "target": "event:notification.sent",
+        "relation": "emits",
+        "directed": true,
+        "metadata": {
+          "id": "emits:service:notification-service:event:notification.sent"
+        }
+      },
+      {
+        "source": "service:payment-service",
+        "target": "database:billing-db",
+        "relation": "reads_from",
+        "directed": true,
+        "metadata": {
+          "id": "reads_from:service:payment-service:database:billing-db"
+        }
+      },
+      {
+        "source": "service:payment-service",
+        "target": "database:billing-db",
+        "relation": "stores_in",
+        "directed": true,
+        "metadata": {
+          "id": "stores_in:service:payment-service:database:billing-db"
+        }
+      },
+      {
+        "source": "service:payment-service",
+        "target": "event:payment.captured",
+        "relation": "depends_on",
+        "directed": true,
+        "metadata": {
+          "id": "depends_on:service:payment-service:event:payment.captured"
+        }
+      },
+      {
+        "source": "service:payment-service",
+        "target": "event:payment.captured",
+        "relation": "emits",
+        "directed": true,
+        "metadata": {
+          "id": "emits:service:payment-service:event:payment.captured"
+        }
+      },
+      {
+        "source": "service:payment-service",
+        "target": "event:payment.captured",
+        "relation": "emits",
+        "directed": true,
+        "metadata": {
+          "id": "emits:service:payment-service:event:payment.captured#2"
+        }
+      },
+      {
+        "source": "service:payment-service",
+        "target": "event:payment.failed",
+        "relation": "emits",
+        "directed": true,
+        "metadata": {
+          "id": "emits:service:payment-service:event:payment.failed"
+        }
+      },
+      {
+        "source": "service:shipping-service",
+        "target": "api:carrier-api",
+        "relation": "calls",
+        "directed": true,
+        "metadata": {
+          "id": "calls:service:shipping-service:api:carrier-api"
+        }
+      },
+      {
+        "source": "service:shipping-service",
+        "target": "event:shipment.created",
+        "relation": "depends_on",
+        "directed": true,
+        "metadata": {
+          "id": "depends_on:service:shipping-service:event:shipment.created"
+        }
+      },
+      {
+        "source": "service:shipping-service",
+        "target": "event:shipment.created",
+        "relation": "emits",
+        "directed": true,
+        "metadata": {
+          "id": "emits:service:shipping-service:event:shipment.created"
+        }
+      }
+    ],
+    "metadata": {
+      "mapture": {
+        "schemaVersion": 1,
+        "generatedAt": "2026-01-02T03:04:05Z",
+        "toolVersion": "dev",
+        "source": {
+          "projectRoot": "/repo/examples/ecommerce",
+          "configPath": "/repo/examples/ecommerce/mapture.yaml"
+        },
+        "catalog": {
+          "teams": [
+            {
+              "id": "team-commerce",
+              "name": "Commerce Platform",
+              "email": "commerce@example.com"
+            },
+            {
+              "id": "team-engagement",
+              "name": "Customer Engagement",
+              "email": "engagement@example.com"
+            },
+            {
+              "id": "team-operations",
+              "name": "Operations Platform",
+              "email": "operations@example.com"
+            }
+          ],
+          "domains": [
+            {
+              "id": "billing",
+              "name": "Billing",
+              "description": "Payment authorization, capture, and reconciliation.",
+              "ownerTeams": [
+                "team-commerce"
+              ],
+              "allowedOutboundDomains": [
+                "shipping",
+                "notifications"
+              ],
+              "allowedInboundDomains": [
+                "orders"
+              ]
+            },
+            {
+              "id": "inventory",
+              "name": "Inventory",
+              "description": "Stock reservations and availability tracking.",
+              "ownerTeams": [
+                "team-operations"
+              ],
+              "allowedOutboundDomains": [
+                "notifications"
+              ],
+              "allowedInboundDomains": [
+                "orders"
+              ]
+            },
+            {
+              "id": "notifications",
+              "name": "Notifications",
+              "description": "Transactional customer notifications and delivery telemetry.",
+              "ownerTeams": [
+                "team-engagement"
+              ],
+              "allowedInboundDomains": [
+                "orders",
+                "billing",
+                "inventory",
+                "shipping"
+              ]
+            },
+            {
+              "id": "orders",
+              "name": "Orders",
+              "description": "Customer checkout flow and order lifecycle.",
+              "ownerTeams": [
+                "team-commerce"
+              ],
+              "allowedOutboundDomains": [
+                "billing",
+                "inventory",
+                "notifications"
+              ]
+            },
+            {
+              "id": "shipping",
+              "name": "Shipping",
+              "description": "Shipment creation and carrier coordination.",
+              "ownerTeams": [
+                "team-operations"
+              ],
+              "allowedOutboundDomains": [
+                "notifications"
+              ],
+              "allowedInboundDomains": [
+                "billing",
+                "orders"
+              ]
+            }
+          ]
+        },
+        "validation": {
+          "summary": {
+            "errors": 0,
+            "warnings": 0,
+            "nodes": 22,
+            "edges": 36
+          }
+        },
+        "ui": {
+          "defaultLayout": "elk-horizontal",
+          "nodeColors": {
+            "service": "#1d4ed8",
+            "api": "#0f766e",
+            "database": "#b45309",
+            "event": "#be185d"
+          }
+        },
+        "meta": {
+          "sourceLabel": "static",
+          "mode": "static"
+        }
+      }
+    }
+  }
+}
