@@ -7,9 +7,11 @@ ROOT_DIR="$(root_dir)"
 
 cd "$ROOT_DIR"
 
+mapture_print_section "Go and CLI checks"
 ./scripts/test-go.sh
 go vet ./src/...
 bash -n ./scripts/install.sh
+bash -n ./scripts/help.sh
 go run src/main.go --help >/dev/null
 go run src/main.go validate examples/demo >/dev/null
 go run src/main.go validate examples/ecommerce >/dev/null
@@ -22,10 +24,14 @@ release_output_dir="$(mktemp -d)"
 formula_output="$(mktemp)"
 tap_output_dir="$(mktemp -d)"
 install_output_dir="$(mktemp -d)"
-trap 'rm -f "$graph_output" "$formula_output"; rm -rf "$release_output_dir" "$tap_output_dir" "$install_output_dir"' EXIT
+help_plain_output="$(mktemp)"
+help_color_output="$(mktemp)"
+go_help_color_output="$(mktemp)"
+trap 'rm -f "$graph_output" "$formula_output" "$help_plain_output" "$help_color_output" "$go_help_color_output"; rm -rf "$release_output_dir" "$tap_output_dir" "$install_output_dir"' EXIT
 go run src/main.go graph examples/ecommerce --domain billing -o "$graph_output"
 test -s "$graph_output"
 
+mapture_print_section "Release helper checks"
 ./scripts/build.sh >/dev/null
 build_version="$(./build/mapture --version)"
 [[ "$build_version" == *"0.0.0-dev"* ]]
@@ -64,6 +70,14 @@ grep -q 'assert_match "mapture version 0.0.0-canary.20260409+sha.c649dd6"' "$for
 test -f "$tap_output_dir/Formula/mapture-canary.rb"
 ! grep -q 'conflicts_with' "$tap_output_dir/Formula/mapture-canary.rb"
 grep -q 'brew install mandotpro/mapture/mapture-canary' "$tap_output_dir/README.md"
+
+mapture_print_section "Script color policy"
+NO_COLOR=1 make help >"$help_plain_output"
+! grep -q $'\033' "$help_plain_output"
+MAPTURE_COLOR=always make help >"$help_color_output"
+grep -q $'\033' "$help_color_output"
+MAPTURE_COLOR=always ./scripts/go.sh help >"$go_help_color_output"
+grep -q $'\033' "$go_help_color_output"
 
 expect_failure() {
   local path="$1"

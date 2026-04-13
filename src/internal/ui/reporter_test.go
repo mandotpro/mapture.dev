@@ -22,7 +22,7 @@ func TestReporterDiagnosticsPlainText(t *testing.T) {
 		err:     "[x]",
 		info:    " - ",
 	}
-	reporter.styles = buildStyles(false)
+	_, reporter.styles = buildTheme(false)
 
 	diagnostics := []validator.Diagnostic{
 		{Severity: "error", Layer: 4, Code: "unknown_domain", File: "src/app.go", Line: 3, Message: `unknown domain "missing"`},
@@ -55,7 +55,7 @@ func TestReporterSummaryPlainText(t *testing.T) {
 		err:     "[x]",
 		info:    " - ",
 	}
-	reporter.styles = buildStyles(false)
+	_, reporter.styles = buildTheme(false)
 
 	if err := reporter.Summary(true, 0, 1, 5, 4, 4); err != nil {
 		t.Fatalf("Summary returned error: %v", err)

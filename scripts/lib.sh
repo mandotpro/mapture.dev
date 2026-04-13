@@ -1,5 +1,54 @@
 #!/usr/bin/env bash
 
+mapture_color_mode() {
+  local mode="${MAPTURE_COLOR:-auto}"
+  case "$mode" in
+    auto|always|never) ;;
+    *) mode="auto" ;;
+  esac
+  printf '%s\n' "$mode"
+}
+
+mapture_color_enabled() {
+  local mode
+  mode="$(mapture_color_mode)"
+  case "$mode" in
+    always) return 0 ;;
+    never) return 1 ;;
+  esac
+
+  if [[ -n "${NO_COLOR:-}" ]]; then
+    return 1
+  fi
+
+  [[ -t 1 ]]
+}
+
+mapture_style() {
+  local code="$1"
+  shift
+  if mapture_color_enabled; then
+    printf '\033[%sm%s\033[0m' "$code" "$*"
+  else
+    printf '%s' "$*"
+  fi
+}
+
+mapture_accent() { mapture_style "36" "$*"; }
+mapture_success() { mapture_style "32" "$*"; }
+mapture_warning() { mapture_style "33" "$*"; }
+mapture_error() { mapture_style "31" "$*"; }
+mapture_strong() { mapture_style "1" "$*"; }
+mapture_muted() { mapture_style "90" "$*"; }
+
+mapture_print_section() {
+  printf '\n%s\n' "$(mapture_strong "$1")"
+}
+
+mapture_print_kv() {
+  printf '  %s %s\n' "$(mapture_accent "$(printf '%-18s' "$1")")" "$2"
+}
+
 root_dir() {
   cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd
 }

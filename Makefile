@@ -20,37 +20,7 @@ endif
 	validate scan graph serve run
 
 help: ## Show grouped development, verification, and fixture commands
-	@printf '\n%s\n' "Repo Development Commands"
-	@printf '  \033[36m%-18s\033[0m %s\n' "install-dev-tools" "Install local Go dev tools into testing/tools/bin"
-	@printf '  \033[36m%-18s\033[0m %s\n' "install-git-hooks" "Configure git to use the repo-managed hooks"
-	@printf '  \033[36m%-18s\033[0m %s\n' "init-hooks" "Configure git to use the repo-managed hooks"
-	@printf '  \033[36m%-18s\033[0m %s\n' "build" "Build the local mapture binary into build/"
-	@printf '  \033[36m%-18s\033[0m %s\n' "web" "Rebuild the frontend bundle under src/internal/webui/dist/"
-	@printf '\n%s\n' "Repo Verification Commands"
-	@printf '  \033[36m%-18s\033[0m %s\n' "test-go" "Run Go tests through gotestsum"
-	@printf '  \033[36m%-18s\033[0m %s\n' "test" "Run the full local verification suite"
-	@printf '  \033[36m%-18s\033[0m %s\n' "lint" "Run golangci-lint against src/"
-	@printf '  \033[36m%-18s\033[0m %s\n' "vet" "Run go vet against src/"
-	@printf '  \033[36m%-18s\033[0m %s\n' "fmt" "Format Go source files under src/"
-	@printf '  \033[36m%-18s\033[0m %s\n' "audit-public" "Run public-release hygiene checks against tracked files"
-	@printf '  \033[36m%-18s\033[0m %s\n' "cli-help" "Show CLI help from the current source tree"
-	@printf '\n%s\n' "Local Verification With Fixtures"
-	@printf '  \033[36m%-18s\033[0m %s\n' "fixtures" "List discovered fixtures"
-	@printf '  \033[36m%-18s\033[0m %s\n' "testing-help" "Show the testing-first wrapper commands and fixture paths"
-	@printf '  \033[36m%-18s\033[0m %s\n' "testing-build" "Build the current source into testing/bin/mapture"
-	@printf '  \033[36m%-18s\033[0m %s\n' "testing-init" "Run init against testing/playground"
-	@printf '  \033[36m%-18s\033[0m %s\n' "playground-init" "Run init against the gitignored testing playground"
-	@printf '  \033[36m%-18s\033[0m %s\n' "validate" "Validate a fixture: make validate FIXTURE=<fixture|all>"
-	@printf '  \033[36m%-18s\033[0m %s\n' "scan" "Scan a fixture: make scan FIXTURE=<fixture|all>"
-	@printf '  \033[36m%-18s\033[0m %s\n' "graph" "Export Mermaid for a fixture: make graph FIXTURE=<fixture|all>"
-	@printf '  \033[36m%-18s\033[0m %s\n' "serve" "Run the local server against a fixture: make serve FIXTURE=<fixture>"
-	@printf '  \033[36m%-18s\033[0m %s\n' "run" "Run any CLI command for a fixture: make run FIXTURE=<fixture> CMD=<cli-command>"
-	@printf '\n%s\n' "Fixtures"
-	@for fixture in $(FIXTURES); do printf '  %s\n' "$$fixture"; done
-	@printf '\n%s\n' "Fixture Aliases"
-	@for fixture in $(FIXTURES); do \
-		printf '  validate.%s  scan.%s  graph.%s  serve.%s\n' "$$fixture" "$$fixture" "$$fixture" "$$fixture"; \
-	done
+	@./scripts/help.sh
 
 fixtures: ## List discovered fixtures
 	@for fixture in $(FIXTURES); do echo "$$fixture"; done
