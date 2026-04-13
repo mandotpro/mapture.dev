@@ -15,8 +15,27 @@ import (
 	"github.com/mandotpro/mapture.dev/src/internal/config"
 	exportercanonical "github.com/mandotpro/mapture.dev/src/internal/exporter/canonical"
 	"github.com/mandotpro/mapture.dev/src/internal/schema"
+	"github.com/mandotpro/mapture.dev/src/internal/ui"
 	"github.com/mandotpro/mapture.dev/src/internal/updater"
 )
+
+func resetRootFlags() {
+	colorModeFlag = string(ui.ColorAuto)
+	noColorFlag = false
+	versionFlag = false
+	if flag := rootCmd.PersistentFlags().Lookup("color"); flag != nil {
+		_ = flag.Value.Set(string(ui.ColorAuto))
+		flag.Changed = false
+	}
+	if flag := rootCmd.PersistentFlags().Lookup("no-color"); flag != nil {
+		_ = flag.Value.Set("false")
+		flag.Changed = false
+	}
+	if flag := rootCmd.Flags().Lookup("version"); flag != nil {
+		_ = flag.Value.Set("false")
+		flag.Changed = false
+	}
+}
 
 func TestLoadProjectSuccess(t *testing.T) {
 	t.Parallel()
@@ -174,9 +193,15 @@ func TestVersionCommandShowsBrandedRuntimeInfo(t *testing.T) {
 func TestRootHelpShowsBrandedHeader(t *testing.T) {
 	originalInspect := inspectRuntime
 	originalCheck := checkVersionStatus
+	previousOut := rootCmd.OutOrStdout()
+	previousErr := rootCmd.ErrOrStderr()
 	defer func() {
 		inspectRuntime = originalInspect
 		checkVersionStatus = originalCheck
+		rootCmd.SetOut(previousOut)
+		rootCmd.SetErr(previousErr)
+		rootCmd.SetArgs(nil)
+		resetRootFlags()
 	}()
 
 	inspectRuntime = func(_ string, _ *debug.BuildInfo) (updater.RuntimeDetails, error) {
@@ -192,6 +217,7 @@ func TestRootHelpShowsBrandedHeader(t *testing.T) {
 	}
 
 	var stdout bytes.Buffer
+	resetRootFlags()
 	rootCmd.SetOut(&stdout)
 	rootCmd.SetErr(&stdout)
 	rootCmd.SetArgs([]string{"--help"})
@@ -210,6 +236,77 @@ func TestRootHelpShowsBrandedHeader(t *testing.T) {
 		if !strings.Contains(output, want) {
 			t.Fatalf("expected %q in output, got %q", want, output)
 		}
+	}
+}
+
+func TestRootHelpHonorsForcedColor(t *testing.T) {
+	var stdout bytes.Buffer
+	previousOut := rootCmd.OutOrStdout()
+	previousErr := rootCmd.ErrOrStderr()
+	defer func() {
+		rootCmd.SetOut(previousOut)
+		rootCmd.SetErr(previousErr)
+		rootCmd.SetArgs(nil)
+		resetRootFlags()
+	}()
+
+	resetRootFlags()
+	rootCmd.SetOut(&stdout)
+	rootCmd.SetErr(&stdout)
+	rootCmd.SetArgs([]string{"--help", "--color=always"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if !strings.Contains(stdout.String(), "\x1b[") {
+		t.Fatalf("expected ANSI output, got %q", stdout.String())
+	}
+}
+
+func TestRootHelpHonorsNoColor(t *testing.T) {
+	var stdout bytes.Buffer
+	previousOut := rootCmd.OutOrStdout()
+	previousErr := rootCmd.ErrOrStderr()
+	defer func() {
+		rootCmd.SetOut(previousOut)
+		rootCmd.SetErr(previousErr)
+		rootCmd.SetArgs(nil)
+		resetRootFlags()
+	}()
+
+	resetRootFlags()
+	rootCmd.SetOut(&stdout)
+	rootCmd.SetErr(&stdout)
+	rootCmd.SetArgs([]string{"--help", "--no-color"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if strings.Contains(stdout.String(), "\x1b[") {
+		t.Fatalf("expected plain output, got %q", stdout.String())
+	}
+}
+
+func TestRootHelpRejectsConflictingColorFlags(t *testing.T) {
+	defer func() {
+		rootCmd.SetArgs(nil)
+		resetRootFlags()
+	}()
+
+	resetRootFlags()
+	rootCmd.SetArgs([]string{"--color=always", "--no-color"})
+	err := rootCmd.ParseFlags([]string{"--color=always", "--no-color"})
+	if err != nil {
+		t.Fatalf("ParseFlags returned error: %v", err)
+	}
+	_, err = selectedColorMode(rootCmd)
+	if err == nil {
+		t.Fatal("expected conflicting color flags to fail")
+	}
+	if !strings.Contains(err.Error(), "--color and --no-color cannot be used together") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -512,11 +609,11 @@ func TestReportServeErrorIncludesPortBusyHint(t *testing.T) {
 	var stderr bytes.Buffer
 	err := fmt.Errorf("listen %s: %w", "127.0.0.1:8765", syscall.EADDRINUSE)
 
-	reportServeError(&stderr, "127.0.0.1:8765", err)
+	reportServeError(&stderr, "127.0.0.1:8765", err, ui.ColorNever)
 
 	output := stderr.String()
 	for _, want := range []string{
-		"mapture serve: listen 127.0.0.1:8765",
+		"Serve failed",
 		"already in use",
 		"Ctrl-Z",
 		"kill %<job>",

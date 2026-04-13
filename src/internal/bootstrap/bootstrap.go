@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -14,6 +13,7 @@ import (
 	"strings"
 
 	survey "github.com/AlecAivazis/survey/v2"
+	"github.com/mandotpro/mapture.dev/src/internal/ui"
 )
 
 var supportedLanguages = []languageOption{
@@ -27,7 +27,7 @@ var preferredIncludeDirs = []string{"src", "cmd", "pkg", "internal", "services",
 var wellKnownExcludeDirs = []string{".git", "vendor", "node_modules", "dist", "build"}
 
 // Run executes the interactive init flow for the target repository.
-func Run(target string, stdin, stdout, stderr *os.File) error {
+func Run(target string, stdin, stdout, stderr *os.File, colorMode ui.ColorMode) error {
 	root, err := filepath.Abs(target)
 	if err != nil {
 		return fmt.Errorf("resolve target path: %w", err)
@@ -43,13 +43,14 @@ func Run(target string, stdin, stdout, stderr *os.File) error {
 	}
 
 	stdio := survey.WithStdio(stdin, stdout, stderr)
+	console := ui.NewConsole(stdout, colorMode)
 
 	skipExisting, err := resolveExistingFiles(state.ExistingFiles, stdio)
 	if err != nil {
 		return err
 	}
 
-	config, err := promptConfig(root, state, stdio, stdout)
+	config, err := promptConfig(root, state, stdio, console)
 	if err != nil {
 		return err
 	}
@@ -59,7 +60,7 @@ func Run(target string, stdin, stdout, stderr *os.File) error {
 		return err
 	}
 
-	return printSummary(stdout, root, result)
+	return printSummary(console, root, result)
 }
 
 type languageOption struct {
@@ -275,7 +276,7 @@ func resolveExistingFiles(existing []string, stdio survey.AskOpt) (bool, error) 
 	return true, nil
 }
 
-func promptConfig(root string, state detectedState, stdio survey.AskOpt, stdout io.Writer) (initConfig, error) {
+func promptConfig(root string, state detectedState, stdio survey.AskOpt, console *ui.Console) (initConfig, error) {
 	defaultIncludes := strings.Join(state.DefaultIncludes, ", ")
 	includePrompt := "Source directories to scan (comma-separated)"
 	if len(state.IncludeSuggestions) > 0 {
@@ -300,7 +301,7 @@ func promptConfig(root string, state detectedState, stdio survey.AskOpt, stdout 
 	if err != nil {
 		return initConfig{}, err
 	}
-	if err := printDetectedLanguages(stdout, includes, detectedLangs); err != nil {
+	if err := printDetectedLanguages(console, includes, detectedLangs); err != nil {
 		return initConfig{}, fmt.Errorf("report detected languages: %w", err)
 	}
 
@@ -438,7 +439,7 @@ func pathListRequired(value any) error {
 	return nil
 }
 
-func printDetectedLanguages(stdout io.Writer, includes []string, detected map[string]bool) error {
+func printDetectedLanguages(console *ui.Console, includes []string, detected map[string]bool) error {
 	found := make([]string, 0, len(supportedLanguages))
 	for _, option := range supportedLanguages {
 		if detected[option.Key] {
@@ -447,12 +448,22 @@ func printDetectedLanguages(stdout io.Writer, includes []string, detected map[st
 	}
 
 	if len(found) == 0 {
-		_, err := fmt.Fprintf(stdout, "\nNo supported languages detected in %s. You can still enable them manually in the next step.\n\n", strings.Join(includes, ", "))
-		return err
+		if err := console.Warning(
+			"No supported languages detected",
+			fmt.Sprintf("%s — you can still enable them manually in the next step", strings.Join(includes, ", ")),
+		); err != nil {
+			return err
+		}
+		return console.Println("")
 	}
 
-	_, err := fmt.Fprintf(stdout, "\nDetected languages in %s: %s\n\n", strings.Join(includes, ", "), strings.Join(found, ", "))
-	return err
+	if err := console.Success(
+		"Detected languages",
+		fmt.Sprintf("%s → %s", strings.Join(includes, ", "), strings.Join(found, ", ")),
+	); err != nil {
+		return err
+	}
+	return console.Println("")
 }
 
 func normalizePath(path string) string {
@@ -592,26 +603,26 @@ func renderConfig(config initConfig) string {
 	return b.String()
 }
 
-func printSummary(stdout io.Writer, root string, result writeResult) error {
-	if _, err := fmt.Fprintf(stdout, "\nInitialized Mapture scaffold in %s\n", root); err != nil {
+func printSummary(console *ui.Console, root string, result writeResult) error {
+	if err := console.Success("Initialized mapture scaffold", console.Path(root)); err != nil {
 		return err
 	}
 	if len(result.Created) > 0 {
-		if _, err := fmt.Fprintln(stdout, "Created:"); err != nil {
+		if err := console.Stage("Created", ""); err != nil {
 			return err
 		}
 		for _, path := range result.Created {
-			if _, err := fmt.Fprintf(stdout, "  - %s\n", path); err != nil {
+			if err := console.Println("  - " + console.Path(path)); err != nil {
 				return err
 			}
 		}
 	}
 	if len(result.Skipped) > 0 {
-		if _, err := fmt.Fprintln(stdout, "Skipped existing:"); err != nil {
+		if err := console.Warning("Skipped existing", ""); err != nil {
 			return err
 		}
 		for _, path := range result.Skipped {
-			if _, err := fmt.Fprintf(stdout, "  - %s\n", path); err != nil {
+			if err := console.Println("  - " + console.Path(path)); err != nil {
 				return err
 			}
 		}

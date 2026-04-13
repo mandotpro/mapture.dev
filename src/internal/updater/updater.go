@@ -56,6 +56,7 @@ type Options struct {
 	BuildInfo        *debug.BuildInfo
 	Stdout           io.Writer
 	Stderr           io.Writer
+	ColorMode        ui.ColorMode
 }
 
 type runtimeInfo struct {
@@ -116,7 +117,7 @@ func Run(ctx context.Context, opts Options) error {
 	if out == nil {
 		out = io.Discard
 	}
-	console := ui.NewConsole(out)
+	console := ui.NewConsole(out, opts.ColorMode)
 
 	current, err := detectRuntime(opts.CurrentVersion, opts.BuildInfo)
 	if err != nil {
@@ -137,8 +138,12 @@ func Run(ctx context.Context, opts Options) error {
 	writef(out, "%s - %s\n", console.Brand("mapture.dev"), console.Strong(displayVersion(current.Version)))
 	writef(out, "%s\n", console.Join(string(targetChannel), humanInstallMethod(current.InstallMethod), current.ExecutablePath))
 	if status, statusErr := CheckVersion(ctx, opts.CurrentVersion, opts.BuildInfo); statusErr == nil && status.UpdateAvailable {
-		writef(out, "%s: %s\n", console.Warning("Update available"), status.LatestForChannel)
-		writef(out, "%s\n", console.Accent("Run: mapture update"))
+		if err := console.Warning("Update available", status.LatestForChannel); err != nil {
+			return err
+		}
+		if err := console.Println(console.Accent("Run: mapture update")); err != nil {
+			return err
+		}
 	}
 
 	switch current.InstallMethod {
@@ -146,11 +151,11 @@ func Run(ctx context.Context, opts Options) error {
 		if targetChannel != current.Channel {
 			return fmt.Errorf("homebrew channel switches are not automatic; uninstall %s and install the %s formula instead", current.HomebrewFormula, targetChannel)
 		}
-		return upgradeViaHomebrew(ctx, current, out)
+		return upgradeViaHomebrew(ctx, current, out, opts.ColorMode)
 	case installMethodGo:
-		return upgradeViaGoInstall(ctx, targetChannel, out)
+		return upgradeViaGoInstall(ctx, targetChannel, out, opts.ColorMode)
 	default:
-		return upgradeDirectBinary(ctx, current, targetChannel, out)
+		return upgradeDirectBinary(ctx, current, targetChannel, out, opts.ColorMode)
 	}
 }
 
@@ -339,7 +344,7 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func upgradeViaHomebrew(ctx context.Context, current runtimeInfo, out io.Writer) error {
+func upgradeViaHomebrew(ctx context.Context, current runtimeInfo, out io.Writer, colorMode ui.ColorMode) error {
 	formula := current.HomebrewFormula
 	if formula == "" {
 		return errors.New("homebrew install detected without formula name")
@@ -349,16 +354,18 @@ func upgradeViaHomebrew(ctx context.Context, current runtimeInfo, out io.Writer)
 		return fmt.Errorf("brew is not available in PATH; reinstall with curl or replace the binary manually")
 	}
 
-	writef(out, "mapture update: running brew upgrade %s\n", formula)
+	if err := ui.NewConsole(out, colorMode).Stage("Running Homebrew upgrade", formula); err != nil {
+		return err
+	}
 	cmd := commandRunner(ctx, "brew", "upgrade", formula)
 	cmd.Stdout = out
 	cmd.Stderr = out
 	return cmd.Run()
 }
 
-func upgradeViaGoInstall(ctx context.Context, channel Channel, out io.Writer) error {
+func upgradeViaGoInstall(ctx context.Context, channel Channel, out io.Writer, colorMode ui.ColorMode) error {
 	if _, err := exec.LookPath("go"); err != nil {
-		return upgradeDirectBinary(ctx, runtimeInfo{ExecutablePath: mustExecutablePath()}, channel, out)
+		return upgradeDirectBinary(ctx, runtimeInfo{ExecutablePath: mustExecutablePath()}, channel, out, colorMode)
 	}
 
 	ref := "@latest"
@@ -366,7 +373,10 @@ func upgradeViaGoInstall(ctx context.Context, channel Channel, out io.Writer) er
 		ref = "@main"
 	}
 
-	writef(out, "mapture update: running go install %s%s\n", moduleRef, ref)
+	console := ui.NewConsole(out, colorMode)
+	if err := console.Stage("Running go install", console.Code(moduleRef+ref)); err != nil {
+		return err
+	}
 	cmd := commandRunner(ctx, "go", "install", moduleRef+ref)
 	cmd.Stdout = out
 	cmd.Stderr = out
@@ -376,7 +386,9 @@ func upgradeViaGoInstall(ctx context.Context, channel Channel, out io.Writer) er
 	}
 
 	if channel == ChannelCanary {
-		writef(out, "mapture update: retrying canary install with GOPROXY=direct\n")
+		if err := console.Warning("Retrying canary install", "GOPROXY=direct"); err != nil {
+			return err
+		}
 		retry := commandRunner(ctx, "go", "install", moduleRef+ref)
 		retry.Env = append(os.Environ(), "GOPROXY=direct")
 		retry.Stdout = out
@@ -398,7 +410,8 @@ func mustExecutablePath() string {
 	return exe
 }
 
-func upgradeDirectBinary(ctx context.Context, current runtimeInfo, channel Channel, out io.Writer) error {
+func upgradeDirectBinary(ctx context.Context, current runtimeInfo, channel Channel, out io.Writer, colorMode ui.ColorMode) error {
+	console := ui.NewConsole(out, colorMode)
 	release, err := fetchReleaseFn(ctx, channel)
 	if err != nil {
 		return err
@@ -411,11 +424,15 @@ func upgradeDirectBinary(ctx context.Context, current runtimeInfo, channel Chann
 
 	targetVersion := release.binaryVersion(runtime.GOOS, runtime.GOARCH)
 	if current.Version != "" && targetVersion != "" && current.Version == targetVersion {
-		writef(out, "mapture update: already at %s\n", targetVersion)
+		if err := console.Success("Already current", targetVersion); err != nil {
+			return err
+		}
 		return nil
 	}
 
-	writef(out, "mapture update: downloading %s\n", asset.Name)
+	if err := console.Stage("Downloading release asset", asset.Name); err != nil {
+		return err
+	}
 	binaryBytes, mode, err := downloadAndExtractBinary(ctx, asset)
 	if err != nil {
 		return err

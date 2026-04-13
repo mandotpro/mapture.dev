@@ -46,6 +46,14 @@ var (
 	runUpdateCmd                 = updater.Run
 	inspectRuntime               = updater.Inspect
 	checkVersionStatus           = updater.CheckVersion
+	colorModeFlag                = string(ui.ColorAuto)
+	noColorFlag        bool
+	versionFlag        bool
+)
+
+const (
+	productSiteURL   = "https://mapture.dev"
+	productGitHubURL = "https://mapture.dev/github"
 )
 
 var rootCmd = &cobra.Command{
@@ -54,12 +62,8 @@ var rootCmd = &cobra.Command{
 	SilenceErrors: true,
 	SilenceUsage:  true,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		showVersion, err := cmd.Flags().GetBool("version")
-		if err != nil {
-			return err
-		}
-		if showVersion {
-			return renderVersionInfo(cmd.OutOrStdout(), readBuildInfo())
+		if versionFlag {
+			return renderVersionInfo(cmd.OutOrStdout(), readBuildInfo(), currentColorMode(cmd))
 		}
 		return renderRootHelp(cmd)
 	},
@@ -72,6 +76,8 @@ func Execute() error {
 
 func init() {
 	version = resolveVersion(version, readBuildInfo())
+	rootCmd.PersistentFlags().StringVar(&colorModeFlag, "color", string(ui.ColorAuto), "color output: auto, always, never")
+	rootCmd.PersistentFlags().BoolVar(&noColorFlag, "no-color", false, "disable color output (alias for --color=never)")
 	rootCmd.AddCommand(
 		newInitCmd(),
 		newValidateCmd(),
@@ -84,10 +90,16 @@ func init() {
 		newExportHTMLCmd(),
 		newExportAICmd(),
 	)
-	rootCmd.Flags().BoolP("version", "v", false, "show version information")
+	rootCmd.Flags().BoolVarP(&versionFlag, "version", "v", false, "show version information")
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+		_, err := selectedColorMode(cmd)
+		return err
+	}
 	rootCmd.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
 		if cmd == rootCmd {
-			_ = renderRootHelp(cmd)
+			if err := renderRootHelp(cmd); err != nil {
+				_ = ui.NewConsole(cmd.ErrOrStderr(), ui.ColorNever).Error("Could not render help", err.Error())
+			}
 			return
 		}
 		_, _ = fmt.Fprint(cmd.OutOrStdout(), cmd.UsageString())
@@ -107,6 +119,53 @@ func init() {
 			return target.Help()
 		},
 	})
+}
+
+func cliBrandBlock(console *ui.Console, versionText string, details ...string) string {
+	lines := []string{
+		console.Header(displayProductVersion(versionText)),
+		console.Muted("Repo-native architecture mapping that stays close to the code."),
+		console.Join("Site: "+console.Accent(productSiteURL), "GitHub: "+console.Accent(productGitHubURL)),
+	}
+	for _, detail := range details {
+		if strings.TrimSpace(detail) == "" {
+			continue
+		}
+		lines = append(lines, detail)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func selectedColorMode(cmd *cobra.Command) (ui.ColorMode, error) {
+	colorValue := colorModeFlag
+	noColor := noColorFlag
+
+	if cmd != nil {
+		if flag := cmd.Flag("color"); flag != nil && flag.Value != nil {
+			colorValue = flag.Value.String()
+		}
+		if flag := cmd.Flag("no-color"); flag != nil && flag.Value != nil {
+			noColor = flag.Value.String() == "true"
+			colorFlag := cmd.Flag("color")
+			if flag.Changed && colorFlag != nil && colorFlag.Changed {
+				return ui.ColorAuto, fmt.Errorf("--color and --no-color cannot be used together")
+			}
+		}
+	}
+
+	if noColor {
+		return ui.ColorNever, nil
+	}
+
+	return ui.ParseColorMode(colorValue)
+}
+
+func currentColorMode(cmd *cobra.Command) ui.ColorMode {
+	mode, err := selectedColorMode(cmd)
+	if err != nil {
+		return ui.ColorAuto
+	}
+	return mode
 }
 
 var readBuildInfo = func() *debug.BuildInfo {
@@ -157,15 +216,16 @@ func resolveVersion(injected string, info *debug.BuildInfo) string {
 // Each caller should be replaced by a real implementation in the
 // matching src/internal/* package.
 func todo(name string) func(*cobra.Command, []string) error {
-	return func(_ *cobra.Command, args []string) error {
+	return func(cmd *cobra.Command, args []string) error {
 		path := "."
 		if len(args) > 0 {
 			path = args[0]
 		}
-		if _, err := fmt.Fprintf(os.Stderr, "mapture %s: not implemented yet (target=%s)\n", name, path); err != nil {
-			return err
-		}
-		return nil
+		console := ui.NewConsole(commandStderr, currentColorMode(cmd))
+		return console.Warning(
+			fmt.Sprintf("%s not implemented yet", console.Code("mapture "+name)),
+			fmt.Sprintf("target=%s", console.Path(path)),
+		)
 	}
 }
 
@@ -174,12 +234,12 @@ func newInitCmd() *cobra.Command {
 		Use:   "init [path]",
 		Short: "Bootstrap a starter mapture.yaml for the target repository",
 		Args:  cobra.MaximumNArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			path := "."
 			if len(args) > 0 {
 				path = args[0]
 			}
-			return bootstrap.Run(path, os.Stdin, os.Stdout, os.Stderr)
+			return bootstrap.Run(path, os.Stdin, os.Stdout, os.Stderr, currentColorMode(cmd))
 		},
 	}
 }
@@ -198,7 +258,7 @@ func newValidateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runValidateWithScopes(target, scopes, commandStdout, commandStderr)
+			return runValidateWithScopes(target, scopes, commandStdout, commandStderr, currentColorMode(cmd))
 		},
 	}
 	bindScopeFlag(c)
@@ -206,11 +266,11 @@ func newValidateCmd() *cobra.Command {
 }
 
 func runValidate(target string, stdout, stderr io.Writer) error {
-	return runValidateWithScopes(target, nil, stdout, stderr)
+	return runValidateWithScopes(target, nil, stdout, stderr, ui.ColorAuto)
 }
 
-func runValidateWithScopes(target string, scopes []string, stdout, stderr io.Writer) error {
-	reporter := ui.NewReporter(stdout, stderr)
+func runValidateWithScopes(target string, scopes []string, stdout, stderr io.Writer, colorMode ui.ColorMode) error {
+	reporter := ui.NewReporter(stdout, stderr, colorMode)
 
 	if err := reporter.Stage("Resolving project", target); err != nil {
 		return err
@@ -510,16 +570,17 @@ func newServeCmd() *cobra.Command {
 					if fromPath != "" {
 						label = "export"
 					}
-					writeCommandf(commandStdout, "mapture serve: listening on %s (%s=%s)\n", url, label, readySource)
+					console := ui.NewConsole(commandStdout, currentColorMode(cmd))
+					_ = console.Success("Explorer listening", console.Join(console.Accent(url), fmt.Sprintf("%s=%s", label, console.Path(readySource))))
 					if open {
 						if err := openBrowser(url); err != nil {
-							writeCommandf(commandStderr, "mapture serve: could not open browser: %v\n", err)
+							_ = ui.NewConsole(commandStderr, currentColorMode(cmd)).Warning("Could not open browser", err.Error())
 						}
 					}
 				},
 			}
 			if err := server.Serve(ctx, opts); err != nil {
-				reportServeError(commandStderr, addr, err)
+				reportServeError(commandStderr, addr, err, currentColorMode(cmd))
 				return err
 			}
 			return nil
@@ -606,6 +667,7 @@ func newUpdateCmd() *cobra.Command {
 				BuildInfo:        readBuildInfo(),
 				Stdout:           commandStdout,
 				Stderr:           commandStderr,
+				ColorMode:        currentColorMode(cmd),
 			})
 		},
 	}
@@ -619,7 +681,7 @@ func newVersionCmd() *cobra.Command {
 		Short: "Show the current Mapture version and release channel",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return renderVersionInfo(cmd.OutOrStdout(), readBuildInfo())
+			return renderVersionInfo(cmd.OutOrStdout(), readBuildInfo(), currentColorMode(cmd))
 		},
 	}
 }
@@ -630,7 +692,7 @@ func bindScopeFlag(c *cobra.Command) {
 
 func renderRootHelp(cmd *cobra.Command) error {
 	out := cmd.OutOrStdout()
-	if err := writeProductHeader(out, readBuildInfo(), true); err != nil {
+	if err := writeProductHeader(out, readBuildInfo(), true, currentColorMode(cmd)); err != nil {
 		return err
 	}
 
@@ -641,46 +703,40 @@ func renderRootHelp(cmd *cobra.Command) error {
 	return err
 }
 
-func renderVersionInfo(out io.Writer, info *debug.BuildInfo) error {
-	return writeProductHeader(out, info, true)
+func renderVersionInfo(out io.Writer, info *debug.BuildInfo, colorMode ui.ColorMode) error {
+	return writeProductHeader(out, info, true, colorMode)
 }
 
-func writeProductHeader(out io.Writer, info *debug.BuildInfo, includeFreshness bool) error {
-	console := ui.NewConsole(out)
+func writeProductHeader(out io.Writer, info *debug.BuildInfo, includeFreshness bool, colorMode ui.ColorMode) error {
+	console := ui.NewConsole(out, colorMode)
 
 	runtimeInfo, err := inspectRuntime(version, info)
 	if err != nil {
 		return err
 	}
 
-	if _, err := fmt.Fprintf(out, "%s - %s\n", console.Brand("mapture.dev"), console.Strong(displayProductVersion(runtimeInfo.Version))); err != nil {
-		return err
-	}
-
-	metaLine := console.Join(string(runtimeInfo.Channel), runtimeInfo.InstallMethod, runtimeInfo.ExecutablePath)
+	metaLine := console.Join(string(runtimeInfo.Channel), runtimeInfo.InstallMethod, console.Path(runtimeInfo.ExecutablePath))
+	details := []string{}
 	if metaLine != "" {
-		if _, err := fmt.Fprintln(out, metaLine); err != nil {
-			return err
-		}
+		details = append(details, metaLine)
 	}
-	if _, err := fmt.Fprintln(out, "Repo-native architecture mapping that stays close to the code."); err != nil {
+	if err := console.Println(cliBrandBlock(console, runtimeInfo.Version, details...)); err != nil {
 		return err
 	}
 
 	if includeFreshness {
 		status, err := bestEffortVersionStatus(info)
 		if err == nil && status.UpdateAvailable {
-			if _, err := fmt.Fprintf(out, "%s: %s\n", console.Warning("Update available"), console.Strong(status.LatestForChannel)); err != nil {
+			if err := console.Warning("Update available", console.Strong(status.LatestForChannel)); err != nil {
 				return err
 			}
-			if _, err := fmt.Fprintf(out, "%s\n", console.Accent("Run: mapture update")); err != nil {
+			if err := console.Println(console.Accent("Run: mapture update")); err != nil {
 				return err
 			}
 		}
 	}
 
-	_, err = fmt.Fprintln(out)
-	return err
+	return console.Println("")
 }
 
 func bestEffortVersionStatus(info *debug.BuildInfo) (updater.VersionStatus, error) {
@@ -696,20 +752,17 @@ func displayProductVersion(value string) string {
 	return value
 }
 
-func writeCommandf(w io.Writer, format string, args ...any) {
-	if w == nil {
-		return
-	}
-	_, _ = fmt.Fprintf(w, format, args...)
-}
-
-func reportServeError(w io.Writer, addr string, err error) {
+func reportServeError(w io.Writer, addr string, err error, colorMode ui.ColorMode) {
 	if err == nil {
 		return
 	}
-	writeCommandf(w, "mapture serve: %v\n", err)
+	console := ui.NewConsole(w, colorMode)
+	_ = console.Error("Serve failed", err.Error())
 	if errors.Is(err, syscall.EADDRINUSE) {
-		writeCommandf(w, "mapture serve: %s is already in use; if you suspended a previous server with Ctrl-Z, run `jobs`, `fg`, or `kill %%<job>` and try again\n", addr)
+		_ = console.Warning(
+			"Address already in use",
+			fmt.Sprintf("%s — if you suspended a previous server with Ctrl-Z, run `jobs`, `fg`, or `kill %%<job>` and try again", console.Code(addr)),
+		)
 	}
 }
 

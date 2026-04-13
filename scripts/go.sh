@@ -44,8 +44,8 @@ fixture_path() {
     return
   fi
 
-  echo "unknown fixture: $fixture" >&2
-  echo "known fixtures: $(fixture_names | tr '\n' ' ' | sed 's/ $//')" >&2
+  printf '%s\n' "$(mapture_error "unknown fixture: $fixture")" >&2
+  printf '%s\n' "$(mapture_muted "known fixtures: $(fixture_names | tr '\n' ' ' | sed 's/ $//')")" >&2
   exit 1
 }
 
@@ -93,15 +93,15 @@ run_for_all_examples() {
     validate|scan|graph)
       ;;
     *)
-      echo "unsupported all-fixtures command: $command" >&2
-      echo "supported commands: validate scan graph" >&2
+      printf '%s\n' "$(mapture_error "unsupported all-fixtures command: $command")" >&2
+      printf '%s\n' "$(mapture_muted "supported commands: validate scan graph")" >&2
       exit 1
       ;;
   esac
 
   local fixture
   while IFS= read -r fixture; do
-    printf '== %s (%s) ==\n' "$fixture" "$command"
+    printf '%s\n' "$(mapture_strong "== $fixture ($command) ==")"
     case "$command" in
       validate)
         "$BIN" validate "$(fixture_path "$fixture")" "$@"
@@ -136,7 +136,7 @@ serve_port() {
     migration) printf '%s\n' "127.0.0.1:8768" ;;
     playground) printf '%s\n' "127.0.0.1:8767" ;;
     *)
-      echo "unknown fixture: $1" >&2
+      printf '%s\n' "$(mapture_error "unknown fixture: $1")" >&2
       exit 1
       ;;
   esac
@@ -144,32 +144,30 @@ serve_port() {
 
 show_help() {
   local fixture
-  cat <<EOF
-Repo Development Commands:
-  ./scripts/go.sh build
-  ./scripts/go.sh init
+  mapture_print_section "Repo Development Commands"
+  mapture_print_kv "./scripts/go.sh build" "Build the testing binary under $(mapture_muted "$BIN")"
+  mapture_print_kv "./scripts/go.sh init" "Run init against the testing playground"
 
-Repo Verification Commands:
-  ./scripts/go.sh validate <fixture|all>
-  ./scripts/go.sh scan <fixture|all>
-  ./scripts/go.sh graph <fixture|all>
+  mapture_print_section "Repo Verification Commands"
+  mapture_print_kv "./scripts/go.sh validate <fixture|all>" "Validate one fixture or every example fixture"
+  mapture_print_kv "./scripts/go.sh scan <fixture|all>" "Write normalized scan output into $(mapture_muted "$OUTPUTS_DIR")"
+  mapture_print_kv "./scripts/go.sh graph <fixture|all>" "Write Mermaid output into $(mapture_muted "$OUTPUTS_DIR")"
 
-Local Verification With Fixtures:
-  ./scripts/go.sh fixtures
-  ./scripts/go.sh serve <fixture>
-  ./scripts/go.sh fixture <fixture> <command>
+  mapture_print_section "Local Verification With Fixtures"
+  mapture_print_kv "./scripts/go.sh fixtures" "List known fixtures"
+  mapture_print_kv "./scripts/go.sh serve <fixture>" "Run the local explorer for a fixture"
+  mapture_print_kv "./scripts/go.sh fixture <fixture> <command>" "Run any CLI command against a fixture path"
 
-Paths:
-  built binary       -> $BIN
-  testing root       -> $TESTING_DIR
-  playground         -> $PLAYGROUND_DIR
-  outputs            -> $OUTPUTS_DIR
-  testing examples   -> $TESTING_EXAMPLES_DIR
+  mapture_print_section "Paths"
+  printf '  %s -> %s\n' "$(mapture_accent "built binary")" "$(mapture_muted "$BIN")"
+  printf '  %s -> %s\n' "$(mapture_accent "testing root")" "$(mapture_muted "$TESTING_DIR")"
+  printf '  %s -> %s\n' "$(mapture_accent "playground")" "$(mapture_muted "$PLAYGROUND_DIR")"
+  printf '  %s -> %s\n' "$(mapture_accent "outputs")" "$(mapture_muted "$OUTPUTS_DIR")"
+  printf '  %s -> %s\n' "$(mapture_accent "testing examples")" "$(mapture_muted "$TESTING_EXAMPLES_DIR")"
 
-Fixtures:
-EOF
+  mapture_print_section "Fixtures"
   while IFS= read -r fixture; do
-    printf '  %-10s -> %s\n' "$fixture" "$(fixture_path "$fixture")"
+    printf '  %s -> %s\n' "$(mapture_accent "$(printf '%-10s' "$fixture")")" "$(fixture_path "$fixture")"
   done < <(fixture_names)
 }
 
@@ -192,7 +190,7 @@ run_scan() {
   target="$(fixture_path "$fixture")"
   output="$(fixture_output "$fixture" "scan.json")"
   "$BIN" scan "$target" >"$output"
-  echo "wrote $output"
+  printf '%s\n' "$(mapture_success "wrote $(mapture_muted "$output")")"
 }
 
 run_graph() {
@@ -205,13 +203,13 @@ run_graph() {
   target="$(fixture_path "$fixture")"
   output="$(fixture_output "$fixture" "mmd")"
   "$BIN" graph "$target" -o "$output"
-  echo "wrote $output"
+  printf '%s\n' "$(mapture_success "wrote $(mapture_muted "$output")")"
 }
 
 run_serve() {
   local fixture="$1"
   if [[ "$fixture" == "all" ]]; then
-    echo 'serve does not support fixture "all"; choose one fixture' >&2
+    printf '%s\n' "$(mapture_error 'serve does not support fixture "all"; choose one fixture')" >&2
     exit 1
   fi
   build_binary "$BIN"
@@ -238,7 +236,8 @@ case "$1" in
     fixture_path "${1:-demo}"
     ;;
   build)
-    echo "built $BIN"
+    build_binary "$BIN"
+    printf '%s\n' "$(mapture_success "built $(mapture_muted "$BIN")")"
     ;;
   init)
     shift
@@ -265,7 +264,7 @@ case "$1" in
     fixture="${1:-}"
     command="${2:-validate}"
     if [[ -z "$fixture" ]]; then
-      echo "usage: ./scripts/go.sh fixture <fixture> [command]" >&2
+      printf '%s\n' "$(mapture_error "usage: ./scripts/go.sh fixture <fixture> [command]")" >&2
       exit 1
     fi
     shift

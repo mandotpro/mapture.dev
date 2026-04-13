@@ -8,17 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/mandotpro/mapture.dev/src/internal/validator"
 )
-
-type iconSet struct {
-	stage   string
-	success string
-	warn    string
-	err     string
-	info    string
-}
 
 // Reporter renders consistent CLI output for commands.
 type Reporter struct {
@@ -28,70 +19,20 @@ type Reporter struct {
 	styles styles
 }
 
-type styles struct {
-	stage   lipgloss.Style
-	success lipgloss.Style
-	warning lipgloss.Style
-	error   lipgloss.Style
-	path    lipgloss.Style
-	muted   lipgloss.Style
-	summary lipgloss.Style
-	code    lipgloss.Style
-}
-
 // NewReporter creates a reporter that auto-detects whether rich styling
 // should be enabled.
-func NewReporter(out, errOut io.Writer) *Reporter {
-	color := SupportsColor(out) && SupportsColor(errOut)
-	icons := iconSet{
-		stage:   "›",
-		success: "✓",
-		warn:    "!",
-		err:     "x",
-		info:    "·",
+func NewReporter(out, errOut io.Writer, mode ...ColorMode) *Reporter {
+	selectedMode := ColorAuto
+	if len(mode) > 0 {
+		selectedMode = mode[0]
 	}
-	if !color {
-		icons = iconSet{
-			stage:   "[..]",
-			success: "[ok]",
-			warn:    "[!]",
-			err:     "[x]",
-			info:    " - ",
-		}
-	}
-
+	color := ColorEnabled(out, selectedMode) && ColorEnabled(errOut, selectedMode)
+	icons, styles := buildTheme(color)
 	return &Reporter{
 		out:    out,
 		color:  color,
 		icons:  icons,
-		styles: buildStyles(color),
-	}
-}
-
-func buildStyles(color bool) styles {
-	if !color {
-		base := lipgloss.NewStyle()
-		return styles{
-			stage:   base,
-			success: base,
-			warning: base,
-			error:   base,
-			path:    base,
-			muted:   base,
-			summary: base.Bold(true),
-			code:    base.Bold(true),
-		}
-	}
-
-	return styles{
-		stage:   lipgloss.NewStyle().Foreground(lipgloss.Color("69")).Bold(true),
-		success: lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true),
-		warning: lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true),
-		error:   lipgloss.NewStyle().Foreground(lipgloss.Color("203")).Bold(true),
-		path:    lipgloss.NewStyle().Foreground(lipgloss.Color("111")).Underline(true),
-		muted:   lipgloss.NewStyle().Foreground(lipgloss.Color("244")),
-		summary: lipgloss.NewStyle().Bold(true),
-		code:    lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Bold(true),
+		styles: styles,
 	}
 }
 

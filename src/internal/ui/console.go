@@ -1,145 +1,214 @@
-// Package ui provides shared CLI reporting primitives for rich and
-// plain-text terminal output.
 package ui
 
 import (
+	"fmt"
 	"io"
-	"os"
+	"path/filepath"
 	"strings"
-
-	"github.com/charmbracelet/lipgloss"
-	"golang.org/x/term"
 )
 
-// Console renders shared human-facing terminal output.
+type iconSet struct {
+	stage   string
+	success string
+	warn    string
+	err     string
+	info    string
+}
+
+type styles struct {
+	brand   textStyle
+	stage   textStyle
+	success textStyle
+	warning textStyle
+	error   textStyle
+	path    textStyle
+	muted   textStyle
+	summary textStyle
+	code    textStyle
+	accent  textStyle
+	strong  textStyle
+}
+
+type textStyle struct {
+	start string
+	end   string
+}
+
+func ansiStyle(codes ...string) textStyle {
+	if len(codes) == 0 {
+		return textStyle{}
+	}
+	return textStyle{
+		start: "\x1b[" + strings.Join(codes, ";") + "m",
+		end:   "\x1b[0m",
+	}
+}
+
+func (s textStyle) Render(text string) string {
+	if s.start == "" || text == "" {
+		return text
+	}
+	return s.start + text + s.end
+}
+
+// Console renders consistent human-facing CLI output.
 type Console struct {
+	out    io.Writer
 	color  bool
-	styles consoleStyles
+	icons  iconSet
+	styles styles
 }
 
-type consoleStyles struct {
-	brand   lipgloss.Style
-	strong  lipgloss.Style
-	muted   lipgloss.Style
-	accent  lipgloss.Style
-	success lipgloss.Style
-	warning lipgloss.Style
-	error   lipgloss.Style
-	code    lipgloss.Style
-}
-
-// NewConsole creates a shared terminal renderer for human-facing command output.
-func NewConsole(primary io.Writer, peers ...io.Writer) *Console {
-	color := SupportsColor(primary)
-	for _, peer := range peers {
-		color = color && SupportsColor(peer)
-	}
-
-	base := lipgloss.NewStyle()
-	if !color {
-		return &Console{
-			color: color,
-			styles: consoleStyles{
-				brand:   base.Bold(true),
-				strong:  base.Bold(true),
-				muted:   base,
-				accent:  base.Bold(true),
-				success: base.Bold(true),
-				warning: base.Bold(true),
-				error:   base.Bold(true),
-				code:    base.Bold(true),
-			},
-		}
-	}
-
+// NewConsole creates a console that respects the requested color mode.
+func NewConsole(out io.Writer, mode ColorMode) *Console {
+	color := ColorEnabled(out, mode)
+	icons, styles := buildTheme(color)
 	return &Console{
-		color: color,
-		styles: consoleStyles{
-			brand:   lipgloss.NewStyle().Foreground(lipgloss.Color("69")).Bold(true),
-			strong:  lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Bold(true),
-			muted:   lipgloss.NewStyle().Foreground(lipgloss.Color("244")),
-			accent:  lipgloss.NewStyle().Foreground(lipgloss.Color("117")).Bold(true),
-			success: lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true),
-			warning: lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true),
-			error:   lipgloss.NewStyle().Foreground(lipgloss.Color("203")).Bold(true),
-			code:    lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Bold(true),
-		},
+		out:    out,
+		color:  color,
+		icons:  icons,
+		styles: styles,
 	}
 }
 
-// SupportsColor reports whether styled terminal output should be used.
-func SupportsColor(w io.Writer) bool {
-	if os.Getenv("NO_COLOR") != "" || os.Getenv("CI") != "" {
-		return false
+func buildTheme(color bool) (iconSet, styles) {
+	icons := iconSet{
+		stage:   "›",
+		success: "✓",
+		warn:    "!",
+		err:     "x",
+		info:    "·",
 	}
-	file, ok := w.(*os.File)
-	if !ok {
-		return false
+	if !color {
+		return iconSet{
+				stage:   "[..]",
+				success: "[ok]",
+				warn:    "[!]",
+				err:     "[x]",
+				info:    " - ",
+			}, styles{
+				brand:   textStyle{},
+				stage:   textStyle{},
+				success: textStyle{},
+				warning: textStyle{},
+				error:   textStyle{},
+				path:    textStyle{},
+				muted:   textStyle{},
+				summary: textStyle{},
+				code:    textStyle{},
+				accent:  textStyle{},
+				strong:  textStyle{},
+			}
 	}
-	return term.IsTerminal(int(file.Fd()))
-}
 
-// ColorEnabled reports whether ANSI styling is active for this console.
-func (c *Console) ColorEnabled() bool {
-	return c != nil && c.color
+	return icons, styles{
+		brand:   ansiStyle("1", "38;5;87"),
+		stage:   ansiStyle("1", "38;5;69"),
+		success: ansiStyle("1", "38;5;42"),
+		warning: ansiStyle("1", "38;5;214"),
+		error:   ansiStyle("1", "38;5;203"),
+		path:    ansiStyle("4", "38;5;111"),
+		muted:   ansiStyle("38;5;244"),
+		summary: ansiStyle("1"),
+		code:    ansiStyle("1", "38;5;252"),
+		accent:  ansiStyle("1", "38;5;81"),
+		strong:  ansiStyle("1", "38;5;255"),
+	}
 }
 
 // Brand renders branded product text.
-func (c *Console) Brand(text string) string {
-	return c.styles.brand.Render(text)
-}
+func (c *Console) Brand(text string) string { return c.styles.brand.Render(text) }
 
 // Strong renders high-emphasis text.
-func (c *Console) Strong(text string) string {
-	return c.styles.strong.Render(text)
-}
-
-// Muted renders low-emphasis metadata text.
-func (c *Console) Muted(text string) string {
-	return c.styles.muted.Render(text)
-}
+func (c *Console) Strong(text string) string { return c.styles.strong.Render(text) }
 
 // Accent renders informational highlight text.
-func (c *Console) Accent(text string) string {
-	return c.styles.accent.Render(text)
-}
+func (c *Console) Accent(text string) string { return c.styles.accent.Render(text) }
 
-// Success renders success state text.
-func (c *Console) Success(text string) string {
-	return c.styles.success.Render(text)
-}
-
-// Warning renders warning state text.
-func (c *Console) Warning(text string) string {
-	return c.styles.warning.Render(text)
-}
-
-// Error renders error state text.
-func (c *Console) Error(text string) string {
-	return c.styles.error.Render(text)
-}
+// Muted renders low-emphasis metadata text.
+func (c *Console) Muted(text string) string { return c.styles.muted.Render(text) }
 
 // Code renders command or identifier text with emphasis.
-func (c *Console) Code(text string) string {
-	return c.styles.code.Render(text)
+func (c *Console) Code(text string) string { return c.styles.code.Render(text) }
+
+// Path renders a filesystem path consistently across CLI output.
+func (c *Console) Path(text string) string {
+	if strings.TrimSpace(text) == "" {
+		return ""
+	}
+	return c.styles.path.Render(filepath.ToSlash(text))
 }
 
 // Join combines metadata fragments with a shared separator.
 func (c *Console) Join(parts ...string) string {
 	filtered := make([]string, 0, len(parts))
 	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part == "" {
+		if strings.TrimSpace(part) == "" {
 			continue
 		}
 		filtered = append(filtered, part)
 	}
-	if len(filtered) == 0 {
-		return ""
+	return strings.Join(filtered, " • ")
+}
+
+// Header renders the branded CLI header block.
+func (c *Console) Header(title string, details ...string) string {
+	lines := []string{fmt.Sprintf("%s - %s", c.Brand("mapture.dev"), c.Strong(title))}
+	for _, detail := range details {
+		if strings.TrimSpace(detail) == "" {
+			continue
+		}
+		lines = append(lines, c.Muted(detail))
 	}
-	separator := " • "
-	if c.ColorEnabled() {
-		separator = c.Muted(separator)
+	return strings.Join(lines, "\n")
+}
+
+// Stage prints an informational stage line.
+func (c *Console) Stage(label string, details string) error {
+	return c.writeStatus(c.styles.stage.Render(c.icons.stage), label, details)
+}
+
+// Success prints a success line.
+func (c *Console) Success(label string, details string) error {
+	return c.writeStatus(c.styles.success.Render(c.icons.success), label, details)
+}
+
+// Warning prints a warning line.
+func (c *Console) Warning(label string, details string) error {
+	return c.writeStatus(c.styles.warning.Render(c.icons.warn), label, details)
+}
+
+// Error prints an error line.
+func (c *Console) Error(label string, details string) error {
+	return c.writeStatus(c.styles.error.Render(c.icons.err), label, details)
+}
+
+// Info prints a low-severity informational line.
+func (c *Console) Info(label string, details string) error {
+	return c.writeStatus(c.styles.accent.Render(c.icons.info), label, details)
+}
+
+// Printf writes formatted text to the configured output writer.
+func (c *Console) Printf(format string, args ...any) error {
+	if c.out == nil {
+		return nil
 	}
-	return strings.Join(filtered, separator)
+	_, err := fmt.Fprintf(c.out, format, args...)
+	return err
+}
+
+// Println writes a full line to the configured output writer.
+func (c *Console) Println(text string) error {
+	if !strings.HasSuffix(text, "\n") {
+		text += "\n"
+	}
+	return c.Printf("%s", text)
+}
+
+func (c *Console) writeStatus(prefix string, label string, details string) error {
+	text := fmt.Sprintf("%s %s", prefix, label)
+	if details != "" {
+		text += " " + c.Muted(details)
+	}
+	return c.Println(text)
 }
