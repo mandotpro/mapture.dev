@@ -24,7 +24,11 @@
           "domain": "orders",
           "owner": "team-commerce",
           "file": "src/go/ordersdb/ordersdb.go",
-          "line": 1
+          "line": 1,
+          "effectiveTags": [
+            "critical-path",
+            "customer-facing"
+          ]
         }
       },
       "event:order.placed": {
@@ -35,7 +39,16 @@
           "domain": "orders",
           "owner": "team-commerce",
           "file": "src/php/CheckoutService.php",
-          "line": 16
+          "line": 17,
+          "tags": [
+            "customer-facing",
+            "pci"
+          ],
+          "effectiveTags": [
+            "critical-path",
+            "customer-facing",
+            "pci"
+          ]
         }
       },
       "service:checkout-service": {
@@ -46,7 +59,16 @@
           "domain": "orders",
           "owner": "team-commerce",
           "file": "src/php/CheckoutService.php",
-          "line": 3
+          "line": 3,
+          "tags": [
+            "critical-path",
+            "pci"
+          ],
+          "effectiveTags": [
+            "critical-path",
+            "customer-facing",
+            "pci"
+          ]
         }
       }
     },
@@ -98,6 +120,11 @@
           "configPath": "/repo/examples/demo/mapture.yaml"
         },
         "catalog": {
+          "tags": [
+            "critical-path",
+            "customer-facing",
+            "pci"
+          ],
           "teams": [
             {
               "id": "team-billing",
@@ -107,7 +134,10 @@
             {
               "id": "team-commerce",
               "name": "Commerce Team",
-              "email": "commerce@example.com"
+              "email": "commerce@example.com",
+              "tags": [
+                "customer-facing"
+              ]
             }
           ],
           "domains": [
@@ -123,6 +153,9 @@
               "name": "Orders",
               "ownerTeams": [
                 "team-commerce"
+              ],
+              "tags": [
+                "critical-path"
               ]
             }
           ]

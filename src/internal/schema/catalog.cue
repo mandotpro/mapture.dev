@@ -10,7 +10,7 @@ package schema
 	contact?: string
 	slack?:   string
 	email?:   #Email
-	tags?:    [...string]
+	tags?:    [...#KebabID]
 }
 
 #Domain: {
@@ -20,7 +20,7 @@ package schema
 	ownerTeams:              [#KebabID, ...#KebabID]
 	allowedOutboundDomains?: [...#KebabID]
 	allowedInboundDomains?:  [...#KebabID]
-	tags?:                   [...string]
+	tags?:                   [...#KebabID]
 }
 
 #EventKind:       "domain" | "integration" | "system" | "internal"
@@ -43,7 +43,7 @@ package schema
 	allowedConsumers?:    [...string]
 	deprecated?:          *false | bool
 	replacedBy?:          #EventID
-	tags?:                [...string]
+	tags?:                [...#KebabID]
 }
 
 #TeamsFile: {

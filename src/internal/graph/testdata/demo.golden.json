@@ -22,7 +22,11 @@
       "domain": "orders",
       "owner": "team-commerce",
       "file": "src/go/ordersdb/ordersdb.go",
-      "line": 1
+      "line": 1,
+      "effectiveTags": [
+        "critical-path",
+        "customer-facing"
+      ]
     },
     {
       "id": "event:order.placed",
@@ -31,7 +35,16 @@
       "domain": "orders",
       "owner": "team-commerce",
       "file": "src/php/CheckoutService.php",
-      "line": 16
+      "line": 17,
+      "tags": [
+        "customer-facing",
+        "pci"
+      ],
+      "effectiveTags": [
+        "critical-path",
+        "customer-facing",
+        "pci"
+      ]
     },
     {
       "id": "service:checkout-service",
@@ -40,7 +53,16 @@
       "domain": "orders",
       "owner": "team-commerce",
       "file": "src/php/CheckoutService.php",
-      "line": 3
+      "line": 3,
+      "tags": [
+        "critical-path",
+        "pci"
+      ],
+      "effectiveTags": [
+        "critical-path",
+        "customer-facing",
+        "pci"
+      ]
     }
   ],
   "edges": [

@@ -113,6 +113,8 @@ export function normalizeGraph(payload: VisualizationExportDocument): GraphModel
     line: node.line ?? 0,
     symbol: node.symbol ?? '',
     summary: node.summary ?? '',
+    tags: node.tags ?? [],
+    effectiveTags: node.effectiveTags ?? node.tags ?? [],
   }));
   const edges = rawGraph.edges.map((edge) => ({
     id: `${edge.from}->${edge.to}|${edge.type}`,
@@ -127,6 +129,7 @@ export function normalizeGraph(payload: VisualizationExportDocument): GraphModel
     nodes,
     edges,
     diagnostics,
+    tags: (payload.catalog.tags ?? unique(nodes.flatMap((node) => node.effectiveTags))).filter(Boolean),
     domains: unique(nodes.map((node) => node.domain).filter(Boolean)),
     owners: unique(nodes.map((node) => node.owner).filter(Boolean)),
     nodeTypes: unique(nodes.map((node) => node.type).filter(Boolean)),
@@ -1173,6 +1176,8 @@ function normalizeBackendGraph(graph: BackendGraph): { nodes: GraphNode[]; edges
       line: node.line ?? 0,
       symbol: node.symbol ?? '',
       summary: node.summary ?? '',
+      tags: node.tags ?? [],
+      effectiveTags: node.effectiveTags ?? node.tags ?? [],
     })),
     edges: (graph.edges ?? []).map((edge) => ({
       id: `${edge.from}->${edge.to}|${edge.type}`,
@@ -1184,6 +1189,9 @@ function normalizeBackendGraph(graph: BackendGraph): { nodes: GraphNode[]; edges
 }
 
 function matchesFilters(node: GraphNode, filters: Filters): boolean {
+  if (filters.tags.length > 0 && !node.effectiveTags.some((tag) => filters.tags.includes(tag))) {
+    return false;
+  }
   if (filters.nodeTypes.length > 0 && !filters.nodeTypes.includes(node.type)) {
     return false;
   }
@@ -1209,6 +1217,8 @@ function matchesQuery(node: GraphNode, query: string): boolean {
     node.owner,
     node.file,
     node.summary,
+    node.tags.join(' '),
+    node.effectiveTags.join(' '),
   ].join(' ').toLowerCase().includes(normalizedQuery);
 }
 

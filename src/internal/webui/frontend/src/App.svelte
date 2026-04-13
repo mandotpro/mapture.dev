@@ -64,14 +64,14 @@
     WindowWithPayload,
   } from './lib/types';
 
-  type PopoverKind = 'search' | 'structure' | 'owners' | 'domains' | 'nodeTypes' | null;
+  type PopoverKind = 'search' | 'structure' | 'owners' | 'domains' | 'tags' | 'nodeTypes' | null;
   type ManualPositions = Record<string, { x: number; y: number }>;
   type PersistedLayoutState = {
     version: 1;
     manualPositions: ManualPositions;
   };
   type ActiveFilterBadge = {
-    kind: 'query' | 'owners' | 'domains' | 'nodeTypes';
+    kind: 'query' | 'owners' | 'domains' | 'tags' | 'nodeTypes';
     value: string;
     label: string;
     icon: string;
@@ -101,6 +101,7 @@
     nodes: [],
     edges: [],
     diagnostics: [],
+    tags: [],
     domains: [],
     owners: [],
     nodeTypes: [],
@@ -200,6 +201,7 @@
   let fitViewRequest = $state(0);
   let filters = $state.raw<Filters>({
     query: '',
+    tags: [],
     nodeTypes: [],
     domains: [],
     owners: [],
@@ -230,6 +232,7 @@
   const visibleTypeCounts = $derived(countBy(presentedGraph.nodes, (node) => node.type));
   const visibleOwnerCounts = $derived(countBy(presentedGraph.nodes, (node) => node.owner));
   const visibleDomainCounts = $derived(countBy(presentedGraph.nodes, (node) => node.domain));
+  const visibleTagCounts = $derived(countMany(baseVisibleNodes, (node) => node.effectiveTags));
   const searchSuggestions = $derived(buildSearchSuggestions(model, filters.query));
   const popupImpact = $derived(buildImpactPreview(presentedGraph, popupNode?.id ?? null));
   const resolvedTheme = $derived<ResolvedTheme>(
@@ -246,6 +249,7 @@
       : 0,
     owners: filters.owners.length,
     domains: filters.domains.length,
+    tags: filters.tags.length,
     nodeTypes: filters.nodeTypes.length,
   });
   const reservedCanvasInsets = $derived({
@@ -564,6 +568,7 @@
   function resetFilters(): void {
     filters = {
       query: '',
+      tags: [],
       nodeTypes: [],
       domains: [],
       owners: [],
@@ -626,7 +631,7 @@
     }
   }
 
-  function clearFilter(kind: 'owners' | 'domains' | 'nodeTypes'): void {
+  function clearFilter(kind: 'owners' | 'domains' | 'tags' | 'nodeTypes'): void {
     filters = {
       ...filters,
       [kind]: [],
@@ -634,7 +639,12 @@
   }
 
   function visibleRailKinds(): Array<Exclude<PopoverKind, null>> {
-    return ['search', 'owners', 'domains', 'nodeTypes'];
+    const kinds: Array<Exclude<PopoverKind, null>> = ['search', 'owners', 'domains'];
+    if (model.tags.length > 0) {
+      kinds.push('tags');
+    }
+    kinds.push('nodeTypes');
+    return kinds;
   }
 
   function togglePopover(kind: PopoverKind): void {
@@ -824,7 +834,7 @@
     selectedNodeId = null;
   }
 
-  function toggleFilter(kind: 'owners' | 'domains' | 'nodeTypes', value: string): void {
+  function toggleFilter(kind: 'owners' | 'domains' | 'tags' | 'nodeTypes', value: string): void {
     const next = new Set(filters[kind]);
     if (next.has(value)) {
       next.delete(value);
@@ -858,6 +868,14 @@
       filters = {
         ...filters,
         domains: filters.domains.filter((domain) => domain !== badge.value),
+      };
+      return;
+    }
+
+    if (badge.kind === 'tags') {
+      filters = {
+        ...filters,
+        tags: filters.tags.filter((tag) => tag !== badge.value),
       };
       return;
     }
@@ -1031,6 +1049,15 @@
     }, {});
   }
 
+  function countMany<T>(items: T[], pick: (item: T) => string[]): Record<string, number> {
+    return items.reduce<Record<string, number>>((result, item) => {
+      for (const key of uniquePreservingOrder(pick(item).filter(Boolean))) {
+        result[key] = (result[key] ?? 0) + 1;
+      }
+      return result;
+    }, {});
+  }
+
   function buildActiveFilterBadges(currentModel: GraphModel, currentFilters: Filters): ActiveFilterBadge[] {
     const badges: ActiveFilterBadge[] = [];
     if (currentFilters.query) {
@@ -1060,6 +1087,15 @@
         tone: accentForKind(currentModel, 'domains'),
       });
     }
+    for (const tag of currentFilters.tags) {
+      badges.push({
+        kind: 'tags',
+        value: tag,
+        label: tag,
+        icon: iconForKind('tags'),
+        tone: accentForKind(currentModel, 'tags'),
+      });
+    }
     for (const nodeType of currentFilters.nodeTypes) {
       badges.push({
         kind: 'nodeTypes',
@@ -1078,6 +1114,7 @@
       structure: 'Structure',
       owners: 'Teams',
       domains: 'Domains',
+      tags: 'Tags',
       nodeTypes: 'Types',
     };
     return labels[kind];
@@ -1095,6 +1132,9 @@
     }
     if (kind === 'domains') {
       return filterCounts.domains;
+    }
+    if (kind === 'tags') {
+      return filterCounts.tags;
     }
     return filterCounts.nodeTypes;
   }
@@ -1115,6 +1155,12 @@
     }
     if (kind === 'domains') {
       return 'D';
+    }
+    if (kind === 'tags') {
+      return 'TG';
+    }
+    if (kind === 'structure') {
+      return 'ST';
     }
     const nodeTypeIcons: Record<string, string> = {
       service: 'S',
@@ -1138,6 +1184,9 @@
     }
     if (kind === 'domains') {
       return '#1664d9';
+    }
+    if (kind === 'tags') {
+      return '#a73f7f';
     }
     if (kind === 'structure') {
       return '#8f4a18';
@@ -1398,11 +1447,7 @@
   }
 
   function popupTagLabel(node: PresentedNode): string {
-    return [
-      capitalize(node.type),
-      node.stage ? capitalize(node.stage) : '',
-      node.groupKind ? capitalize(node.groupKind) : '',
-    ].filter(Boolean).join(' · ');
+    return node.effectiveTags.length > 0 ? node.effectiveTags.join(' · ') : 'n/a';
   }
 
   function toggleValue(values: string[], value: string): string[] {
@@ -1714,6 +1759,28 @@
                     active={filters.domains.includes(domain)}
                     className="filter-chip filter-chip--domain"
                     onclick={() => toggleFilter('domains', domain)}
+                  />
+                {/each}
+              </div>
+            </div>
+          {/if}
+
+          {#if activePopover === 'tags'}
+            <div class="toolbar-popover" data-interactive-root>
+              <div class="popover-head">
+                <strong>Tags</strong>
+                <ActionButton compact tone="ghost" className="mini-action" onclick={() => clearFilter('tags')}>Reset</ActionButton>
+              </div>
+              <div class="chip-list">
+                {#each model.tags.filter((tag) => (visibleTagCounts[tag] ?? 0) > 0) as tag}
+                  <TokenBadge
+                    label={tag}
+                    icon={iconForKind('tags')}
+                    count={visibleTagCounts[tag] ?? 0}
+                    accent={accentForKind(model, 'tags')}
+                    active={filters.tags.includes(tag)}
+                    className="filter-chip filter-chip--tag"
+                    onclick={() => toggleFilter('tags', tag)}
                   />
                 {/each}
               </div>

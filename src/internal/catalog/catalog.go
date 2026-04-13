@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/mandotpro/mapture.dev/src/internal/config"
@@ -67,6 +68,13 @@ func Load(configPath string, cfg *config.Config) (*Catalog, error) {
 		}
 		c.Teams = append(c.Teams, teamDoc.Teams...)
 		c.Domains = append(c.Domains, domainDoc.Domains...)
+	}
+
+	for index := range c.Teams {
+		c.Teams[index].Tags = normalizeTags(c.Teams[index].Tags)
+	}
+	for index := range c.Domains {
+		c.Domains[index].Tags = normalizeTags(c.Domains[index].Tags)
 	}
 
 	c.TeamsByID = make(map[string]Team, len(c.Teams))
@@ -140,4 +148,26 @@ func (c *Catalog) validateReferences() error {
 		}
 	}
 	return nil
+}
+
+func normalizeTags(tags []string) []string {
+	if len(tags) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]struct{}, len(tags))
+	normalized := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		tag = strings.TrimSpace(strings.ToLower(tag))
+		if tag == "" {
+			continue
+		}
+		if _, exists := seen[tag]; exists {
+			continue
+		}
+		seen[tag] = struct{}{}
+		normalized = append(normalized, tag)
+	}
+	sort.Strings(normalized)
+	return normalized
 }

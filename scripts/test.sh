@@ -7,9 +7,11 @@ ROOT_DIR="$(root_dir)"
 
 cd "$ROOT_DIR"
 
+mapfile -t packages < <(mapture_go_packages)
+
 mapture_print_section "Go and CLI checks"
 ./scripts/test-go.sh
-go vet ./src/...
+go vet "${packages[@]}"
 bash -n ./scripts/install.sh
 bash -n ./scripts/help.sh
 go run src/main.go --help >/dev/null

@@ -33,6 +33,7 @@ package schema
 })
 
 #ExportCatalog: close({
+	tags?:   [...#KebabID]
 	teams:   [...#Team]
 	domains: [...#Domain]
 })
@@ -46,6 +47,8 @@ package schema
 	line?:   int & >=0
 	symbol?: string
 	summary?: string
+	tags?: [...#KebabID]
+	effectiveTags?: [...#KebabID]
 })
 
 #JGFNode: close({
