@@ -45,15 +45,17 @@ const (
 // the graph. File/Line/Symbol are best-effort source attachment — they
 // may be empty if the comment could not be tied to a concrete location.
 type Node struct {
-	ID      string `json:"id"`
-	Type    string `json:"type"`
-	Name    string `json:"name"`
-	Domain  string `json:"domain,omitempty"`
-	Owner   string `json:"owner,omitempty"`
-	File    string `json:"file,omitempty"`
-	Line    int    `json:"line,omitempty"`
-	Symbol  string `json:"symbol,omitempty"`
-	Summary string `json:"summary,omitempty"`
+	ID            string   `json:"id"`
+	Type          string   `json:"type"`
+	Name          string   `json:"name"`
+	Domain        string   `json:"domain,omitempty"`
+	Owner         string   `json:"owner,omitempty"`
+	File          string   `json:"file,omitempty"`
+	Line          int      `json:"line,omitempty"`
+	Symbol        string   `json:"symbol,omitempty"`
+	Summary       string   `json:"summary,omitempty"`
+	Tags          []string `json:"tags,omitempty"`
+	EffectiveTags []string `json:"effectiveTags,omitempty"`
 }
 
 // Edge is a typed directed relation between two node IDs.

@@ -25,7 +25,6 @@ That means:
 | ID | Story | Why it comes now |
 | --- | --- | --- |
 | 032 | Export-driven Mermaid and diagnostics outputs | Mermaid and CI diagnostics should read from the same export/diagnostics model instead of bespoke code paths. |
-| 033 | First-class tags support | Tags are broadly useful metadata and should land before heavier policy work. |
 | 034 | AI export from JGF graph export | AI artifacts should be generated from the shared JGF export, not from a second traversal. |
 | 035 | MCP server over JGF graph export | Chat-with-your-architecture depends on the JGF export existing first. |
 | 036 | Scenario presets for explorer workflows | Presets make the explorer easier to use once the data contract is stable. |

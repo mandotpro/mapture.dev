@@ -14,6 +14,7 @@ package schema
 		dir?: string
 	}
 
+	tags?: [...#KebabID]
 	teams?: [...#Team]
 	domains?: [...#Domain]
 

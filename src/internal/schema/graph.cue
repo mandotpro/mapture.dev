@@ -20,6 +20,8 @@ package schema
 	line?:   int & >=0
 	symbol?: string
 	summary?: string
+	tags?: [...#KebabID]
+	effectiveTags?: [...#KebabID]
 })
 
 #GraphEdge: close({
@@ -34,4 +36,3 @@ package schema
 	nodes:         [...#GraphNode]
 	edges:         [...#GraphEdge]
 })
-

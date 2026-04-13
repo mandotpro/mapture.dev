@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/mandotpro/mapture.dev/src/internal/schema"
@@ -17,6 +18,7 @@ const filename = "mapture.yaml"
 type Config struct {
 	Version    int        `json:"version"`
 	Catalog    Catalog    `json:"catalog"`
+	Tags       []string   `json:"tags,omitempty"`
 	Teams      []Team     `json:"teams,omitempty"`
 	Domains    []Domain   `json:"domains,omitempty"`
 	Scan       Scan       `json:"scan"`
@@ -146,6 +148,9 @@ func Load(path string) (*Config, error) {
 	if err := schema.DecodeYAML(schema.ConfigDefinition, path, data, &cfg); err != nil {
 		return nil, err
 	}
+	if err := validateTagVocabulary(cfg.Tags); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
 	if !cfg.Languages.PHP && !cfg.Languages.Go && !cfg.Languages.TypeScript && !cfg.Languages.JavaScript {
 		return nil, fmt.Errorf("%s: at least one language must be enabled", path)
 	}
@@ -184,4 +189,44 @@ func (c *Config) applyDefaults() {
 	if c.UI.NodeColors.Event == "" {
 		c.UI.NodeColors.Event = defaultNodeColors.Event
 	}
+	c.Tags = normalizeTags(c.Tags)
+	for index := range c.Teams {
+		c.Teams[index].Tags = normalizeTags(c.Teams[index].Tags)
+	}
+	for index := range c.Domains {
+		c.Domains[index].Tags = normalizeTags(c.Domains[index].Tags)
+	}
+}
+
+func validateTagVocabulary(tags []string) error {
+	seen := make(map[string]struct{}, len(tags))
+	for _, tag := range tags {
+		if _, exists := seen[tag]; exists {
+			return fmt.Errorf("duplicate tag %q", tag)
+		}
+		seen[tag] = struct{}{}
+	}
+	return nil
+}
+
+func normalizeTags(tags []string) []string {
+	if len(tags) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]struct{}, len(tags))
+	normalized := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		tag = strings.TrimSpace(strings.ToLower(tag))
+		if tag == "" {
+			continue
+		}
+		if _, exists := seen[tag]; exists {
+			continue
+		}
+		seen[tag] = struct{}{}
+		normalized = append(normalized, tag)
+	}
+	sort.Strings(normalized)
+	return normalized
 }

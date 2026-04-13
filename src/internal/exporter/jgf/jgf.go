@@ -53,14 +53,16 @@ type Node struct {
 
 // NodeMetadata carries Mapture-specific node details inside JGF.
 type NodeMetadata struct {
-	ID      string `json:"id"`
-	Type    string `json:"type"`
-	Domain  string `json:"domain,omitempty"`
-	Owner   string `json:"owner,omitempty"`
-	File    string `json:"file,omitempty"`
-	Line    int    `json:"line,omitempty"`
-	Symbol  string `json:"symbol,omitempty"`
-	Summary string `json:"summary,omitempty"`
+	ID            string   `json:"id"`
+	Type          string   `json:"type"`
+	Domain        string   `json:"domain,omitempty"`
+	Owner         string   `json:"owner,omitempty"`
+	File          string   `json:"file,omitempty"`
+	Line          int      `json:"line,omitempty"`
+	Symbol        string   `json:"symbol,omitempty"`
+	Summary       string   `json:"summary,omitempty"`
+	Tags          []string `json:"tags,omitempty"`
+	EffectiveTags []string `json:"effectiveTags,omitempty"`
 }
 
 // Edge is a single directed JGF edge entry.
@@ -103,6 +105,7 @@ type Source struct {
 
 // Catalog contains the team/domain metadata needed by downstream tools.
 type Catalog struct {
+	Tags    []string         `json:"tags,omitempty"`
 	Teams   []catalog.Team   `json:"teams"`
 	Domains []catalog.Domain `json:"domains"`
 }
@@ -202,14 +205,16 @@ func Build(opts BuildOptions) (*Document, error) {
 		nodes[node.ID] = Node{
 			Label: node.Name,
 			Metadata: NodeMetadata{
-				ID:      node.ID,
-				Type:    node.Type,
-				Domain:  node.Domain,
-				Owner:   node.Owner,
-				File:    node.File,
-				Line:    node.Line,
-				Symbol:  node.Symbol,
-				Summary: node.Summary,
+				ID:            node.ID,
+				Type:          node.Type,
+				Domain:        node.Domain,
+				Owner:         node.Owner,
+				File:          node.File,
+				Line:          node.Line,
+				Symbol:        node.Symbol,
+				Summary:       node.Summary,
+				Tags:          append([]string(nil), node.Tags...),
+				EffectiveTags: append([]string(nil), node.EffectiveTags...),
 			},
 		}
 	}
@@ -273,6 +278,7 @@ func Build(opts BuildOptions) (*Document, error) {
 						Scopes:      append([]string(nil), opts.Scopes...),
 					},
 					Catalog: Catalog{
+						Tags:    append([]string(nil), opts.Config.Tags...),
 						Teams:   teams,
 						Domains: domains,
 					},

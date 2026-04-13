@@ -39,10 +39,15 @@ func cloneVisualizationDocument(doc *exportervis.Document) *exportervis.Document
 
 	cloned := *doc
 	cloned.Source.Scopes = append([]string(nil), doc.Source.Scopes...)
+	cloned.Catalog.Tags = append([]string(nil), doc.Catalog.Tags...)
 	cloned.Catalog.Teams = append(cloned.Catalog.Teams[:0:0], doc.Catalog.Teams...)
 	cloned.Catalog.Domains = append(cloned.Catalog.Domains[:0:0], doc.Catalog.Domains...)
 	cloned.Validation.Diagnostics = append(cloned.Validation.Diagnostics[:0:0], doc.Validation.Diagnostics...)
 	cloned.Graph.Nodes = append(cloned.Graph.Nodes[:0:0], doc.Graph.Nodes...)
+	for index := range cloned.Graph.Nodes {
+		cloned.Graph.Nodes[index].Tags = append([]string(nil), doc.Graph.Nodes[index].Tags...)
+		cloned.Graph.Nodes[index].EffectiveTags = append([]string(nil), doc.Graph.Nodes[index].EffectiveTags...)
+	}
 	cloned.Graph.Edges = append(cloned.Graph.Edges[:0:0], doc.Graph.Edges...)
 	return &cloned
 }

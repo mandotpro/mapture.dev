@@ -323,6 +323,133 @@ func TestBuildMigrationFixtureWarnsOnlyOnDeprecatedLegacyEvent(t *testing.T) {
 	}
 }
 
+func TestBuildRejectsUnknownConfiguredTags(t *testing.T) {
+	t.Parallel()
+
+	cfg := strictConfig()
+	cfg.Tags = []string{"critical-path"}
+
+	team := catalog.Team{ID: "team-commerce", Name: "Commerce", Tags: []string{"critical-path", "unknown-tag"}}
+	domain := catalog.Domain{
+		ID:         "orders",
+		Name:       "Orders",
+		OwnerTeams: []string{"team-commerce"},
+		Tags:       []string{"critical-path"},
+	}
+	cat := &catalog.Catalog{
+		Teams:       []catalog.Team{team},
+		Domains:     []catalog.Domain{domain},
+		TeamsByID:   map[string]catalog.Team{team.ID: team},
+		DomainsByID: map[string]catalog.Domain{domain.ID: domain},
+	}
+
+	result, err := Build(cfg, cat, nil)
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	if !hasDiagnostic(result.Diagnostics, severityError, "unknown_tag") {
+		t.Fatalf("expected unknown_tag diagnostic, got %#v", result.Diagnostics)
+	}
+}
+
+func TestBuildParsesDirectTagsAndComputesEffectiveTags(t *testing.T) {
+	t.Parallel()
+
+	cfg := strictConfig()
+	cfg.Tags = []string{"critical-path", "customer-facing", "pci"}
+	team := catalog.Team{ID: "team-commerce", Name: "Commerce", Tags: []string{"customer-facing"}}
+	domain := catalog.Domain{
+		ID:         "orders",
+		Name:       "Orders",
+		OwnerTeams: []string{"team-commerce"},
+		Tags:       []string{"critical-path"},
+	}
+	cat := &catalog.Catalog{
+		Teams:       []catalog.Team{team},
+		Domains:     []catalog.Domain{domain},
+		TeamsByID:   map[string]catalog.Team{team.ID: team},
+		DomainsByID: map[string]catalog.Domain{domain.ID: domain},
+	}
+	blocks := []scanner.RawBlock{
+		{
+			Kind: "arch",
+			File: "src/app.go",
+			Line: 1,
+			Fields: map[string]string{
+				"node":   "service checkout-service",
+				"name":   "Checkout Service",
+				"domain": "orders",
+				"owner":  "team-commerce",
+				"tags":   "pci, critical-path, pci",
+			},
+		},
+		{
+			Kind: "event",
+			File: "src/app.go",
+			Line: 10,
+			Fields: map[string]string{
+				"id":       "order.placed",
+				"role":     "trigger",
+				"domain":   "orders",
+				"owner":    "team-commerce",
+				"producer": "CheckoutService::placeOrder",
+				"tags":     "pci, customer-facing, pci",
+			},
+		},
+	}
+
+	result, err := Build(cfg, cat, blocks)
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+
+	checkout := findGraphNode(t, result.Graph, "service:checkout-service")
+	if got, want := strings.Join(checkout.Tags, ","), "critical-path,pci"; got != want {
+		t.Fatalf("unexpected direct tags: got %q want %q", got, want)
+	}
+	if got, want := strings.Join(checkout.EffectiveTags, ","), "critical-path,customer-facing,pci"; got != want {
+		t.Fatalf("unexpected effective tags: got %q want %q", got, want)
+	}
+
+	event := findGraphNode(t, result.Graph, "event:order.placed")
+	if got, want := strings.Join(event.Tags, ","), "customer-facing,pci"; got != want {
+		t.Fatalf("unexpected event direct tags: got %q want %q", got, want)
+	}
+	if got, want := strings.Join(event.EffectiveTags, ","), "critical-path,customer-facing,pci"; got != want {
+		t.Fatalf("unexpected event effective tags: got %q want %q", got, want)
+	}
+}
+
+func TestBuildRejectsUnknownDirectTag(t *testing.T) {
+	t.Parallel()
+
+	cfg := strictConfig()
+	cfg.Tags = []string{"critical-path"}
+	cat := minimalCatalog()
+	blocks := []scanner.RawBlock{
+		{
+			Kind: "arch",
+			File: "src/app.go",
+			Line: 1,
+			Fields: map[string]string{
+				"node":   "service checkout-service",
+				"name":   "Checkout Service",
+				"domain": "orders",
+				"owner":  "team-commerce",
+				"tags":   "unknown-tag",
+			},
+		},
+	}
+
+	result, err := Build(cfg, cat, blocks)
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	if !hasDiagnostic(result.Diagnostics, severityError, "unknown_tag") {
+		t.Fatalf("expected unknown_tag diagnostic, got %#v", result.Diagnostics)
+	}
+}
+
 func loadFixture(t *testing.T, rel string) (string, *config.Config, *catalog.Catalog, []scanner.RawBlock) {
 	t.Helper()
 
@@ -394,4 +521,17 @@ func hasDiagnostic(diagnostics []Diagnostic, severity string, code string) bool 
 		}
 	}
 	return false
+}
+
+func findGraphNode(t *testing.T, g graph.Graph, nodeID string) graph.Node {
+	t.Helper()
+
+	for _, node := range g.Nodes {
+		if node.ID == nodeID {
+			return node
+		}
+	}
+
+	t.Fatalf("node %q not found in %#v", nodeID, g.Nodes)
+	return graph.Node{}
 }

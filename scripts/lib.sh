@@ -136,3 +136,15 @@ sha256_file() {
 
   shasum -a 256 "$path" | awk '{print $1}'
 }
+
+mapture_go_packages() {
+  (
+    cd "$(root_dir)" || exit 1
+    find src \
+      \( -name node_modules -o -name dist -o -name build -o -name vendor \) -type d -prune -o \
+      -type f -name '*.go' -print \
+      | xargs -n1 dirname \
+      | sort -u \
+      | sed 's#^#./#'
+  )
+}

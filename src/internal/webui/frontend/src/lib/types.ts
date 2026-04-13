@@ -8,6 +8,8 @@ export interface BackendGraphNode {
   line?: number;
   symbol?: string;
   summary?: string;
+  tags?: string[];
+  effectiveTags?: string[];
 }
 
 export interface BackendGraphEdge {
@@ -73,6 +75,7 @@ export interface VisualizationMeta {
 }
 
 export interface CatalogPayload {
+  tags?: string[];
   teams: CatalogTeam[];
   domains: CatalogDomain[];
 }
@@ -111,6 +114,8 @@ export interface GraphNode {
   line: number;
   symbol: string;
   summary: string;
+  tags: string[];
+  effectiveTags: string[];
 }
 
 export interface GraphEdge {
@@ -136,6 +141,7 @@ export interface GraphModel {
   nodes: GraphNode[];
   edges: GraphEdge[];
   diagnostics: Diagnostic[];
+  tags: string[];
   domains: string[];
   owners: string[];
   nodeTypes: string[];
@@ -154,6 +160,7 @@ export interface GraphModel {
 
 export interface Filters {
   query: string;
+  tags: string[];
   nodeTypes: string[];
   domains: string[];
   owners: string[];

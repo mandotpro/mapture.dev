@@ -15,9 +15,11 @@ fi
 
 cd "$ROOT_DIR"
 
+mapfile -t packages < <(mapture_go_packages)
+
 "$GOTESTSUM_BIN" \
   --format pkgname \
   --junitfile "$REPORTS_DIR/gotestsum-junit.xml" \
   -- \
   -count=1 \
-  ./src/...
+  "${packages[@]}"

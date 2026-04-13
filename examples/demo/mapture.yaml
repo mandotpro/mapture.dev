@@ -1,9 +1,15 @@
 version: 1
 
+tags:
+  - critical-path
+  - customer-facing
+  - pci
+
 teams:
   - id: team-commerce
     name: Commerce Team
     email: commerce@example.com
+    tags: [customer-facing]
 
   - id: team-billing
     name: Billing Team
@@ -13,6 +19,7 @@ domains:
   - id: orders
     name: Orders
     ownerTeams: [team-commerce]
+    tags: [critical-path]
 
   - id: billing
     name: Billing

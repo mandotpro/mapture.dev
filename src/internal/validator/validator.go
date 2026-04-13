@@ -110,9 +110,13 @@ func Build(cfg *config.Config, cat *catalog.Catalog, blocks []scanner.RawBlock, 
 	eventModels := collectEventModels(blocks)
 	fileNodes := make(map[string][]graph.Node)
 	requiredNodeRefs := collectScopedRefs(blocks, eventModels.aliases)
+	allowedTags := allowedTagSet(cfg.Tags)
+
+	validateCatalogTags(result, cat, allowedTags)
+	validateBlockTags(result, blocks, allowedTags)
 
 	for _, event := range eventModels.byID {
-		node := event.Node
+		node := applyEffectiveTags(event.Node, cat)
 		if err := builder.AddNode(node); err != nil {
 			addError(result, 6, "duplicate_node_id", err.Error(), node.File, node.Line)
 		}
@@ -133,6 +137,7 @@ func Build(cfg *config.Config, cat *catalog.Catalog, blocks []scanner.RawBlock, 
 
 		checkDomain(result, cfg.Validation.FailOnUnknownDomain, block.File, block.Line, node.Domain, cat)
 		checkOwner(result, cfg.Validation.FailOnUnknownTeam, block.File, block.Line, node.Owner, cat)
+		node = applyEffectiveTags(node, cat)
 
 		if err := builder.AddNode(node); err != nil {
 			addError(result, 6, "duplicate_node_id", err.Error(), block.File, block.Line)
@@ -247,6 +252,7 @@ func buildArchNode(block scanner.RawBlock, eventAliases map[string]string) (grap
 		File:    block.File,
 		Line:    block.Line,
 		Summary: block.Fields["description"],
+		Tags:    parseTagList(block.Fields["tags"]),
 	}, nil
 }
 
@@ -308,6 +314,7 @@ func collectEventModels(blocks []scanner.RawBlock) eventModelSet {
 		if archBlock, ok := models.archByLocation[location]; ok {
 			model = attachPairedArchMetadata(model, eventID, archBlock, location, &models)
 		}
+		model.Node.Tags = mergeTags(model.Node.Tags, parseTagList(block.Fields["tags"]))
 		model = applyEventRoleMetadata(model, block)
 		models.byID[eventID] = model
 	}
@@ -357,6 +364,7 @@ func attachPairedArchMetadata(model eventModel, eventID string, archBlock scanne
 	if archBlock.Fields["status"] == "deprecated" {
 		model.Deprecated = true
 	}
+	model.Node.Tags = mergeTags(model.Node.Tags, parseTagList(archBlock.Fields["tags"]))
 	if model.Node.File == "" {
 		model.Node.File = archBlock.File
 		model.Node.Line = archBlock.Line
@@ -458,6 +466,104 @@ func checkOwner(result *Result, fail bool, file string, line int, ownerID string
 		return
 	}
 	addWarning(result, 4, "unknown_team", fmt.Sprintf("unknown team %q", ownerID), file, line)
+}
+
+func validateCatalogTags(result *Result, cat *catalog.Catalog, allowed map[string]struct{}) {
+	for _, team := range cat.Teams {
+		for _, tag := range team.Tags {
+			if _, ok := allowed[tag]; ok {
+				continue
+			}
+			addError(result, 4, "unknown_tag", fmt.Sprintf("team %q references unknown tag %q", team.ID, tag), "", 0)
+		}
+	}
+	for _, domain := range cat.Domains {
+		for _, tag := range domain.Tags {
+			if _, ok := allowed[tag]; ok {
+				continue
+			}
+			addError(result, 4, "unknown_tag", fmt.Sprintf("domain %q references unknown tag %q", domain.ID, tag), "", 0)
+		}
+	}
+}
+
+func validateBlockTags(result *Result, blocks []scanner.RawBlock, allowed map[string]struct{}) {
+	for _, block := range blocks {
+		for _, tag := range parseTagList(block.Fields["tags"]) {
+			if _, ok := allowed[tag]; ok {
+				continue
+			}
+			addError(result, 4, "unknown_tag", fmt.Sprintf("unknown tag %q", tag), block.File, block.Line)
+		}
+	}
+}
+
+func allowedTagSet(tags []string) map[string]struct{} {
+	set := make(map[string]struct{}, len(tags))
+	for _, tag := range tags {
+		set[tag] = struct{}{}
+	}
+	return set
+}
+
+func applyEffectiveTags(node graph.Node, cat *catalog.Catalog) graph.Node {
+	effective := append([]string(nil), node.Tags...)
+	if domain, ok := cat.DomainsByID[node.Domain]; ok {
+		effective = mergeTags(effective, domain.Tags)
+	}
+	if team, ok := cat.TeamsByID[node.Owner]; ok {
+		effective = mergeTags(effective, team.Tags)
+	}
+	node.Tags = normalizeTags(node.Tags)
+	node.EffectiveTags = normalizeTags(effective)
+	return node
+}
+
+func parseTagList(value string) []string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+
+	parts := strings.Split(value, ",")
+	tags := make([]string, 0, len(parts))
+	for _, part := range parts {
+		tag := strings.TrimSpace(strings.ToLower(part))
+		if tag == "" {
+			continue
+		}
+		tags = append(tags, tag)
+	}
+	return normalizeTags(tags)
+}
+
+func mergeTags(base []string, extra []string) []string {
+	if len(base) == 0 && len(extra) == 0 {
+		return nil
+	}
+	combined := append([]string(nil), base...)
+	combined = append(combined, extra...)
+	return normalizeTags(combined)
+}
+
+func normalizeTags(tags []string) []string {
+	if len(tags) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(tags))
+	normalized := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		tag = strings.TrimSpace(strings.ToLower(tag))
+		if tag == "" {
+			continue
+		}
+		if _, exists := seen[tag]; exists {
+			continue
+		}
+		seen[tag] = struct{}{}
+		normalized = append(normalized, tag)
+	}
+	sort.Strings(normalized)
+	return normalized
 }
 
 func validateEventBlock(result *Result, cfg *config.Config, cat *catalog.Catalog, block scanner.RawBlock, model eventModel, pairedArch scanner.RawBlock) {

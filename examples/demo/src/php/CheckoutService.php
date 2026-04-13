@@ -5,6 +5,7 @@
  * @arch.name Checkout Service
  * @arch.domain orders
  * @arch.owner team-commerce
+ * @arch.tags pci, critical-path
  *
  * @arch.calls api payment-api
  * @arch.stores_in database orders-db
@@ -20,6 +21,7 @@ final class CheckoutService
          * @event.owner team-commerce
          * @event.producer App\Orders\CheckoutService::placeOrder
          * @event.phase post-commit
+         * @event.tags pci
          */
         // $bus->dispatch(new OrderPlaced($orderId));
     }

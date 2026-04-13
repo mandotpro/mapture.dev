@@ -185,3 +185,58 @@ ui:
 		t.Fatalf("expected error to mention invalid color, got %v", err)
 	}
 }
+
+func TestLoadRejectsDuplicateTopLevelTags(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	path := filepath.Join(root, "mapture.yaml")
+	content := `version: 1
+tags:
+  - critical-path
+  - critical-path
+scan:
+  include:
+    - ./src
+languages:
+  go: true
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected duplicate tag config to fail")
+	}
+	if !strings.Contains(err.Error(), `duplicate tag "critical-path"`) {
+		t.Fatalf("expected duplicate tag error, got %v", err)
+	}
+}
+
+func TestLoadRejectsMalformedTopLevelTags(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	path := filepath.Join(root, "mapture.yaml")
+	content := `version: 1
+tags:
+  - CriticalPath
+scan:
+  include:
+    - ./src
+languages:
+  go: true
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected malformed tag config to fail")
+	}
+	if !strings.Contains(err.Error(), "CriticalPath") {
+		t.Fatalf("expected malformed tag error to mention invalid value, got %v", err)
+	}
+}

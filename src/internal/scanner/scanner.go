@@ -21,7 +21,7 @@ var (
 	nodeIDPattern  = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 	dotIDPattern   = regexp.MustCompile(`^[a-z0-9]+(?:[.-][a-z0-9]+)*$`)
 	allowedArch    = map[string]struct{}{"node": {}, "name": {}, "domain": {}, "owner": {}, "description": {}, "version": {}, "tags": {}, "status": {}, "calls": {}, "depends_on": {}, "stores_in": {}, "reads_from": {}}
-	allowedEvent   = map[string]struct{}{"id": {}, "role": {}, "domain": {}, "owner": {}, "phase": {}, "topic": {}, "version": {}, "notes": {}, "producer": {}, "consumer": {}}
+	allowedEvent   = map[string]struct{}{"id": {}, "role": {}, "domain": {}, "owner": {}, "phase": {}, "topic": {}, "version": {}, "notes": {}, "producer": {}, "consumer": {}, "tags": {}}
 	repeatableArch = map[string]struct{}{"calls": {}, "depends_on": {}, "stores_in": {}, "reads_from": {}}
 	archStatuses   = map[string]struct{}{"active": {}, "deprecated": {}, "experimental": {}}
 	eventRoles     = map[string]struct{}{"definition": {}, "trigger": {}, "listener": {}, "bridge-out": {}, "bridge-in": {}, "publisher": {}, "subscriber": {}}

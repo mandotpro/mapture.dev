@@ -33,6 +33,7 @@ type Source = jgfexport.Source
 
 // Catalog contains the team/domain metadata needed by the explorer.
 type Catalog struct {
+	Tags    []string         `json:"tags,omitempty"`
 	Teams   []catalog.Team   `json:"teams"`
 	Domains []catalog.Domain `json:"domains"`
 }
@@ -69,15 +70,17 @@ func FromJGF(doc *jgfexport.Document) (*Document, error) {
 	for _, id := range nodeIDs {
 		node := doc.Graph.Nodes[id]
 		nodes = append(nodes, graph.Node{
-			ID:      id,
-			Type:    node.Metadata.Type,
-			Name:    node.Label,
-			Domain:  node.Metadata.Domain,
-			Owner:   node.Metadata.Owner,
-			File:    node.Metadata.File,
-			Line:    node.Metadata.Line,
-			Symbol:  node.Metadata.Symbol,
-			Summary: node.Metadata.Summary,
+			ID:            id,
+			Type:          node.Metadata.Type,
+			Name:          node.Label,
+			Domain:        node.Metadata.Domain,
+			Owner:         node.Metadata.Owner,
+			File:          node.Metadata.File,
+			Line:          node.Metadata.Line,
+			Symbol:        node.Metadata.Symbol,
+			Summary:       node.Metadata.Summary,
+			Tags:          append([]string(nil), node.Metadata.Tags...),
+			EffectiveTags: append([]string(nil), node.Metadata.EffectiveTags...),
 		})
 	}
 
@@ -108,6 +111,7 @@ func FromJGF(doc *jgfexport.Document) (*Document, error) {
 		Source:        meta.Source,
 		Graph:         graphDoc,
 		Catalog: Catalog{
+			Tags:    append([]string(nil), meta.Catalog.Tags...),
 			Teams:   append([]catalog.Team(nil), meta.Catalog.Teams...),
 			Domains: append([]catalog.Domain(nil), meta.Catalog.Domains...),
 		},
