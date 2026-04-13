@@ -23,6 +23,15 @@
   --canvas-grid: rgba(24, 34, 40, 0.07);
   --canvas-surface: #efe8d7;
   --canvas-surface-elevated: rgba(255, 252, 246, 0.36);
+  --ui-transition-fast: 140ms ease;
+  --focus-ring: color-mix(in srgb, var(--accent) 28%, transparent);
+  --focus-ring-width: 3px;
+  --interactive-bg-hover: color-mix(in srgb, var(--accent) 7%, var(--surface-panel));
+  --interactive-bg-selected: color-mix(in srgb, var(--accent) 11%, var(--surface-raised));
+  --interactive-border-hover: color-mix(in srgb, var(--accent) 26%, var(--border-strong));
+  --interactive-border-selected: color-mix(in srgb, var(--accent) 34%, var(--border-strong));
+  --interactive-text-selected: color-mix(in srgb, var(--accent) 82%, var(--text-primary));
+  --interactive-shadow-hover: 0 10px 24px color-mix(in srgb, var(--accent) 12%, transparent);
 
   --bg: var(--color-bg-base);
   --ink: var(--color-text-primary);
@@ -107,29 +116,21 @@ a {
 }
 
 button,
-.header-link {
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface-raised);
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
-}
-
-button:hover,
-.header-link:hover {
-  transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--accent) 28%, var(--border-strong));
-  box-shadow: 0 10px 24px color-mix(in srgb, var(--accent) 12%, transparent);
-}
-
-.control-trigger,
-.control-option,
-.suggestion-chip,
+a,
 .svelte-flow__controls button,
 .svelte-flow__node,
 .svelte-flow__edge-interaction {
   cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+  outline: none;
 }
 
 input {
@@ -193,9 +194,9 @@ input {
   min-height: 2rem;
   padding: 0.4rem 0.72rem;
   border-radius: 999px;
-  background: var(--surface-panel);
-  border: 1px solid var(--border-strong);
-  box-shadow: var(--shadow);
+  border: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--surface-panel) 92%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 24%, transparent);
   backdrop-filter: blur(12px);
   color: var(--text-secondary);
   font-size: 0.76rem;
@@ -207,15 +208,8 @@ input {
   color: var(--text-primary);
 }
 
-.header-button.active {
-  border-color: rgba(13, 118, 97, 0.28);
-  color: var(--accent-strong);
-}
-
 .icon-pill {
   justify-content: center;
-  min-width: 2.15rem;
-  padding: 0.4rem 0.55rem;
 }
 
 .icon-pill svg {
@@ -356,11 +350,6 @@ input {
 }
 
 .suggestion-chip {
-  padding: 0.24rem 0.58rem;
-  min-height: 1.6rem;
-  border-radius: 999px;
-  background: var(--surface-panel-soft);
-  box-shadow: none;
   color: var(--text-primary);
   font-size: 0.72rem;
 }
@@ -378,7 +367,6 @@ input {
 }
 
 .mini-action {
-  padding: 0.24rem 0.52rem;
   font-size: 0.7rem;
 }
 
@@ -493,20 +481,8 @@ input {
   position: relative;
 }
 
-.control-trigger,
-.control-option {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.58rem;
-  width: 100%;
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--surface-panel) 92%, transparent);
-}
-
 .control-trigger {
   min-width: 224px;
-  justify-content: space-between;
-  padding: 0.42rem 0.5rem;
 }
 
 .control-trigger--density {
@@ -515,73 +491,6 @@ input {
 
 .control-trigger--structure {
   min-width: 172px;
-}
-
-.control-trigger.active {
-  border-color: rgba(13, 118, 97, 0.28);
-}
-
-.control-trigger__icon,
-.control-option__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.8rem;
-  height: 1.8rem;
-  border-radius: 14px;
-  background: var(--surface-raised);
-  color: var(--text-primary);
-  font-size: 0.6rem;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  box-shadow: inset 0 0 0 1px rgba(23, 32, 39, 0.06);
-}
-
-.control-trigger__copy,
-.control-option__copy {
-  display: grid;
-  justify-items: start;
-  gap: 0.08rem;
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
-.control-trigger__copy strong,
-.control-option__copy strong {
-  color: var(--text-primary);
-  font-size: 0.75rem;
-}
-
-.control-trigger__copy small,
-.control-option__copy small {
-  color: var(--text-secondary);
-  font-size: 0.66rem;
-}
-
-.control-trigger__caret {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.15rem;
-  height: 1.15rem;
-  color: var(--text-secondary);
-  transition: transform 160ms ease, color 160ms ease;
-}
-
-.control-trigger__caret svg {
-  width: 0.9rem;
-  height: 0.9rem;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.control-trigger__caret.is-open {
-  transform: rotate(180deg);
-  color: var(--text-primary);
 }
 
 .control-menu {
@@ -612,17 +521,6 @@ input {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-}
-
-.control-option {
-  padding: 0.38rem 0.44rem;
-  justify-content: flex-start;
-  box-shadow: none;
-}
-
-.control-option.active {
-  border-color: color-mix(in srgb, var(--accent) 24%, var(--border-strong));
-  background: color-mix(in srgb, var(--accent) 8%, var(--surface-panel));
 }
 
 .event-flow-backdrop {

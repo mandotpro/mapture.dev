@@ -111,12 +111,30 @@
     box-shadow: inset 0 1px 0 color-mix(in srgb, white 32%, transparent);
     color: var(--text-primary);
     white-space: nowrap;
-    transition: transform 140ms ease, border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+    transition:
+      transform var(--ui-transition-fast),
+      border-color var(--ui-transition-fast),
+      background var(--ui-transition-fast),
+      box-shadow var(--ui-transition-fast),
+      color var(--ui-transition-fast);
   }
 
-  .token-badge:hover {
+  button.token-badge {
+    cursor: pointer;
+  }
+
+  button.token-badge:hover {
     transform: translateY(-1px);
-    border-color: color-mix(in srgb, var(--token-accent) 28%, var(--border-strong));
+    border-color: color-mix(in srgb, var(--token-accent) 28%, var(--interactive-border-hover));
+    background: color-mix(in srgb, var(--token-accent) 10%, var(--interactive-bg-hover));
+    box-shadow: var(--interactive-shadow-hover);
+  }
+
+  button.token-badge:focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 var(--focus-ring-width) var(--focus-ring),
+      var(--interactive-shadow-hover);
   }
 
   .token-badge.is-active {
@@ -127,6 +145,10 @@
 
   .token-badge.is-quiet {
     background: var(--surface-panel-soft);
+  }
+
+  span.token-badge {
+    cursor: default;
   }
 
   .token-badge.is-compact {

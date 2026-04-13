@@ -1,5 +1,9 @@
 <script lang="ts">
   import type { ImpactPreview, NodeInspectorAction, PresentedNode } from '../types';
+  import ActionButton from './ActionButton.svelte';
+  import DisclosureButton from './DisclosureButton.svelte';
+  import IconButton from './IconButton.svelte';
+  import PropertyRow from './PropertyRow.svelte';
   import TokenBadge from './TokenBadge.svelte';
 
   let {
@@ -14,6 +18,7 @@
     summary = '',
     preview,
     impactEnabled = false,
+    impactDefaultExpanded = false,
     actions = [],
     onaction,
     onclose,
@@ -29,10 +34,14 @@
     summary?: string;
     preview: ImpactPreview;
     impactEnabled?: boolean;
+    impactDefaultExpanded?: boolean;
     actions?: NodeInspectorAction[];
     onaction?: (id: string) => void;
     onclose?: () => void;
   } = $props();
+
+  let descriptionExpanded = $state(false);
+  let impactExpanded = $state(false);
 
   function trigger(actionId: string): void {
     onaction?.(actionId);
@@ -47,11 +56,37 @@
     };
     return icons[type] ?? 'N';
   }
+
+  function resetExpandedState(): void {
+    descriptionExpanded = false;
+    impactExpanded = impactEnabled && impactDefaultExpanded;
+  }
+
+  $effect(() => {
+    node.id;
+    impactEnabled;
+    impactDefaultExpanded;
+    resetExpandedState();
+  });
+
+  const hasLongSummary = $derived(summary.trim().length > 140);
+  const impactSummary = $derived(buildImpactSummary(preview));
+
+  function buildImpactSummary(current: ImpactPreview): string {
+    const parts = [
+      `${current.directUpstream.length} upstream`,
+      `${current.directDownstream.length} downstream`,
+    ];
+    if (current.crossBoundaryTouches > 0) {
+      parts.push(`${current.crossBoundaryTouches} boundary`);
+    }
+    return parts.join(' · ');
+  }
 </script>
 
 <article class="node-inspector" data-interactive-root>
   <header class="node-inspector__head">
-    <div class="node-inspector__title">
+    <div class="node-inspector__identity">
       <TokenBadge
         label={badgeLabel}
         icon={typeIcon(node.type)}
@@ -59,100 +94,105 @@
         interactive={false}
         compact
         quiet
+        className="node-inspector__badge"
       />
+      <IconButton className="node-inspector__close" ariaLabel="Close node overview" onclick={onclose} subtle>
+        <span class="node-inspector__close-mark" aria-hidden="true">x</span>
+      </IconButton>
+    </div>
+
+    <div class="node-inspector__title">
       <strong>{node.name}</strong>
       <small>{node.id}</small>
       {#if summary}
-        <p class="node-inspector__summary">{summary}</p>
+        <div class="node-inspector__summary-block">
+          <p class={['node-inspector__summary', !descriptionExpanded ? 'is-collapsed' : ''].join(' ')}>
+            {summary}
+          </p>
+          {#if hasLongSummary}
+            <button
+              type="button"
+              class="node-inspector__inline-toggle"
+              onclick={() => (descriptionExpanded = !descriptionExpanded)}
+            >
+              {descriptionExpanded ? 'Show less' : 'Show more'}
+            </button>
+          {/if}
+        </div>
       {/if}
     </div>
-
-    <button type="button" class="node-inspector__close" aria-label="Close node overview" onclick={onclose}>
-      <span aria-hidden="true">x</span>
-    </button>
   </header>
 
-  <div class="node-inspector__grid">
-    <section class="node-inspector__meta">
-      <span>Domain</span>
-      <strong>{domainLabel}</strong>
-    </section>
-    <section class="node-inspector__meta">
-      <span>Owner</span>
-      <strong>{ownerLabel}</strong>
-    </section>
-    <section class="node-inspector__meta">
-      <span>{node.kind === 'node' ? 'Source' : 'Composition'}</span>
-      <strong>{node.kind === 'node' ? sourceLabel : compositionLabel || 'n/a'}</strong>
-    </section>
-    <section class="node-inspector__meta">
-      <span>Tags</span>
-      <strong>{tagLabel || 'n/a'}</strong>
-    </section>
-  </div>
+  <dl class="node-inspector__meta-list">
+    <PropertyRow label="Domain" value={domainLabel} />
+    <PropertyRow label="Owner" value={ownerLabel} />
+    <PropertyRow
+      label={node.kind === 'node' ? 'Source' : 'Composition'}
+      value={node.kind === 'node' ? sourceLabel : compositionLabel || 'n/a'}
+    />
+    <PropertyRow label="Tags" value={tagLabel || 'n/a'} />
+  </dl>
 
   {#if impactEnabled}
     <section class="node-inspector__impact">
-      <header class="node-inspector__impact-head">
-        <div>
-          <strong>Impact Preview</strong>
-          <p>Quick upstream and downstream reach from the visible graph.</p>
+      <DisclosureButton
+        icon="IM"
+        title="Impact Preview"
+        summary={impactSummary}
+        open={impactExpanded}
+        className="node-inspector__impact-toggle"
+        onclick={() => (impactExpanded = !impactExpanded)}
+      />
+
+      {#if impactExpanded}
+        <div class="node-inspector__impact-body">
+          <div class="node-inspector__impact-grid">
+            <article class="node-inspector__impact-card">
+              <span>Immediate upstream</span>
+              <strong>{preview.directUpstream.length}</strong>
+              <small>{preview.upstreamReach} reachable upstream</small>
+            </article>
+            <article class="node-inspector__impact-card">
+              <span>Immediate downstream</span>
+              <strong>{preview.directDownstream.length}</strong>
+              <small>{preview.downstreamReach} reachable downstream</small>
+            </article>
+          </div>
+
+          {#if preview.directUpstream.length > 0}
+            <section class="node-inspector__impact-list">
+              <span>Immediate upstream</span>
+              <div class="node-inspector__impact-chips">
+                {#each preview.directUpstream.slice(0, 4) as previewNode}
+                  <TokenBadge
+                    label={previewNode.name}
+                    accent={previewNode.colorHint || 'var(--accent)'}
+                    interactive={false}
+                    compact
+                    quiet
+                  />
+                {/each}
+              </div>
+            </section>
+          {/if}
+
+          {#if preview.directDownstream.length > 0}
+            <section class="node-inspector__impact-list">
+              <span>Immediate downstream</span>
+              <div class="node-inspector__impact-chips">
+                {#each preview.directDownstream.slice(0, 4) as previewNode}
+                  <TokenBadge
+                    label={previewNode.name}
+                    accent={previewNode.colorHint || 'var(--accent)'}
+                    interactive={false}
+                    compact
+                    quiet
+                  />
+                {/each}
+              </div>
+            </section>
+          {/if}
         </div>
-        {#if preview.crossBoundaryTouches > 0}
-          <TokenBadge
-            label="Boundary"
-            count={preview.crossBoundaryTouches}
-            accent="var(--warning)"
-            interactive={false}
-            compact
-            quiet
-          />
-        {/if}
-      </header>
-
-      <div class="node-inspector__impact-grid">
-        <article class="node-inspector__impact-card">
-          <span>Downstream</span>
-          <strong>{preview.directDownstream.length}</strong>
-          <small>{preview.downstreamReach} reachable</small>
-        </article>
-        <article class="node-inspector__impact-card">
-          <span>Upstream</span>
-          <strong>{preview.directUpstream.length}</strong>
-          <small>{preview.upstreamReach} reachable</small>
-        </article>
-      </div>
-
-      {#if preview.directDownstream.length > 0}
-        <section class="node-inspector__impact-list">
-          <span>Immediate downstream</span>
-          <div class="node-inspector__impact-chips">
-            {#each preview.directDownstream.slice(0, 4) as previewNode}
-              <TokenBadge
-                label={previewNode.name}
-                accent={previewNode.colorHint || 'var(--accent)'}
-                interactive={false}
-                compact
-              />
-            {/each}
-          </div>
-        </section>
-      {/if}
-
-      {#if preview.directUpstream.length > 0}
-        <section class="node-inspector__impact-list">
-          <span>Immediate upstream</span>
-          <div class="node-inspector__impact-chips">
-            {#each preview.directUpstream.slice(0, 4) as previewNode}
-              <TokenBadge
-                label={previewNode.name}
-                accent={previewNode.colorHint || 'var(--accent)'}
-                interactive={false}
-                compact
-              />
-            {/each}
-          </div>
-        </section>
       {/if}
     </section>
   {/if}
@@ -160,15 +200,17 @@
   {#if actions.length > 0}
     <div class="node-inspector__actions">
       {#each actions as action}
-        <TokenBadge
-          label={action.label}
-          accent={action.tone === 'accent' ? badgeAccent : 'var(--accent)'}
-          interactive
+        <ActionButton
+          tone={action.tone === 'accent' ? 'soft' : 'ghost'}
           compact
-          trailingText={action.badge ?? ''}
           className="node-inspector__action"
           onclick={() => trigger(action.id)}
-        />
+        >
+          <span>{action.label}</span>
+          {#if action.badge}
+            <span class="node-inspector__action-badge">{action.badge}</span>
+          {/if}
+        </ActionButton>
       {/each}
     </div>
   {/if}
@@ -179,8 +221,8 @@
     pointer-events: auto;
     width: min(440px, calc(100vw - 1.5rem));
     display: grid;
-    gap: 0.92rem;
-    padding: 1rem;
+    gap: 0.78rem;
+    padding: 0.96rem 1rem;
     border-radius: 24px;
     border: 1px solid var(--border-strong);
     background:
@@ -191,10 +233,19 @@
   }
 
   .node-inspector__head {
+    display: grid;
+    gap: 0.7rem;
+  }
+
+  .node-inspector__identity {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
     gap: 0.9rem;
+  }
+
+  .node-inspector__badge {
+    justify-self: start;
   }
 
   .node-inspector__title {
@@ -212,9 +263,16 @@
 
   .node-inspector__title small {
     color: var(--text-secondary);
-    font-size: 0.72rem;
+    font-size: 0.62rem;
     font-family: "SFMono-Regular", "Consolas", monospace;
     overflow-wrap: anywhere;
+    opacity: 0.74;
+  }
+
+  .node-inspector__summary-block {
+    display: grid;
+    justify-items: start;
+    gap: 0.1rem;
   }
 
   .node-inspector__summary {
@@ -224,77 +282,61 @@
     line-height: 1.52;
   }
 
-  .node-inspector__close {
-    width: 2.1rem;
-    height: 2.1rem;
-    padding: 0;
-    border-radius: 999px;
-    box-shadow: none;
-    background: var(--surface-panel);
+  .node-inspector__summary.is-collapsed {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
   }
 
-  .node-inspector__close span {
-    font-size: 0.74rem;
+  .node-inspector__inline-toggle {
+    min-height: auto;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--accent);
+    font-size: 0.72rem;
+    font-weight: 700;
+    transform: none;
+    cursor: pointer;
+    transition: color var(--ui-transition-fast);
+  }
+
+  .node-inspector__inline-toggle:hover {
+    transform: none;
+    border-color: transparent;
+    box-shadow: none;
+    color: var(--accent-strong);
+  }
+
+  .node-inspector__close-mark {
+    font-size: 0.86rem;
     font-weight: 800;
     text-transform: uppercase;
   }
 
-  .node-inspector__grid {
+  .node-inspector__meta-list {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 0.42rem;
-  }
-
-  .node-inspector__meta {
-    display: grid;
-    gap: 0.16rem;
-    padding: 0.62rem 0.66rem;
-    border-radius: 16px;
-    border: 1px solid var(--border-soft);
-    background: var(--surface-panel-soft);
-  }
-
-  .node-inspector__meta span {
-    color: var(--text-tertiary);
-    font-size: 0.64rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-  }
-
-  .node-inspector__meta strong {
-    color: var(--text-primary);
-    font-size: 0.74rem;
-    line-height: 1.35;
-    overflow-wrap: anywhere;
+    gap: 0.52rem;
+    margin: 0;
   }
 
   .node-inspector__impact {
     display: grid;
-    gap: 0.62rem;
-    padding: 0.78rem;
-    border-radius: 18px;
-    border: 1px solid var(--border-soft);
-    background: color-mix(in srgb, var(--surface-panel-soft) 92%, transparent);
+    gap: 0.52rem;
+    padding-top: 0.16rem;
+    border-top: 1px solid color-mix(in srgb, var(--border-soft) 82%, transparent);
   }
 
-  .node-inspector__impact-head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 0.8rem;
+  .node-inspector__impact-toggle {
+    min-width: 0;
   }
 
-  .node-inspector__impact-head strong {
-    display: block;
-    color: var(--text-primary);
-    font-size: 0.78rem;
-  }
-
-  .node-inspector__impact-head p {
-    margin: 0.14rem 0 0;
-    color: var(--text-secondary);
-    font-size: 0.7rem;
-    line-height: 1.45;
+  .node-inspector__impact-body {
+    display: grid;
+    gap: 0.58rem;
   }
 
   .node-inspector__impact-grid {
@@ -306,10 +348,10 @@
   .node-inspector__impact-card {
     display: grid;
     gap: 0.08rem;
-    padding: 0.6rem 0.64rem;
+    padding: 0.56rem 0.62rem;
     border-radius: 14px;
     border: 1px solid var(--border-soft);
-    background: color-mix(in srgb, var(--surface-raised) 88%, transparent);
+    background: color-mix(in srgb, var(--surface-panel-soft) 82%, transparent);
   }
 
   .node-inspector__impact-card span {
@@ -351,15 +393,33 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.42rem;
+    padding-top: 0.16rem;
+    border-top: 1px solid color-mix(in srgb, var(--border-soft) 82%, transparent);
+  }
+
+  .node-inspector__action {
+    gap: 0.34rem;
+  }
+
+  .node-inspector__action-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.2rem;
+    height: 1.06rem;
+    padding: 0 0.28rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--warning) 14%, var(--surface-panel));
+    color: color-mix(in srgb, var(--warning) 86%, var(--text-primary));
+    font-size: 0.56rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
   }
 
   @media (max-width: 760px) {
     .node-inspector {
       width: min(100vw - 1rem, 440px);
-    }
-
-    .node-inspector__grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .node-inspector__impact-grid {

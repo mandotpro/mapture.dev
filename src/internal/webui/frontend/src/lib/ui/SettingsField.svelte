@@ -92,6 +92,15 @@
     border-radius: 20px;
     border: 1px solid var(--border-soft);
     background: var(--surface-raised);
+    transition:
+      border-color var(--ui-transition-fast),
+      background var(--ui-transition-fast),
+      box-shadow var(--ui-transition-fast);
+  }
+
+  .settings-field:hover {
+    border-color: var(--interactive-border-hover);
+    background: color-mix(in srgb, var(--surface-raised) 96%, var(--interactive-bg-hover));
   }
 
   .settings-field.is-disabled {
@@ -151,13 +160,34 @@
     min-height: 2.1rem;
     padding: 0.28rem 0.4rem 0.28rem 0.32rem;
     border-radius: 999px;
+    border: 1px solid var(--border-soft);
     background: var(--surface-panel);
     box-shadow: none;
+    cursor: pointer;
+    transition:
+      border-color var(--ui-transition-fast),
+      background var(--ui-transition-fast),
+      box-shadow var(--ui-transition-fast),
+      transform var(--ui-transition-fast);
+  }
+
+  .settings-toggle:hover {
+    transform: translateY(-1px);
+    border-color: var(--interactive-border-hover);
+    background: var(--interactive-bg-hover);
   }
 
   .settings-toggle.is-active {
-    border-color: color-mix(in srgb, var(--accent) 26%, var(--border-strong));
-    background: color-mix(in srgb, var(--accent) 9%, var(--surface-panel));
+    border-color: var(--interactive-border-selected);
+    background: var(--interactive-bg-selected);
+  }
+
+  .settings-toggle:focus-visible,
+  .settings-choice__option:focus-visible,
+  .settings-input:focus-visible,
+  .settings-checkbox input:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 var(--focus-ring-width) var(--focus-ring);
   }
 
   .settings-toggle__track {
@@ -197,6 +227,7 @@
     align-items: center;
     gap: 0.44rem;
     min-height: 2rem;
+    cursor: pointer;
   }
 
   .settings-choice {
@@ -220,12 +251,24 @@
     background: transparent;
     border-color: transparent;
     color: var(--text-secondary);
+    cursor: pointer;
+    transition:
+      border-color var(--ui-transition-fast),
+      background var(--ui-transition-fast),
+      color var(--ui-transition-fast),
+      transform var(--ui-transition-fast);
+  }
+
+  .settings-choice__option:hover {
+    transform: translateY(-1px);
+    border-color: var(--interactive-border-hover);
+    background: color-mix(in srgb, var(--surface-panel-soft) 92%, transparent);
   }
 
   .settings-choice__option.is-active {
-    background: color-mix(in srgb, var(--accent) 10%, var(--surface-raised));
-    border-color: color-mix(in srgb, var(--accent) 22%, var(--border-strong));
-    color: color-mix(in srgb, var(--accent) 84%, var(--text-primary));
+    background: var(--interactive-bg-selected);
+    border-color: var(--interactive-border-selected);
+    color: var(--interactive-text-selected);
   }
 
   .settings-choice__glyph {
