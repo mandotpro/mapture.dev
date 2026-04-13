@@ -19,6 +19,7 @@ type Config struct {
 	Version    int        `json:"version"`
 	Catalog    Catalog    `json:"catalog"`
 	Tags       []string   `json:"tags,omitempty"`
+	Facets     Facets     `json:"facets,omitempty"`
 	Teams      []Team     `json:"teams,omitempty"`
 	Domains    []Domain   `json:"domains,omitempty"`
 	Scan       Scan       `json:"scan"`
@@ -31,6 +32,15 @@ type Config struct {
 // Catalog configures where catalog YAML files live.
 type Catalog struct {
 	Dir string `json:"dir"`
+}
+
+// Facets is a repo-wide registry of direct-only categorical metadata.
+type Facets map[string]FacetDefinition
+
+// FacetDefinition defines one allowed categorical dimension.
+type FacetDefinition struct {
+	Label  string   `json:"label"`
+	Values []string `json:"values"`
 }
 
 // Team is an inline team catalog entry defined in mapture.yaml.
@@ -151,6 +161,9 @@ func Load(path string) (*Config, error) {
 	if err := validateTagVocabulary(cfg.Tags); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
+	if err := validateFacetDefinitions(cfg.Facets); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
 	if !cfg.Languages.PHP && !cfg.Languages.Go && !cfg.Languages.TypeScript && !cfg.Languages.JavaScript {
 		return nil, fmt.Errorf("%s: at least one language must be enabled", path)
 	}
@@ -196,6 +209,11 @@ func (c *Config) applyDefaults() {
 	for index := range c.Domains {
 		c.Domains[index].Tags = normalizeTags(c.Domains[index].Tags)
 	}
+	for id, definition := range c.Facets {
+		definition.Label = strings.TrimSpace(definition.Label)
+		definition.Values = normalizeFacetValues(definition.Values)
+		c.Facets[id] = definition
+	}
 }
 
 func validateTagVocabulary(tags []string) error {
@@ -206,6 +224,27 @@ func validateTagVocabulary(tags []string) error {
 		}
 		seen[tag] = struct{}{}
 	}
+	return nil
+}
+
+func validateFacetDefinitions(facets Facets) error {
+	for id, definition := range facets {
+		if strings.TrimSpace(definition.Label) == "" {
+			return fmt.Errorf("facet %q is missing label", id)
+		}
+		if len(definition.Values) == 0 {
+			return fmt.Errorf("facet %q must define at least one value", id)
+		}
+
+		seen := make(map[string]struct{}, len(definition.Values))
+		for _, value := range definition.Values {
+			if _, exists := seen[value]; exists {
+				return fmt.Errorf("facet %q has duplicate value %q", id, value)
+			}
+			seen[value] = struct{}{}
+		}
+	}
+
 	return nil
 }
 
@@ -228,5 +267,21 @@ func normalizeTags(tags []string) []string {
 		normalized = append(normalized, tag)
 	}
 	sort.Strings(normalized)
+	return normalized
+}
+
+func normalizeFacetValues(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+
+	normalized := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(strings.ToLower(value))
+		if value == "" {
+			continue
+		}
+		normalized = append(normalized, value)
+	}
 	return normalized
 }

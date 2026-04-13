@@ -3,6 +3,7 @@ import type {
   BackendGraph,
   DensityMode,
   Diagnostic,
+  FacetOption,
   Filters,
   FlowPresentation,
   GraphEdge,
@@ -115,6 +116,7 @@ export function normalizeGraph(payload: VisualizationExportDocument): GraphModel
     summary: node.summary ?? '',
     tags: node.tags ?? [],
     effectiveTags: node.effectiveTags ?? node.tags ?? [],
+    facets: node.facets ?? {},
   }));
   const edges = rawGraph.edges.map((edge) => ({
     id: `${edge.from}->${edge.to}|${edge.type}`,
@@ -130,6 +132,7 @@ export function normalizeGraph(payload: VisualizationExportDocument): GraphModel
     edges,
     diagnostics,
     tags: (payload.catalog.tags ?? unique(nodes.flatMap((node) => node.effectiveTags))).filter(Boolean),
+    facets: normalizeFacetOptions(payload.catalog.facets),
     domains: unique(nodes.map((node) => node.domain).filter(Boolean)),
     owners: unique(nodes.map((node) => node.owner).filter(Boolean)),
     nodeTypes: unique(nodes.map((node) => node.type).filter(Boolean)),
@@ -1178,6 +1181,7 @@ function normalizeBackendGraph(graph: BackendGraph): { nodes: GraphNode[]; edges
       summary: node.summary ?? '',
       tags: node.tags ?? [],
       effectiveTags: node.effectiveTags ?? node.tags ?? [],
+      facets: node.facets ?? {},
     })),
     edges: (graph.edges ?? []).map((edge) => ({
       id: `${edge.from}->${edge.to}|${edge.type}`,
@@ -1191,6 +1195,15 @@ function normalizeBackendGraph(graph: BackendGraph): { nodes: GraphNode[]; edges
 function matchesFilters(node: GraphNode, filters: Filters): boolean {
   if (filters.tags.length > 0 && !node.effectiveTags.some((tag) => filters.tags.includes(tag))) {
     return false;
+  }
+  for (const [facetID, selectedValues] of Object.entries(filters.facets)) {
+    if (selectedValues.length === 0) {
+      continue;
+    }
+    const nodeValue = node.facets[facetID];
+    if (!nodeValue || !selectedValues.includes(nodeValue)) {
+      return false;
+    }
   }
   if (filters.nodeTypes.length > 0 && !filters.nodeTypes.includes(node.type)) {
     return false;
@@ -1219,7 +1232,22 @@ function matchesQuery(node: GraphNode, query: string): boolean {
     node.summary,
     node.tags.join(' '),
     node.effectiveTags.join(' '),
+    ...Object.entries(node.facets).flatMap(([key, value]) => [key, value, `${key} ${value}`]),
   ].join(' ').toLowerCase().includes(normalizedQuery);
+}
+
+function normalizeFacetOptions(definitions: Record<string, { label: string; values: string[] }> | undefined): FacetOption[] {
+  if (!definitions) {
+    return [];
+  }
+
+  return Object.entries(definitions)
+    .map(([id, definition]) => ({
+      id,
+      label: definition.label,
+      values: definition.values ?? [],
+    }))
+    .sort((left, right) => left.label.localeCompare(right.label));
 }
 
 function toWorkingNode(node: GraphNode): WorkingNode {

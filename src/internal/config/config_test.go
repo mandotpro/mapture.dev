@@ -240,3 +240,104 @@ languages:
 		t.Fatalf("expected malformed tag error to mention invalid value, got %v", err)
 	}
 }
+
+func TestLoadAcceptsFacetDefinitions(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	path := filepath.Join(root, "mapture.yaml")
+	content := `version: 1
+facets:
+  event.type:
+    label: Event Type
+    values:
+      - sync
+      - async
+  db.type:
+    label: Database Type
+    values:
+      - tenant
+      - shared
+scan:
+  include:
+    - ./src
+languages:
+  go: true
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	if cfg.Facets["event.type"].Label != "Event Type" {
+		t.Fatalf("unexpected facet label: %+v", cfg.Facets)
+	}
+	if got := strings.Join(cfg.Facets["db.type"].Values, ","); got != "tenant,shared" {
+		t.Fatalf("unexpected facet values: %q", got)
+	}
+}
+
+func TestLoadRejectsDuplicateFacetValues(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	path := filepath.Join(root, "mapture.yaml")
+	content := `version: 1
+facets:
+  event.type:
+    label: Event Type
+    values:
+      - async
+      - async
+scan:
+  include:
+    - ./src
+languages:
+  go: true
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected duplicate facet values to fail")
+	}
+	if !strings.Contains(err.Error(), `facet "event.type" has duplicate value "async"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadRejectsMalformedFacetKey(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	path := filepath.Join(root, "mapture.yaml")
+	content := `version: 1
+facets:
+  EventType:
+    label: Event Type
+    values:
+      - async
+scan:
+  include:
+    - ./src
+languages:
+  go: true
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected malformed facet key to fail")
+	}
+	if !strings.Contains(err.Error(), "EventType") {
+		t.Fatalf("expected malformed facet key error to mention invalid value, got %v", err)
+	}
+}

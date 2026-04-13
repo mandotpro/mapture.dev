@@ -34,6 +34,7 @@ type Source = jgfexport.Source
 // Catalog contains the team/domain metadata needed by the explorer.
 type Catalog struct {
 	Tags    []string         `json:"tags,omitempty"`
+	Facets  config.Facets    `json:"facets,omitempty"`
 	Teams   []catalog.Team   `json:"teams"`
 	Domains []catalog.Domain `json:"domains"`
 }
@@ -81,6 +82,7 @@ func FromJGF(doc *jgfexport.Document) (*Document, error) {
 			Summary:       node.Metadata.Summary,
 			Tags:          append([]string(nil), node.Metadata.Tags...),
 			EffectiveTags: append([]string(nil), node.Metadata.EffectiveTags...),
+			Facets:        cloneFacetAssignments(node.Metadata.Facets),
 		})
 	}
 
@@ -112,6 +114,7 @@ func FromJGF(doc *jgfexport.Document) (*Document, error) {
 		Graph:         graphDoc,
 		Catalog: Catalog{
 			Tags:    append([]string(nil), meta.Catalog.Tags...),
+			Facets:  cloneFacetDefinitions(meta.Catalog.Facets),
 			Teams:   append([]catalog.Team(nil), meta.Catalog.Teams...),
 			Domains: append([]catalog.Domain(nil), meta.Catalog.Domains...),
 		},
@@ -130,4 +133,31 @@ func (d *Document) Result() validator.Result {
 		Graph:       d.Graph,
 		Diagnostics: append([]validator.Diagnostic(nil), d.Validation.Diagnostics...),
 	}
+}
+
+func cloneFacetAssignments(values map[string]string) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+
+	cloned := make(map[string]string, len(values))
+	for key, value := range values {
+		cloned[key] = value
+	}
+	return cloned
+}
+
+func cloneFacetDefinitions(facets config.Facets) config.Facets {
+	if len(facets) == 0 {
+		return nil
+	}
+
+	cloned := make(config.Facets, len(facets))
+	for id, definition := range facets {
+		cloned[id] = config.FacetDefinition{
+			Label:  definition.Label,
+			Values: append([]string(nil), definition.Values...),
+		}
+	}
+	return cloned
 }

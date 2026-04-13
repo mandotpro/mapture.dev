@@ -26,7 +26,10 @@
       "effectiveTags": [
         "critical-path",
         "customer-facing"
-      ]
+      ],
+      "facets": {
+        "db.type": "tenant"
+      }
     },
     {
       "id": "event:order.placed",
@@ -44,7 +47,10 @@
         "critical-path",
         "customer-facing",
         "pci"
-      ]
+      ],
+      "facets": {
+        "event.type": "async"
+      }
     },
     {
       "id": "service:checkout-service",

@@ -85,6 +85,7 @@ function wrapGraphAsVisualization(graph: BackendGraph, fallback: CanonicalFallba
     },
     catalog: {
       tags: [],
+      facets: {},
       teams: [],
       domains: [],
     },

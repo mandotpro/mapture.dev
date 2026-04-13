@@ -215,6 +215,55 @@ func TestScanReturnsEmptySliceForExistingTreeWithoutComments(t *testing.T) {
 	}
 }
 
+func TestScanParsesFacetKeys(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	srcDir := filepath.Join(root, "src")
+	if err := os.MkdirAll(srcDir, 0o755); err != nil {
+		t.Fatalf("mkdir src: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "mapture.yaml"), []byte(`version: 1
+facets:
+  event.type:
+    label: Event Type
+    values: [async]
+scan:
+  include:
+    - ./src
+languages:
+  go: true
+`), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "main.go"), []byte(`package main
+
+// @arch.node service checkout-service
+// @arch.name Checkout Service
+// @arch.domain orders
+// @arch.owner team-commerce
+// @arch.event.type async
+func main() {}
+`), 0o644); err != nil {
+		t.Fatalf("write source: %v", err)
+	}
+
+	cfg, err := config.Load(filepath.Join(root, "mapture.yaml"))
+	if err != nil {
+		t.Fatalf("config.Load: %v", err)
+	}
+	blocks, err := Scan(root, cfg)
+	if err != nil {
+		t.Fatalf("Scan returned error: %v", err)
+	}
+	if len(blocks) != 1 {
+		t.Fatalf("expected 1 block, got %d", len(blocks))
+	}
+	if got := blocks[0].Fields["event.type"]; got != "async" {
+		t.Fatalf("expected facet field to be preserved, got %q", got)
+	}
+}
+
 func loadFixtureConfig(t *testing.T, rel string) (string, *config.Config) {
 	t.Helper()
 

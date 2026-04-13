@@ -450,6 +450,140 @@ func TestBuildRejectsUnknownDirectTag(t *testing.T) {
 	}
 }
 
+func TestBuildParsesDirectFacets(t *testing.T) {
+	t.Parallel()
+
+	cfg := strictConfig()
+	cfg.Facets = config.Facets{
+		"event.type": {Label: "Event Type", Values: []string{"async", "queue"}},
+		"db.type":    {Label: "Database Type", Values: []string{"tenant", "shared"}},
+	}
+	cat := minimalCatalog()
+	blocks := []scanner.RawBlock{
+		{
+			Kind: "arch",
+			File: "src/db.go",
+			Line: 1,
+			Fields: map[string]string{
+				"node":    "database orders-db",
+				"name":    "Orders DB",
+				"domain":  "orders",
+				"owner":   "team-commerce",
+				"db.type": "tenant",
+			},
+		},
+		{
+			Kind: "event",
+			File: "src/app.go",
+			Line: 10,
+			Fields: map[string]string{
+				"id":         "order.placed",
+				"role":       "trigger",
+				"domain":     "orders",
+				"owner":      "team-commerce",
+				"producer":   "CheckoutService::placeOrder",
+				"event.type": "async",
+			},
+		},
+	}
+
+	result, err := Build(cfg, cat, blocks)
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+
+	database := findGraphNode(t, result.Graph, "database:orders-db")
+	if got := database.Facets["db.type"]; got != "tenant" {
+		t.Fatalf("unexpected database facet value: %q", got)
+	}
+
+	event := findGraphNode(t, result.Graph, "event:order.placed")
+	if got := event.Facets["event.type"]; got != "async" {
+		t.Fatalf("unexpected event facet value: %q", got)
+	}
+}
+
+func TestBuildRejectsUnknownFacetKeyAndValue(t *testing.T) {
+	t.Parallel()
+
+	cfg := strictConfig()
+	cfg.Facets = config.Facets{
+		"event.type": {Label: "Event Type", Values: []string{"async"}},
+	}
+	cat := minimalCatalog()
+	blocks := []scanner.RawBlock{
+		{
+			Kind: "arch",
+			File: "src/app.go",
+			Line: 1,
+			Fields: map[string]string{
+				"node":         "service checkout-service",
+				"name":         "Checkout Service",
+				"domain":       "orders",
+				"owner":        "team-commerce",
+				"message.type": "queue",
+				"event.type":   "event-bus",
+			},
+		},
+	}
+
+	result, err := Build(cfg, cat, blocks)
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	if !hasDiagnostic(result.Diagnostics, severityError, "unknown_facet_key") {
+		t.Fatalf("expected unknown_facet_key diagnostic, got %#v", result.Diagnostics)
+	}
+	if !hasDiagnostic(result.Diagnostics, severityError, "unknown_facet_value") {
+		t.Fatalf("expected unknown_facet_value diagnostic, got %#v", result.Diagnostics)
+	}
+}
+
+func TestBuildRejectsConflictingFacetValuesAcrossEventBlocks(t *testing.T) {
+	t.Parallel()
+
+	cfg := strictConfig()
+	cfg.Facets = config.Facets{
+		"event.type": {Label: "Event Type", Values: []string{"async", "queue"}},
+	}
+	cat := minimalCatalog()
+	blocks := []scanner.RawBlock{
+		{
+			Kind: "event",
+			File: "src/app.go",
+			Line: 10,
+			Fields: map[string]string{
+				"id":         "order.placed",
+				"role":       "trigger",
+				"domain":     "orders",
+				"owner":      "team-commerce",
+				"producer":   "CheckoutService::placeOrder",
+				"event.type": "async",
+			},
+		},
+		{
+			Kind: "event",
+			File: "src/app.go",
+			Line: 20,
+			Fields: map[string]string{
+				"id":         "order.placed",
+				"role":       "listener",
+				"domain":     "orders",
+				"consumer":   "capture_payment",
+				"event.type": "queue",
+			},
+		},
+	}
+
+	result, err := Build(cfg, cat, blocks)
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	if !hasDiagnostic(result.Diagnostics, severityError, "conflicting_facet_value") {
+		t.Fatalf("expected conflicting_facet_value diagnostic, got %#v", result.Diagnostics)
+	}
+}
+
 func loadFixture(t *testing.T, rel string) (string, *config.Config, *catalog.Catalog, []scanner.RawBlock) {
 	t.Helper()
 

@@ -5,6 +5,20 @@ tags:
   - customer-facing
   - pci
 
+facets:
+  event.type:
+    label: Event Type
+    values:
+      - sync
+      - async
+      - queue
+      - event-bus
+  db.type:
+    label: Database Type
+    values:
+      - tenant
+      - shared
+
 teams:
   - id: team-commerce
     name: Commerce Team

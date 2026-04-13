@@ -107,13 +107,14 @@ func Build(cfg *config.Config, cat *catalog.Catalog, blocks []scanner.RawBlock, 
 	if len(opts) > 0 {
 		buildOptions = opts[0]
 	}
-	eventModels := collectEventModels(blocks)
+	eventModels := collectEventModels(blocks, result)
 	fileNodes := make(map[string][]graph.Node)
 	requiredNodeRefs := collectScopedRefs(blocks, eventModels.aliases)
 	allowedTags := allowedTagSet(cfg.Tags)
 
 	validateCatalogTags(result, cat, allowedTags)
 	validateBlockTags(result, blocks, allowedTags)
+	validateBlockFacets(result, blocks, cfg.Facets)
 
 	for _, event := range eventModels.byID {
 		node := applyEffectiveTags(event.Node, cat)
@@ -253,6 +254,7 @@ func buildArchNode(block scanner.RawBlock, eventAliases map[string]string) (grap
 		Line:    block.Line,
 		Summary: block.Fields["description"],
 		Tags:    parseTagList(block.Fields["tags"]),
+		Facets:  extractFacetAssignments(block.Fields),
 	}, nil
 }
 
@@ -291,7 +293,7 @@ func canonicalEventID(id string, aliases map[string]string) string {
 	return id
 }
 
-func collectEventModels(blocks []scanner.RawBlock) eventModelSet {
+func collectEventModels(blocks []scanner.RawBlock, result *Result) eventModelSet {
 	models := eventModelSet{
 		byID:             make(map[string]eventModel),
 		aliases:          make(map[string]string),
@@ -312,9 +314,16 @@ func collectEventModels(blocks []scanner.RawBlock) eventModelSet {
 		model := ensureEventModel(models.byID[eventID], eventID)
 		location := blockLocationKey(block.File, block.Line)
 		if archBlock, ok := models.archByLocation[location]; ok {
-			model = attachPairedArchMetadata(model, eventID, archBlock, location, &models)
+			model = attachPairedArchMetadata(model, eventID, archBlock, location, &models, result)
 		}
 		model.Node.Tags = mergeTags(model.Node.Tags, parseTagList(block.Fields["tags"]))
+		model.Node.Facets = mergeFacetAssignments(
+			model.Node.Facets,
+			extractFacetAssignments(block.Fields),
+			block.File,
+			block.Line,
+			result,
+		)
 		model = applyEventRoleMetadata(model, block)
 		models.byID[eventID] = model
 	}
@@ -349,7 +358,7 @@ func ensureEventModel(model eventModel, eventID string) eventModel {
 	return model
 }
 
-func attachPairedArchMetadata(model eventModel, eventID string, archBlock scanner.RawBlock, location string, models *eventModelSet) eventModel {
+func attachPairedArchMetadata(model eventModel, eventID string, archBlock scanner.RawBlock, location string, models *eventModelSet, result *Result) eventModel {
 	ref, err := parseNodeRef(archBlock.Fields["node"])
 	if err == nil && ref.Type == graph.NodeEvent {
 		models.aliases[ref.ID] = eventID
@@ -365,6 +374,13 @@ func attachPairedArchMetadata(model eventModel, eventID string, archBlock scanne
 		model.Deprecated = true
 	}
 	model.Node.Tags = mergeTags(model.Node.Tags, parseTagList(archBlock.Fields["tags"]))
+	model.Node.Facets = mergeFacetAssignments(
+		model.Node.Facets,
+		extractFacetAssignments(archBlock.Fields),
+		archBlock.File,
+		archBlock.Line,
+		result,
+	)
 	if model.Node.File == "" {
 		model.Node.File = archBlock.File
 		model.Node.Line = archBlock.Line
@@ -498,6 +514,22 @@ func validateBlockTags(result *Result, blocks []scanner.RawBlock, allowed map[st
 	}
 }
 
+func validateBlockFacets(result *Result, blocks []scanner.RawBlock, definitions config.Facets) {
+	for _, block := range blocks {
+		for key, value := range extractFacetAssignments(block.Fields) {
+			definition, ok := definitions[key]
+			if !ok {
+				addError(result, 4, "unknown_facet_key", fmt.Sprintf("unknown facet key %q", key), block.File, block.Line)
+				continue
+			}
+			if containsFacetValue(definition.Values, value) {
+				continue
+			}
+			addError(result, 4, "unknown_facet_value", fmt.Sprintf("facet %q does not allow value %q", key, value), block.File, block.Line)
+		}
+	}
+}
+
 func allowedTagSet(tags []string) map[string]struct{} {
 	set := make(map[string]struct{}, len(tags))
 	for _, tag := range tags {
@@ -517,6 +549,59 @@ func applyEffectiveTags(node graph.Node, cat *catalog.Catalog) graph.Node {
 	node.Tags = normalizeTags(node.Tags)
 	node.EffectiveTags = normalizeTags(effective)
 	return node
+}
+
+func extractFacetAssignments(fields map[string]string) map[string]string {
+	if len(fields) == 0 {
+		return nil
+	}
+
+	assignments := make(map[string]string)
+	for key, value := range fields {
+		if !strings.Contains(key, ".") {
+			continue
+		}
+		normalized := strings.TrimSpace(strings.ToLower(value))
+		if normalized == "" {
+			continue
+		}
+		assignments[key] = normalized
+	}
+	if len(assignments) == 0 {
+		return nil
+	}
+	return assignments
+}
+
+func mergeFacetAssignments(base map[string]string, extra map[string]string, file string, line int, result *Result) map[string]string {
+	if len(base) == 0 && len(extra) == 0 {
+		return nil
+	}
+
+	merged := make(map[string]string, len(base)+len(extra))
+	for key, value := range base {
+		merged[key] = value
+	}
+	for key, value := range extra {
+		if existing, ok := merged[key]; ok && existing != value {
+			addError(result, 4, "conflicting_facet_value", fmt.Sprintf("facet %q is already set to %q and cannot also be %q", key, existing, value), file, line)
+			continue
+		}
+		merged[key] = value
+	}
+	if len(merged) == 0 {
+		return nil
+	}
+	return merged
+}
+
+func containsFacetValue(values []string, candidate string) bool {
+	for _, value := range values {
+		if value == candidate {
+			return true
+		}
+	}
+	return false
 }
 
 func parseTagList(value string) []string {

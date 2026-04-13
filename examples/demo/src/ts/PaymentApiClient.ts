@@ -11,6 +11,7 @@ export class PaymentApiClient {}
  * @event.role listener
  * @event.domain billing
  * @event.consumer capture_payment
+ * @event.event.type async
  * @event.tags customer-facing
  */
 export function handleCapturePayment(): void {}
