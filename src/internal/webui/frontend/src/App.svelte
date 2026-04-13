@@ -40,6 +40,10 @@
   import ServiceNode from './lib/nodes/ServiceNode.svelte';
   import CanvasModal from './lib/ui/CanvasModal.svelte';
   import NodeInspector from './lib/ui/NodeInspector.svelte';
+  import ActionButton from './lib/ui/ActionButton.svelte';
+  import DisclosureButton from './lib/ui/DisclosureButton.svelte';
+  import IconButton from './lib/ui/IconButton.svelte';
+  import MenuOption from './lib/ui/MenuOption.svelte';
   import SettingsField from './lib/ui/SettingsField.svelte';
   import SettingsSection from './lib/ui/SettingsSection.svelte';
   import TokenBadge from './lib/ui/TokenBadge.svelte';
@@ -80,13 +84,16 @@
   const SETTINGS_STORAGE_KEY = 'mapture-explorer-settings';
   const FIT_VIEW_PADDING = 0.72;
   const defaultExplorerSettings: ExplorerSettings = {
-    version: 2,
+    version: 3,
     appearance: {
       themePreference: 'system',
     },
+    inspector: {
+      impactPreviewEnabled: false,
+      impactPreviewDefaultExpanded: false,
+    },
     experimental: {
       structureTools: false,
-      impactPreview: false,
     },
   };
 
@@ -423,15 +430,20 @@
         appearance?: { themePreference?: ThemePreference };
       };
       return {
-        version: 2,
+        version: 3,
         appearance: {
           themePreference: isThemePreference(parsed?.appearance?.themePreference)
             ? parsed.appearance.themePreference
             : 'system',
         },
+        inspector: {
+          impactPreviewEnabled:
+            parsed?.inspector?.impactPreviewEnabled === true
+            || parsed?.experimental?.impactPreview === true,
+          impactPreviewDefaultExpanded: parsed?.inspector?.impactPreviewDefaultExpanded === true,
+        },
         experimental: {
           structureTools: parsed?.experimental?.structureTools === true,
-          impactPreview: parsed?.experimental?.impactPreview === true,
         },
       };
     } catch {
@@ -657,11 +669,22 @@
       return;
     }
 
-    if (id === 'structureTools' || id === 'impactPreview') {
+    if (id === 'structureTools') {
       updateExplorerSettings({
         ...explorerSettings,
         experimental: {
           ...explorerSettings.experimental,
+          structureTools: value,
+        },
+      });
+      return;
+    }
+
+    if (id === 'impactPreviewEnabled' || id === 'impactPreviewDefaultExpanded') {
+      updateExplorerSettings({
+        ...explorerSettings,
+        inspector: {
+          ...explorerSettings.inspector,
           [id]: value,
         },
       });
@@ -690,6 +713,28 @@
         ],
       },
       {
+        id: 'inspector',
+        title: 'Inspector',
+        description: 'Control how node details and impact information open in the canvas inspector.',
+        fields: [
+          {
+            id: 'impactPreviewEnabled',
+            kind: 'toggle',
+            label: 'Impact preview',
+            description: 'Show the collapsible upstream and downstream impact section in the node inspector.',
+            value: settings.inspector.impactPreviewEnabled,
+          },
+          {
+            id: 'impactPreviewDefaultExpanded',
+            kind: 'toggle',
+            label: 'Open impact by default',
+            description: 'Start the impact section expanded when opening a node inspector.',
+            value: settings.inspector.impactPreviewDefaultExpanded,
+            disabled: !settings.inspector.impactPreviewEnabled,
+          },
+        ],
+      },
+      {
         id: 'experimental',
         title: 'Experimental',
         description: 'Hidden tools that need more iteration before they become default.',
@@ -700,14 +745,6 @@
             label: 'Structure tools',
             description: 'Compact boundary controls for cross-domain emphasis and contextual collapsing.',
             value: settings.experimental.structureTools,
-            badge: 'FT',
-          },
-          {
-            id: 'impactPreview',
-            kind: 'toggle',
-            label: 'Impact preview',
-            description: 'Shows upstream and downstream reach for the selected node.',
-            value: settings.experimental.impactPreview,
             badge: 'FT',
           },
         ],
@@ -1499,47 +1536,46 @@
 
     <div class="page-header__actions">
       {#if canAttachJSON}
-        <button
-          type="button"
-          class={['header-pill', 'status-pill', 'header-button', connectionTone()].join(' ')}
+        <ActionButton
+          className={['status-pill', 'header-button', connectionTone()].join(' ')}
           onclick={openAttachDialog}
         >
           <span class="status-dot"></span>
           {connectionLabel()}
-        </button>
+        </ActionButton>
       {:else}
         <span class={['header-pill', 'status-pill', connectionTone()].join(' ')}>
           <span class="status-dot"></span>
           {connectionLabel()}
         </span>
       {/if}
-      <a
-        class="header-pill header-link icon-pill"
+      <IconButton
+        className="header-link icon-pill"
         href={GITHUB_URL}
         target="_blank"
         rel="noreferrer"
-        aria-label="Open GitHub repository"
+        ariaLabel="Open GitHub repository"
         title="GitHub"
       >
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
           <path d="M9 19c-4 1.2-4-2.1-5.6-2.6M14.6 21v-3.1c0-1 .1-1.5-.4-2.1 2.3-.3 4.7-1.1 4.7-5a3.9 3.9 0 0 0-1-2.7 3.6 3.6 0 0 0-.1-2.7s-.9-.3-2.9 1a10.1 10.1 0 0 0-5.8 0c-2-1.3-2.9-1-2.9-1a3.6 3.6 0 0 0-.1 2.7 3.9 3.9 0 0 0-1 2.7c0 3.9 2.4 4.7 4.7 5-.5.6-.5 1.2-.4 2.1V21"></path>
         </svg>
         <span class="sr-only">GitHub</span>
-      </a>
+      </IconButton>
       <div class="header-control" data-interactive-root>
-        <button
-          type="button"
-          class={['header-pill', 'header-button', 'icon-pill', settingsOpen ? 'active' : ''].join(' ')}
+        <IconButton
+          className={['header-button', 'icon-pill', settingsOpen ? 'active' : ''].join(' ')}
           onclick={toggleSettingsPanel}
-          aria-label="Open explorer settings"
+          ariaLabel="Open explorer settings"
           title="Settings"
+          active={settingsOpen}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <path d="M10.3 3.3h3.4l.4 2a6.7 6.7 0 0 1 1.7.7l1.7-1 2.4 2.4-1 1.7c.3.5.5 1.1.7 1.7l2 .4v3.4l-2 .4a6.7 6.7 0 0 1-.7 1.7l1 1.7-2.4 2.4-1.7-1a6.7 6.7 0 0 1-1.7.7l-.4 2h-3.4l-.4-2a6.7 6.7 0 0 1-1.7-.7l-1.7 1-2.4-2.4 1-1.7a6.7 6.7 0 0 1-.7-1.7l-2-.4v-3.4l2-.4c.2-.6.4-1.2.7-1.7l-1-1.7L8 4.9l1.7 1c.5-.3 1.1-.5 1.7-.7l.4-2z"></path>
             <circle cx="12" cy="12" r="3.1"></circle>
           </svg>
           <span class="sr-only">Settings</span>
-        </button>
+        </IconButton>
       </div>
     </div>
   </header>
@@ -1629,14 +1665,14 @@
               {#if searchSuggestions.length > 0}
                 <div class="suggestion-strip">
                   {#each searchSuggestions as suggestion}
-                    <button type="button" class="suggestion-chip" onclick={() => applySearchSuggestion(suggestion)}>
+                    <ActionButton compact tone="subtle" className="suggestion-chip" onclick={() => applySearchSuggestion(suggestion)}>
                       {suggestion}
-                    </button>
+                    </ActionButton>
                   {/each}
                 </div>
               {/if}
-              <button type="button" class="mini-action" onclick={() => (filters = { ...filters, query: '' })}>Clear</button>
-              <button type="button" class="mini-action" onclick={resetFilters}>Reset filters</button>
+              <ActionButton compact tone="ghost" className="mini-action" onclick={() => (filters = { ...filters, query: '' })}>Clear</ActionButton>
+              <ActionButton compact tone="ghost" className="mini-action" onclick={resetFilters}>Reset filters</ActionButton>
             </div>
           {/if}
 
@@ -1644,7 +1680,7 @@
             <div class="toolbar-popover" data-interactive-root>
               <div class="popover-head">
                 <strong>Teams</strong>
-                <button type="button" class="mini-action" onclick={() => clearFilter('owners')}>Reset</button>
+                <ActionButton compact tone="ghost" className="mini-action" onclick={() => clearFilter('owners')}>Reset</ActionButton>
               </div>
               <div class="chip-list">
                 {#each model.owners as owner}
@@ -1666,7 +1702,7 @@
             <div class="toolbar-popover" data-interactive-root>
               <div class="popover-head">
                 <strong>Domains</strong>
-                <button type="button" class="mini-action" onclick={() => clearFilter('domains')}>Reset</button>
+                <ActionButton compact tone="ghost" className="mini-action" onclick={() => clearFilter('domains')}>Reset</ActionButton>
               </div>
               <div class="chip-list">
                 {#each model.domains as domain}
@@ -1688,7 +1724,7 @@
             <div class="toolbar-popover" data-interactive-root>
               <div class="popover-head">
                 <strong>Types</strong>
-                <button type="button" class="mini-action" onclick={() => clearFilter('nodeTypes')}>Reset</button>
+                <ActionButton compact tone="ghost" className="mini-action" onclick={() => clearFilter('nodeTypes')}>Reset</ActionButton>
               </div>
               <div class="chip-list">
                 {#each model.nodeTypes as nodeType}
@@ -1718,7 +1754,7 @@
                   onclick={() => removeBadge(badge)}
                 />
               {/each}
-              <button type="button" class="active-reset" onclick={resetFilters}>Reset filters</button>
+              <ActionButton className="active-reset" onclick={resetFilters}>Reset filters</ActionButton>
             </div>
           {/if}
         </div>
@@ -1727,69 +1763,51 @@
       <Panel position="top-right" class="canvas-control-shell">
         <div class="control-stack" data-interactive-root>
           <div class="control-picker">
-            <button
-              type="button"
-              class={['control-trigger', modeMenuOpen ? 'active' : ''].join(' ')}
+            <DisclosureButton
+              icon={activeViewOption.glyph}
+              title={activeViewOption.label}
+              summary={activeViewOption.summary}
+              open={modeMenuOpen}
+              className="control-trigger"
               onclick={toggleModeMenu}
-            >
-              <span class="control-trigger__icon" aria-hidden="true">{activeViewOption.glyph}</span>
-              <span class="control-trigger__copy">
-                <strong>{activeViewOption.label}</strong>
-                <small>{activeViewOption.summary}</small>
-              </span>
-              <span class={['control-trigger__caret', modeMenuOpen ? 'is-open' : ''].join(' ')} aria-hidden="true">
-                <svg viewBox="0 0 16 16" focusable="false">
-                  <path d="M4.5 6.25 8 9.75l3.5-3.5"></path>
-                </svg>
-              </span>
-            </button>
+            />
 
             {#if modeMenuOpen}
               <div class="control-menu">
                 <div class="control-menu__head">
                   <strong>View</strong>
-                  <button
-                    type="button"
-                    class="mini-action"
+                  <ActionButton
+                    compact
+                    tone="ghost"
+                    className="mini-action"
                     onclick={viewMode === 'workbench' ? resetLayout : refitCanvas}
                   >
                     {viewMode === 'workbench' ? 'Reset' : 'Refit'}
-                  </button>
+                  </ActionButton>
                 </div>
                 {#each viewModeOptions as option}
-                  <button
-                    type="button"
-                    class={['control-option', viewMode === option.value ? 'active' : ''].join(' ')}
+                  <MenuOption
+                    icon={option.glyph}
+                    title={option.label}
+                    description={option.summary}
+                    active={viewMode === option.value}
+                    className="control-option"
                     onclick={() => setViewMode(option.value)}
-                  >
-                    <span class="control-option__icon" aria-hidden="true">{option.glyph}</span>
-                    <span class="control-option__copy">
-                      <strong>{option.label}</strong>
-                      <small>{option.summary}</small>
-                    </span>
-                  </button>
+                  />
                 {/each}
               </div>
             {/if}
           </div>
 
           <div class="control-picker control-picker--density">
-            <button
-              type="button"
-              class={['control-trigger', 'control-trigger--density', densityMenuOpen ? 'active' : ''].join(' ')}
+            <DisclosureButton
+              icon={activeDensityOption.glyph}
+              title={activeDensityOption.label}
+              summary={activeDensityOption.summary}
+              open={densityMenuOpen}
+              className="control-trigger control-trigger--density"
               onclick={toggleDensityMenu}
-            >
-              <span class="control-trigger__icon" aria-hidden="true">{activeDensityOption.glyph}</span>
-              <span class="control-trigger__copy">
-                <strong>{activeDensityOption.label}</strong>
-                <small>{activeDensityOption.summary}</small>
-              </span>
-              <span class={['control-trigger__caret', densityMenuOpen ? 'is-open' : ''].join(' ')} aria-hidden="true">
-                <svg viewBox="0 0 16 16" focusable="false">
-                  <path d="M4.5 6.25 8 9.75l3.5-3.5"></path>
-                </svg>
-              </span>
-            </button>
+            />
 
             {#if densityMenuOpen}
               <div class="control-menu control-menu--density">
@@ -1797,17 +1815,14 @@
                   <strong>Density</strong>
                 </div>
                 {#each densityOptions as option}
-                  <button
-                    type="button"
-                    class={['control-option', densityMode === option.value ? 'active' : ''].join(' ')}
+                  <MenuOption
+                    icon={option.glyph}
+                    title={option.label}
+                    description={option.summary}
+                    active={densityMode === option.value}
+                    className="control-option"
                     onclick={() => setDensityMode(option.value)}
-                  >
-                    <span class="control-option__icon" aria-hidden="true">{option.glyph}</span>
-                    <span class="control-option__copy">
-                      <strong>{option.label}</strong>
-                      <small>{option.summary}</small>
-                    </span>
-                  </button>
+                  />
                 {/each}
               </div>
             {/if}
@@ -1815,80 +1830,60 @@
 
           {#if explorerSettings.experimental.structureTools}
             <div class="control-picker control-picker--structure">
-              <button
-                type="button"
-                class={['control-trigger', 'control-trigger--structure', activePopover === 'structure' ? 'active' : ''].join(' ')}
+              <DisclosureButton
+                icon={iconForKind('structure')}
+                title="Structure"
+                summary={filterCounts.structure > 0 ? `${filterCounts.structure} active` : 'Boundary tools'}
+                open={activePopover === 'structure'}
+                className="control-trigger control-trigger--structure"
                 onclick={() => togglePopover('structure')}
-              >
-                <span class="control-trigger__icon" aria-hidden="true">{iconForKind('structure')}</span>
-                <span class="control-trigger__copy">
-                  <strong>Structure</strong>
-                  <small>{filterCounts.structure > 0 ? `${filterCounts.structure} active` : 'Boundary tools'}</small>
-                </span>
-                <span class={['control-trigger__caret', activePopover === 'structure' ? 'is-open' : ''].join(' ')} aria-hidden="true">
-                  <svg viewBox="0 0 16 16" focusable="false">
-                    <path d="M4.5 6.25 8 9.75l3.5-3.5"></path>
-                  </svg>
-                </span>
-              </button>
+              />
 
               {#if activePopover === 'structure'}
                 <div class="control-menu control-menu--structure">
                   <div class="control-menu__head">
                     <strong>Structure</strong>
-                    <button type="button" class="mini-action" onclick={resetStructure}>Reset</button>
+                    <ActionButton compact tone="ghost" className="mini-action" onclick={resetStructure}>Reset</ActionButton>
                   </div>
 
-                  <button
-                    type="button"
-                    class={['control-option', boundaryFocus ? 'active' : ''].join(' ')}
+                  <MenuOption
+                    icon="BF"
+                    title="Boundary focus"
+                    description="Emphasize cross-domain traffic"
+                    active={boundaryFocus}
+                    className="control-option"
                     onclick={toggleBoundaryFocus}
-                  >
-                    <span class="control-option__icon" aria-hidden="true">BF</span>
-                    <span class="control-option__copy">
-                      <strong>Boundary focus</strong>
-                      <small>Emphasize cross-domain traffic</small>
-                    </span>
-                  </button>
+                  />
 
-                  <button
-                    type="button"
-                    class={['control-option', aggregateCrossDomain ? 'active' : ''].join(' ')}
+                  <MenuOption
+                    icon="AG"
+                    title="Summarize links"
+                    description="Aggregate cross-domain connections"
+                    active={aggregateCrossDomain}
+                    className="control-option"
                     onclick={toggleCrossDomainAggregation}
-                  >
-                    <span class="control-option__icon" aria-hidden="true">AG</span>
-                    <span class="control-option__copy">
-                      <strong>Summarize links</strong>
-                      <small>Aggregate cross-domain connections</small>
-                    </span>
-                  </button>
+                  />
 
                   {#if popupNode?.domain}
-                    <button
-                      type="button"
-                      class={['control-option', collapsedDomains.includes(popupNode.domain) ? 'active' : ''].join(' ')}
+                    <MenuOption
+                      icon="DM"
+                      title={collapsedDomains.includes(popupNode.domain) ? 'Expand domain' : 'Collapse domain'}
+                      description={domainName(model, popupNode.domain)}
+                      active={collapsedDomains.includes(popupNode.domain)}
+                      className="control-option"
                       onclick={togglePopupDomainCollapse}
-                    >
-                      <span class="control-option__icon" aria-hidden="true">DM</span>
-                      <span class="control-option__copy">
-                        <strong>{collapsedDomains.includes(popupNode.domain) ? 'Expand domain' : 'Collapse domain'}</strong>
-                        <small>{domainName(model, popupNode.domain)}</small>
-                      </span>
-                    </button>
+                    />
                   {/if}
 
                   {#if popupNode?.owner}
-                    <button
-                      type="button"
-                      class={['control-option', collapsedOwners.includes(popupNode.owner) ? 'active' : ''].join(' ')}
+                    <MenuOption
+                      icon="TM"
+                      title={collapsedOwners.includes(popupNode.owner) ? 'Expand team' : 'Collapse team'}
+                      description={teamName(model, popupNode.owner)}
+                      active={collapsedOwners.includes(popupNode.owner)}
+                      className="control-option"
                       onclick={togglePopupOwnerCollapse}
-                    >
-                      <span class="control-option__icon" aria-hidden="true">TM</span>
-                      <span class="control-option__copy">
-                        <strong>{collapsedOwners.includes(popupNode.owner) ? 'Expand team' : 'Collapse team'}</strong>
-                        <small>{teamName(model, popupNode.owner)}</small>
-                      </span>
-                    </button>
+                    />
                   {/if}
                 </div>
               {/if}
@@ -1911,7 +1906,8 @@
               compositionLabel={popupCompositionLabel(popupNode)}
               summary={popupNode.summary}
               preview={popupImpact}
-              impactEnabled={explorerSettings.experimental.impactPreview}
+              impactEnabled={explorerSettings.inspector.impactPreviewEnabled}
+              impactDefaultExpanded={explorerSettings.inspector.impactPreviewDefaultExpanded}
               actions={nodeInspectorActions}
               onaction={handleNodeInspectorAction}
               onclose={() => (selectedNodeId = null)}

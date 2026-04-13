@@ -265,13 +265,16 @@ export interface ImpactPreview {
 }
 
 export interface ExplorerSettings {
-  version: 2;
+  version: 3;
   appearance: {
     themePreference: ThemePreference;
   };
+  inspector: {
+    impactPreviewEnabled: boolean;
+    impactPreviewDefaultExpanded: boolean;
+  };
   experimental: {
     structureTools: boolean;
-    impactPreview: boolean;
   };
 }
 

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import IconButton from './IconButton.svelte';
+
   let {
     open = false,
     title = '',
@@ -41,9 +43,9 @@
             <p>{description}</p>
           {/if}
         </div>
-        <button type="button" class="canvas-modal__close" onclick={onclose} aria-label="Close dialog">
-          <span aria-hidden="true">x</span>
-        </button>
+        <IconButton className="canvas-modal__close" onclick={onclose} ariaLabel="Close dialog" subtle>
+          <span class="canvas-modal__close-mark" aria-hidden="true">x</span>
+        </IconButton>
       </header>
 
       <div class="canvas-modal__body">
@@ -107,16 +109,7 @@
     line-height: 1.5;
   }
 
-  .canvas-modal__close {
-    width: 2.2rem;
-    height: 2.2rem;
-    padding: 0;
-    border-radius: 999px;
-    box-shadow: none;
-    background: var(--surface-raised);
-  }
-
-  .canvas-modal__close span {
+  .canvas-modal__close-mark {
     font-size: 0.75rem;
     font-weight: 800;
     text-transform: uppercase;
