@@ -14,6 +14,7 @@
     ownerLabel,
     sourceLabel,
     tagLabel = '',
+    facetEntries = [],
     compositionLabel = '',
     summary = '',
     preview,
@@ -30,6 +31,7 @@
     ownerLabel: string;
     sourceLabel: string;
     tagLabel?: string;
+    facetEntries?: Array<{ label: string; value: string }>;
     compositionLabel?: string;
     summary?: string;
     preview: ImpactPreview;
@@ -131,6 +133,18 @@
       value={node.kind === 'node' ? sourceLabel : compositionLabel || 'n/a'}
     />
     <PropertyRow label="Tags" value={tagLabel || 'n/a'} />
+    {#if facetEntries.length > 0}
+      <PropertyRow label="Facets">
+        <div class="node-inspector__facets">
+          {#each facetEntries as entry}
+            <div class="node-inspector__facet-entry">
+              <span>{entry.label}</span>
+              <strong>{entry.value}</strong>
+            </div>
+          {/each}
+        </div>
+      </PropertyRow>
+    {/if}
   </dl>
 
   {#if impactEnabled}
@@ -328,6 +342,31 @@
     gap: 0.52rem;
     padding-top: 0.16rem;
     border-top: 1px solid color-mix(in srgb, var(--border-soft) 82%, transparent);
+  }
+
+  .node-inspector__facets {
+    display: grid;
+    gap: 0.38rem;
+  }
+
+  .node-inspector__facet-entry {
+    display: grid;
+    gap: 0.1rem;
+  }
+
+  .node-inspector__facet-entry span {
+    color: var(--text-tertiary);
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .node-inspector__facet-entry strong {
+    font-size: 0.78rem;
+    line-height: 1.4;
+    font-weight: 600;
+    color: var(--text-primary);
   }
 
   .node-inspector__impact-toggle {

@@ -34,6 +34,7 @@ package schema
 
 #ExportCatalog: close({
 	tags?:   [...#KebabID]
+	facets?: [#FacetID]: #FacetDefinition
 	teams:   [...#Team]
 	domains: [...#Domain]
 })
@@ -49,6 +50,7 @@ package schema
 	summary?: string
 	tags?: [...#KebabID]
 	effectiveTags?: [...#KebabID]
+	facets?: [#FacetID]: #KebabID
 })
 
 #JGFNode: close({

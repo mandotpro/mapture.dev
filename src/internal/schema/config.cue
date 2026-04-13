@@ -3,9 +3,15 @@ package schema
 #EventRole: "definition" | "trigger" | "listener" | "bridge-out" | "bridge-in" | "publisher" | "subscriber"
 
 #KebabID: =~"^[a-z0-9-]+$"
+#FacetID: =~"^[a-z0-9]+(?:-[a-z0-9]+)*(?:\\.[a-z0-9]+(?:-[a-z0-9]+)*)+$"
 #EventID: =~"^[a-z0-9]+(?:\\.[a-z0-9]+)+$"
 #Email:   =~"^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
 #HexColor: =~"^#[0-9a-fA-F]{6}$"
+
+#FacetDefinition: {
+	label:  string & != ""
+	values: [#KebabID, ...#KebabID]
+}
 
 #Config: {
 	version: 1
@@ -15,6 +21,7 @@ package schema
 	}
 
 	tags?: [...#KebabID]
+	facets?: [#FacetID]: #FacetDefinition
 	teams?: [...#Team]
 	domains?: [...#Domain]
 

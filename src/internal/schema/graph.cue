@@ -22,6 +22,7 @@ package schema
 	summary?: string
 	tags?: [...#KebabID]
 	effectiveTags?: [...#KebabID]
+	facets?: [#FacetID]: #KebabID
 })
 
 #GraphEdge: close({

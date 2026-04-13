@@ -10,6 +10,7 @@ export interface BackendGraphNode {
   summary?: string;
   tags?: string[];
   effectiveTags?: string[];
+  facets?: Record<string, string>;
 }
 
 export interface BackendGraphEdge {
@@ -76,8 +77,20 @@ export interface VisualizationMeta {
 
 export interface CatalogPayload {
   tags?: string[];
+  facets?: Record<string, FacetDefinition>;
   teams: CatalogTeam[];
   domains: CatalogDomain[];
+}
+
+export interface FacetDefinition {
+  label: string;
+  values: string[];
+}
+
+export interface FacetOption {
+  id: string;
+  label: string;
+  values: string[];
 }
 
 export interface ValidationPayload {
@@ -116,6 +129,7 @@ export interface GraphNode {
   summary: string;
   tags: string[];
   effectiveTags: string[];
+  facets: Record<string, string>;
 }
 
 export interface GraphEdge {
@@ -142,6 +156,7 @@ export interface GraphModel {
   edges: GraphEdge[];
   diagnostics: Diagnostic[];
   tags: string[];
+  facets: FacetOption[];
   domains: string[];
   owners: string[];
   nodeTypes: string[];
@@ -161,6 +176,7 @@ export interface GraphModel {
 export interface Filters {
   query: string;
   tags: string[];
+  facets: Record<string, string[]>;
   nodeTypes: string[];
   domains: string[];
   owners: string[];

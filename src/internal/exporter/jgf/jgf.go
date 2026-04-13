@@ -53,16 +53,17 @@ type Node struct {
 
 // NodeMetadata carries Mapture-specific node details inside JGF.
 type NodeMetadata struct {
-	ID            string   `json:"id"`
-	Type          string   `json:"type"`
-	Domain        string   `json:"domain,omitempty"`
-	Owner         string   `json:"owner,omitempty"`
-	File          string   `json:"file,omitempty"`
-	Line          int      `json:"line,omitempty"`
-	Symbol        string   `json:"symbol,omitempty"`
-	Summary       string   `json:"summary,omitempty"`
-	Tags          []string `json:"tags,omitempty"`
-	EffectiveTags []string `json:"effectiveTags,omitempty"`
+	ID            string            `json:"id"`
+	Type          string            `json:"type"`
+	Domain        string            `json:"domain,omitempty"`
+	Owner         string            `json:"owner,omitempty"`
+	File          string            `json:"file,omitempty"`
+	Line          int               `json:"line,omitempty"`
+	Symbol        string            `json:"symbol,omitempty"`
+	Summary       string            `json:"summary,omitempty"`
+	Tags          []string          `json:"tags,omitempty"`
+	EffectiveTags []string          `json:"effectiveTags,omitempty"`
+	Facets        map[string]string `json:"facets,omitempty"`
 }
 
 // Edge is a single directed JGF edge entry.
@@ -106,6 +107,7 @@ type Source struct {
 // Catalog contains the team/domain metadata needed by downstream tools.
 type Catalog struct {
 	Tags    []string         `json:"tags,omitempty"`
+	Facets  config.Facets    `json:"facets,omitempty"`
 	Teams   []catalog.Team   `json:"teams"`
 	Domains []catalog.Domain `json:"domains"`
 }
@@ -215,6 +217,7 @@ func Build(opts BuildOptions) (*Document, error) {
 				Summary:       node.Summary,
 				Tags:          append([]string(nil), node.Tags...),
 				EffectiveTags: append([]string(nil), node.EffectiveTags...),
+				Facets:        cloneFacetAssignments(node.Facets),
 			},
 		}
 	}
@@ -279,6 +282,7 @@ func Build(opts BuildOptions) (*Document, error) {
 					},
 					Catalog: Catalog{
 						Tags:    append([]string(nil), opts.Config.Tags...),
+						Facets:  cloneFacetDefinitions(opts.Config.Facets),
 						Teams:   teams,
 						Domains: domains,
 					},
@@ -300,6 +304,33 @@ func Build(opts BuildOptions) (*Document, error) {
 			},
 		},
 	}, nil
+}
+
+func cloneFacetAssignments(values map[string]string) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+
+	cloned := make(map[string]string, len(values))
+	for key, value := range values {
+		cloned[key] = value
+	}
+	return cloned
+}
+
+func cloneFacetDefinitions(facets config.Facets) config.Facets {
+	if len(facets) == 0 {
+		return nil
+	}
+
+	cloned := make(config.Facets, len(facets))
+	for id, definition := range facets {
+		cloned[id] = config.FacetDefinition{
+			Label:  definition.Label,
+			Values: append([]string(nil), definition.Values...),
+		}
+	}
+	return cloned
 }
 
 // BuildProject runs the config/catalog/scan/validate pipeline and returns a JGF export.

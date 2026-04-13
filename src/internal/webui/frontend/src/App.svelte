@@ -51,6 +51,7 @@
     ExplorerSettings,
     DensityMode,
     Filters,
+    FacetOption,
     GraphModel,
     ImpactPreview,
     NodeInspectorAction,
@@ -64,18 +65,19 @@
     WindowWithPayload,
   } from './lib/types';
 
-  type PopoverKind = 'search' | 'structure' | 'owners' | 'domains' | 'tags' | 'nodeTypes' | null;
+  type PopoverKind = 'search' | 'structure' | 'owners' | 'domains' | 'tags' | 'nodeTypes' | `facet:${string}` | null;
   type ManualPositions = Record<string, { x: number; y: number }>;
   type PersistedLayoutState = {
     version: 1;
     manualPositions: ManualPositions;
   };
   type ActiveFilterBadge = {
-    kind: 'query' | 'owners' | 'domains' | 'tags' | 'nodeTypes';
+    kind: 'query' | 'owners' | 'domains' | 'tags' | 'nodeTypes' | 'facet';
     value: string;
     label: string;
     icon: string;
     tone: string;
+    facetId?: string;
   };
   type BootSourceKind = 'injected' | 'query' | 'api' | 'bundle' | 'file' | 'none';
 
@@ -102,6 +104,7 @@
     edges: [],
     diagnostics: [],
     tags: [],
+    facets: [],
     domains: [],
     owners: [],
     nodeTypes: [],
@@ -202,6 +205,7 @@
   let filters = $state.raw<Filters>({
     query: '',
     tags: [],
+    facets: {},
     nodeTypes: [],
     domains: [],
     owners: [],
@@ -233,6 +237,12 @@
   const visibleOwnerCounts = $derived(countBy(presentedGraph.nodes, (node) => node.owner));
   const visibleDomainCounts = $derived(countBy(presentedGraph.nodes, (node) => node.domain));
   const visibleTagCounts = $derived(countMany(baseVisibleNodes, (node) => node.effectiveTags));
+  const visibleFacetCounts = $derived(countFacetValues(baseVisibleNodes, model.facets));
+  const activeFacetDefinition = $derived(
+    isFacetKind(activePopover)
+      ? model.facets.find((facet) => facet.id === facetIDFromKind(activePopover))
+      : null,
+  );
   const searchSuggestions = $derived(buildSearchSuggestions(model, filters.query));
   const popupImpact = $derived(buildImpactPreview(presentedGraph, popupNode?.id ?? null));
   const resolvedTheme = $derived<ResolvedTheme>(
@@ -251,6 +261,7 @@
     domains: filters.domains.length,
     tags: filters.tags.length,
     nodeTypes: filters.nodeTypes.length,
+    facets: Object.values(filters.facets).reduce((total, values) => total + values.length, 0),
   });
   const reservedCanvasInsets = $derived({
     top: Math.ceil(toolbarSize.height + 72),
@@ -569,6 +580,7 @@
     filters = {
       query: '',
       tags: [],
+      facets: {},
       nodeTypes: [],
       domains: [],
       owners: [],
@@ -638,10 +650,26 @@
     };
   }
 
+  function clearFacetFilter(facetID: string): void {
+    filters = {
+      ...filters,
+      facets: {
+        ...filters.facets,
+        [facetID]: [],
+      },
+    };
+  }
+
   function visibleRailKinds(): Array<Exclude<PopoverKind, null>> {
     const kinds: Array<Exclude<PopoverKind, null>> = ['search', 'owners', 'domains'];
     if (model.tags.length > 0) {
       kinds.push('tags');
+    }
+    for (const facet of model.facets) {
+      const counts = visibleFacetCounts[facet.id] ?? {};
+      if (Object.values(counts).some((count) => count > 0)) {
+        kinds.push(facetKind(facet.id));
+      }
     }
     kinds.push('nodeTypes');
     return kinds;
@@ -847,6 +875,22 @@
     };
   }
 
+  function toggleFacetFilter(facetID: string, value: string): void {
+    const next = new Set(filters.facets[facetID] ?? []);
+    if (next.has(value)) {
+      next.delete(value);
+    } else {
+      next.add(value);
+    }
+    filters = {
+      ...filters,
+      facets: {
+        ...filters.facets,
+        [facetID]: Array.from(next).sort((left, right) => left.localeCompare(right)),
+      },
+    };
+  }
+
   function removeBadge(badge: ActiveFilterBadge): void {
     if (badge.kind === 'query') {
       filters = {
@@ -876,6 +920,17 @@
       filters = {
         ...filters,
         tags: filters.tags.filter((tag) => tag !== badge.value),
+      };
+      return;
+    }
+
+    if (badge.kind === 'facet' && badge.facetId) {
+      filters = {
+        ...filters,
+        facets: {
+          ...filters.facets,
+          [badge.facetId]: (filters.facets[badge.facetId] ?? []).filter((value) => value !== badge.value),
+        },
       };
       return;
     }
@@ -1058,6 +1113,23 @@
     }, {});
   }
 
+  function countFacetValues(
+    items: Array<{ facets: Record<string, string> }>,
+    facetDefinitions: FacetOption[],
+  ): Record<string, Record<string, number>> {
+    return facetDefinitions.reduce<Record<string, Record<string, number>>>((result, facet) => {
+      result[facet.id] = items.reduce<Record<string, number>>((counts, item) => {
+        const value = item.facets[facet.id];
+        if (!value) {
+          return counts;
+        }
+        counts[value] = (counts[value] ?? 0) + 1;
+        return counts;
+      }, {});
+      return result;
+    }, {});
+  }
+
   function buildActiveFilterBadges(currentModel: GraphModel, currentFilters: Filters): ActiveFilterBadge[] {
     const badges: ActiveFilterBadge[] = [];
     if (currentFilters.query) {
@@ -1096,6 +1168,18 @@
         tone: accentForKind(currentModel, 'tags'),
       });
     }
+    for (const facet of currentModel.facets) {
+      for (const value of currentFilters.facets[facet.id] ?? []) {
+        badges.push({
+          kind: 'facet',
+          facetId: facet.id,
+          value,
+          label: `${facet.label}: ${value}`,
+          icon: iconForKind(facetKind(facet.id)),
+          tone: accentForKind(currentModel, facetKind(facet.id)),
+        });
+      }
+    }
     for (const nodeType of currentFilters.nodeTypes) {
       badges.push({
         kind: 'nodeTypes',
@@ -1109,6 +1193,9 @@
   }
 
   function railButtonLabel(kind: Exclude<PopoverKind, null>): string {
+    if (isFacetKind(kind)) {
+      return facetLabel(model, facetIDFromKind(kind));
+    }
     const labels: Record<Exclude<PopoverKind, null>, string> = {
       search: 'Search',
       structure: 'Structure',
@@ -1117,10 +1204,13 @@
       tags: 'Tags',
       nodeTypes: 'Types',
     };
-    return labels[kind];
+    return labels[kind as Exclude<typeof kind, `facet:${string}`>];
   }
 
   function popoverCount(kind: Exclude<PopoverKind, null>): number {
+    if (isFacetKind(kind)) {
+      return (filters.facets[facetIDFromKind(kind)] ?? []).length;
+    }
     if (kind === 'search') {
       return filterCounts.query;
     }
@@ -1147,6 +1237,9 @@
     kind: ActiveFilterBadge['kind'] | Exclude<PopoverKind, null>,
     value?: string,
   ): string {
+    if (kind === 'facet' || isFacetKind(kind)) {
+      return facetGlyph(kind === 'facet' ? (value ?? '') : facetIDFromKind(kind));
+    }
     if (kind === 'query' || kind === 'search') {
       return 'Q';
     }
@@ -1156,11 +1249,11 @@
     if (kind === 'domains') {
       return 'D';
     }
-    if (kind === 'tags') {
-      return 'TG';
-    }
     if (kind === 'structure') {
       return 'ST';
+    }
+    if (kind === 'tags') {
+      return 'TG';
     }
     const nodeTypeIcons: Record<string, string> = {
       service: 'S',
@@ -1176,6 +1269,9 @@
     kind: ActiveFilterBadge['kind'] | Exclude<PopoverKind, null>,
     value?: string,
   ): string {
+    if (kind === 'facet' || isFacetKind(kind)) {
+      return facetAccent(currentModel, kind === 'facet' ? (value ?? '') : facetIDFromKind(kind));
+    }
     if (kind === 'query' || kind === 'search') {
       return '#667076';
     }
@@ -1448,6 +1544,52 @@
 
   function popupTagLabel(node: PresentedNode): string {
     return node.effectiveTags.length > 0 ? node.effectiveTags.join(' · ') : 'n/a';
+  }
+
+  function popupFacetEntries(node: PresentedNode): Array<{ label: string; value: string }> {
+    return model.facets
+      .filter((facet) => node.facets[facet.id])
+      .map((facet) => ({
+        label: facet.label,
+        value: node.facets[facet.id],
+      }));
+  }
+
+  function isFacetKind(kind: PopoverKind): kind is `facet:${string}` {
+    return typeof kind === 'string' && kind.startsWith('facet:');
+  }
+
+  function facetKind(facetID: string): `facet:${string}` {
+    return `facet:${facetID}`;
+  }
+
+  function facetIDFromKind(kind: `facet:${string}`): string {
+    return kind.slice('facet:'.length);
+  }
+
+  function facetLabel(currentModel: GraphModel, facetID: string): string {
+    return currentModel.facets.find((facet) => facet.id === facetID)?.label ?? facetID;
+  }
+
+  function facetGlyph(facetID: string): string {
+    return facetID
+      .split('.')
+      .slice(0, 2)
+      .map((segment) => segment[0]?.toUpperCase() ?? '')
+      .join('') || 'FC';
+  }
+
+  function facetAccent(currentModel: GraphModel, facetID: string): string {
+    if (facetID.startsWith('event.')) {
+      return nodeColor(currentModel, 'event');
+    }
+    if (facetID.startsWith('db.')) {
+      return nodeColor(currentModel, 'database');
+    }
+    if (facetID.startsWith('api.')) {
+      return nodeColor(currentModel, 'api');
+    }
+    return '#7a6b4d';
   }
 
   function toggleValue(values: string[], value: string): string[] {
@@ -1787,6 +1929,28 @@
             </div>
           {/if}
 
+          {#if activeFacetDefinition}
+            <div class="toolbar-popover" data-interactive-root>
+              <div class="popover-head">
+                <strong>{activeFacetDefinition.label}</strong>
+                <ActionButton compact tone="ghost" className="mini-action" onclick={() => clearFacetFilter(activeFacetDefinition.id)}>Reset</ActionButton>
+              </div>
+              <div class="chip-list">
+                {#each activeFacetDefinition.values.filter((value) => (visibleFacetCounts[activeFacetDefinition.id]?.[value] ?? 0) > 0) as value}
+                  <TokenBadge
+                    label={value}
+                    icon={iconForKind(facetKind(activeFacetDefinition.id))}
+                    count={visibleFacetCounts[activeFacetDefinition.id]?.[value] ?? 0}
+                    accent={accentForKind(model, facetKind(activeFacetDefinition.id))}
+                    active={(filters.facets[activeFacetDefinition.id] ?? []).includes(value)}
+                    className="filter-chip filter-chip--facet"
+                    onclick={() => toggleFacetFilter(activeFacetDefinition.id, value)}
+                  />
+                {/each}
+              </div>
+            </div>
+          {/if}
+
           {#if activePopover === 'nodeTypes'}
             <div class="toolbar-popover" data-interactive-root>
               <div class="popover-head">
@@ -1970,6 +2134,7 @@
               ownerLabel={popupNode.owner ? teamName(model, popupNode.owner) : 'n/a'}
               sourceLabel={popupSourceLabel(popupNode)}
               tagLabel={popupTagLabel(popupNode)}
+              facetEntries={popupFacetEntries(popupNode)}
               compositionLabel={popupCompositionLabel(popupNode)}
               summary={popupNode.summary}
               preview={popupImpact}

@@ -28,7 +28,10 @@
           "effectiveTags": [
             "critical-path",
             "customer-facing"
-          ]
+          ],
+          "facets": {
+            "db.type": "tenant"
+          }
         }
       },
       "event:order.placed": {
@@ -48,7 +51,10 @@
             "critical-path",
             "customer-facing",
             "pci"
-          ]
+          ],
+          "facets": {
+            "event.type": "async"
+          }
         }
       },
       "service:checkout-service": {
@@ -125,6 +131,24 @@
             "customer-facing",
             "pci"
           ],
+          "facets": {
+            "db.type": {
+              "label": "Database Type",
+              "values": [
+                "tenant",
+                "shared"
+              ]
+            },
+            "event.type": {
+              "label": "Event Type",
+              "values": [
+                "sync",
+                "async",
+                "queue",
+                "event-bus"
+              ]
+            }
+          },
           "teams": [
             {
               "id": "team-billing",

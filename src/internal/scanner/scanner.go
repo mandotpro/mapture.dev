@@ -17,15 +17,16 @@ import (
 )
 
 var (
-	tagPattern     = regexp.MustCompile(`^@(arch|event)\.([a-z_]+)\s+(.+?)\s*$`)
-	nodeIDPattern  = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
-	dotIDPattern   = regexp.MustCompile(`^[a-z0-9]+(?:[.-][a-z0-9]+)*$`)
-	allowedArch    = map[string]struct{}{"node": {}, "name": {}, "domain": {}, "owner": {}, "description": {}, "version": {}, "tags": {}, "status": {}, "calls": {}, "depends_on": {}, "stores_in": {}, "reads_from": {}}
-	allowedEvent   = map[string]struct{}{"id": {}, "role": {}, "domain": {}, "owner": {}, "phase": {}, "topic": {}, "version": {}, "notes": {}, "producer": {}, "consumer": {}, "tags": {}}
-	repeatableArch = map[string]struct{}{"calls": {}, "depends_on": {}, "stores_in": {}, "reads_from": {}}
-	archStatuses   = map[string]struct{}{"active": {}, "deprecated": {}, "experimental": {}}
-	eventRoles     = map[string]struct{}{"definition": {}, "trigger": {}, "listener": {}, "bridge-out": {}, "bridge-in": {}, "publisher": {}, "subscriber": {}}
-	eventPhases    = map[string]struct{}{"pre-commit": {}, "post-commit": {}, "async": {}, "integration": {}}
+	tagPattern      = regexp.MustCompile(`^@(arch|event)\.([a-z_]+(?:\.[a-z0-9]+(?:-[a-z0-9]+)*)*)\s+(.+?)\s*$`)
+	facetKeyPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*(?:\.[a-z0-9]+(?:-[a-z0-9]+)*)+$`)
+	nodeIDPattern   = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
+	dotIDPattern    = regexp.MustCompile(`^[a-z0-9]+(?:[.-][a-z0-9]+)*$`)
+	allowedArch     = map[string]struct{}{"node": {}, "name": {}, "domain": {}, "owner": {}, "description": {}, "version": {}, "tags": {}, "status": {}, "calls": {}, "depends_on": {}, "stores_in": {}, "reads_from": {}}
+	allowedEvent    = map[string]struct{}{"id": {}, "role": {}, "domain": {}, "owner": {}, "phase": {}, "topic": {}, "version": {}, "notes": {}, "producer": {}, "consumer": {}, "tags": {}}
+	repeatableArch  = map[string]struct{}{"calls": {}, "depends_on": {}, "stores_in": {}, "reads_from": {}}
+	archStatuses    = map[string]struct{}{"active": {}, "deprecated": {}, "experimental": {}}
+	eventRoles      = map[string]struct{}{"definition": {}, "trigger": {}, "listener": {}, "bridge-out": {}, "bridge-in": {}, "publisher": {}, "subscriber": {}}
+	eventPhases     = map[string]struct{}{"pre-commit": {}, "post-commit": {}, "async": {}, "integration": {}}
 )
 
 var languageExtensions = map[string][]string{
@@ -412,7 +413,7 @@ func (a *blockAccumulator) add(key, value string) error {
 	if a.namespace == "arch" {
 		allowed = allowedArch
 	}
-	if _, ok := allowed[key]; !ok {
+	if _, ok := allowed[key]; !ok && !isFacetKey(key) {
 		return &ParseError{File: a.file, Line: a.line, Namespace: a.namespace, Key: key, Message: "unknown tag key"}
 	}
 
@@ -433,6 +434,10 @@ func (a *blockAccumulator) add(key, value string) error {
 	a.seen[key] = struct{}{}
 	a.fields[key] = value
 	return nil
+}
+
+func isFacetKey(key string) bool {
+	return facetKeyPattern.MatchString(key)
 }
 
 func (a *blockAccumulator) finish() (RawBlock, error) {

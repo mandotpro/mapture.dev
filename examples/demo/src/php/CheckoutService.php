@@ -21,6 +21,7 @@ final class CheckoutService
          * @event.owner team-commerce
          * @event.producer App\Orders\CheckoutService::placeOrder
          * @event.phase post-commit
+         * @event.event.type async
          * @event.tags pci
          */
         // $bus->dispatch(new OrderPlaced($orderId));
