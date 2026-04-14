@@ -30,6 +30,15 @@ Then open the local explorer and inspect the bundled example graph.
 For the repo’s day-to-day wrappers and testing helpers, run `make help`.
 Release packaging and distribution scripts live under `scripts/release/`.
 
+For local development:
+
+```bash
+make build
+make serve ecommerce
+```
+
+`make build` refreshes the embedded web bundle automatically when the frontend is stale. `make serve <fixture>` always rebuilds the embedded web bundle first, then rebuilds the binary, so the local explorer reflects the latest frontend and backend changes. Use `make web` only when you want a frontend-only rebuild.
+
 Once installed, `mapture --help` and `mapture --version` show the current version, detected release channel, install source, and whether a newer build is available for that channel.
 
 ## Install
