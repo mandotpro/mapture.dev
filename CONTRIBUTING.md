@@ -24,6 +24,8 @@ Common commands:
 make help
 make test
 make lint
+make build
+make serve ecommerce
 make web
 make audit-public
 go run src/main.go --help
@@ -37,9 +39,12 @@ Useful fixture commands:
 ```bash
 make validate demo
 make scan ecommerce
-make graph migration
+make export-json-graph migration
+make export-json-visualisation migration
 make serve ecommerce
 ```
+
+`make build` auto-refreshes the embedded web bundle when the frontend sources are newer than `src/internal/webui/dist/`. `make serve <fixture>` always rebuilds the embedded web bundle first, then rebuilds the binary, so local explorer testing always uses the latest app state. Use `make web` when you want an explicit frontend-only rebuild without building a binary.
 
 ## Frontend changes
 

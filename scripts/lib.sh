@@ -53,6 +53,14 @@ root_dir() {
   cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd
 }
 
+web_frontend_dir() {
+  printf '%s/src/internal/webui/frontend\n' "$(root_dir)"
+}
+
+web_dist_dir() {
+  printf '%s/src/internal/webui/dist\n' "$(root_dir)"
+}
+
 testing_dir() {
   printf '%s/testing\n' "$(root_dir)"
 }
@@ -124,6 +132,78 @@ build_binary() {
     -ldflags "-X github.com/mandotpro/mapture.dev/src/cmd.version=$version" \
     -o "$output" \
     "$repo/cmd/mapture"
+}
+
+binary_version_line() {
+  local binary="$1"
+  "$binary" --version 2>/dev/null | sed -n '1p'
+}
+
+print_binary_summary() {
+  local label="$1"
+  local binary="$2"
+  local version_line
+
+  version_line="$(binary_version_line "$binary")"
+
+  printf '%s\n' "$(mapture_success "$label ready")"
+  printf '  %s %s\n' "$(mapture_accent "binary")" "$(mapture_muted "$binary")"
+  if [[ -n "$version_line" ]]; then
+    printf '  %s %s\n' "$(mapture_accent "version")" "$(mapture_muted "$version_line")"
+  fi
+}
+
+embedded_web_bundle_current() {
+  local frontend_dir dist_dir marker source
+
+  frontend_dir="$(web_frontend_dir)"
+  dist_dir="$(web_dist_dir)"
+  marker="$dist_dir/app.js"
+
+  [[ -f "$dist_dir/index.html" ]] || return 1
+  [[ -f "$dist_dir/styles.css" ]] || return 1
+  [[ -f "$marker" ]] || return 1
+
+  for source in \
+    "$frontend_dir/index.html" \
+    "$frontend_dir/package.json" \
+    "$frontend_dir/package-lock.json" \
+    "$frontend_dir/vite.config.ts"; do
+    [[ ! -e "$source" || "$source" -ot "$marker" ]] || return 1
+  done
+
+  if find "$frontend_dir/src" -type f -newer "$marker" | grep -q .; then
+    return 1
+  fi
+
+  return 0
+}
+
+ensure_embedded_web_bundle() {
+  local repo
+  repo="$(root_dir)"
+
+  if embedded_web_bundle_current; then
+    printf '%s\n' "$(mapture_success "embedded web bundle is current")"
+    return 0
+  fi
+
+  printf '%s\n' "$(mapture_warning "embedded web bundle is stale; rebuilding")"
+  (
+    cd "$repo"
+    go run ./scripts/build-web
+  )
+}
+
+rebuild_embedded_web_bundle() {
+  local repo
+  repo="$(root_dir)"
+
+  printf '%s\n' "$(mapture_warning "rebuilding embedded web bundle")"
+  (
+    cd "$repo"
+    go run ./scripts/build-web
+  )
 }
 
 sha256_file() {

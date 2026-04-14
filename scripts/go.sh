@@ -66,6 +66,16 @@ fixture_output() {
   printf '%s/%s.%s\n' "$OUTPUTS_DIR" "$fixture" "$kind"
 }
 
+ensure_testing_binary() {
+  local command="${1:-}"
+  if [[ "$command" == "serve" ]]; then
+    rebuild_embedded_web_bundle
+  else
+    ensure_embedded_web_bundle
+  fi
+  build_binary "$BIN"
+}
+
 sync_example_fixtures() {
   local requested="${1:-all}"
   local fixture source target
@@ -90,16 +100,18 @@ run_for_all_examples() {
   shift || true
 
   case "$command" in
-    validate|scan|graph)
+    validate|scan|export-json-graph|export-json-visualisation)
       ;;
     *)
       printf '%s\n' "$(mapture_error "unsupported all-fixtures command: $command")" >&2
-      printf '%s\n' "$(mapture_muted "supported commands: validate scan graph")" >&2
+      printf '%s\n' "$(mapture_muted "supported commands: validate scan export-json-graph export-json-visualisation")" >&2
       exit 1
       ;;
   esac
 
-  local fixture
+  ensure_testing_binary "$command"
+
+  local fixture target output
   while IFS= read -r fixture; do
     printf '%s\n' "$(mapture_strong "== $fixture ($command) ==")"
     case "$command" in
@@ -107,10 +119,22 @@ run_for_all_examples() {
         "$BIN" validate "$(fixture_path "$fixture")" "$@"
         ;;
       scan)
-        run_scan "$fixture"
+        target="$(fixture_path "$fixture")"
+        output="$(fixture_output "$fixture" "scan.json")"
+        "$BIN" scan "$target" >"$output"
+        printf '%s\n' "$(mapture_success "wrote $(mapture_muted "$output")")"
         ;;
-      graph)
-        run_graph "$fixture"
+      export-json-graph)
+        target="$(fixture_path "$fixture")"
+        output="$(fixture_output "$fixture" "graph.json")"
+        "$BIN" export-json-graph "$target" -o "$output"
+        printf '%s\n' "$(mapture_success "wrote $(mapture_muted "$output")")"
+        ;;
+      export-json-visualisation)
+        target="$(fixture_path "$fixture")"
+        output="$(fixture_output "$fixture" "visualisation.json")"
+        "$BIN" export-json-visualisation "$target" -o "$output"
+        printf '%s\n' "$(mapture_success "wrote $(mapture_muted "$output")")"
         ;;
     esac
   done < <(example_fixture_names)
@@ -145,17 +169,18 @@ serve_port() {
 show_help() {
   local fixture
   mapture_print_section "Repo Development Commands"
-  mapture_print_kv "./scripts/go.sh build" "Build the testing binary under $(mapture_muted "$BIN")"
+  mapture_print_kv "./scripts/go.sh build" "Build the latest local app into $(mapture_muted "$BIN")"
   mapture_print_kv "./scripts/go.sh init" "Run init against the testing playground"
 
   mapture_print_section "Repo Verification Commands"
   mapture_print_kv "./scripts/go.sh validate <fixture|all>" "Validate one fixture or every example fixture"
   mapture_print_kv "./scripts/go.sh scan <fixture|all>" "Write normalized scan output into $(mapture_muted "$OUTPUTS_DIR")"
-  mapture_print_kv "./scripts/go.sh graph <fixture|all>" "Write Mermaid output into $(mapture_muted "$OUTPUTS_DIR")"
+  mapture_print_kv "./scripts/go.sh export-json-graph <fixture|all>" "Write JGF output into $(mapture_muted "$OUTPUTS_DIR")"
+  mapture_print_kv "./scripts/go.sh export-json-visualisation <fixture|all>" "Write explorer JSON into $(mapture_muted "$OUTPUTS_DIR")"
 
   mapture_print_section "Local Verification With Fixtures"
   mapture_print_kv "./scripts/go.sh fixtures" "List known fixtures"
-  mapture_print_kv "./scripts/go.sh serve <fixture>" "Run the local explorer for a fixture"
+  mapture_print_kv "./scripts/go.sh serve <fixture>" "Run the latest local explorer for a fixture"
   mapture_print_kv "./scripts/go.sh fixture <fixture> <command>" "Run any CLI command against a fixture path"
 
   mapture_print_section "Paths"
@@ -176,7 +201,7 @@ run_validate() {
   if run_across_examples_if_needed validate "$fixture"; then
     return
   fi
-  build_binary "$BIN"
+  ensure_testing_binary validate
   exec "$BIN" validate "$(fixture_path "$fixture")"
 }
 
@@ -185,7 +210,7 @@ run_scan() {
   if run_across_examples_if_needed scan "$fixture"; then
     return
   fi
-  build_binary "$BIN"
+  ensure_testing_binary scan
   local target output
   target="$(fixture_path "$fixture")"
   output="$(fixture_output "$fixture" "scan.json")"
@@ -193,16 +218,29 @@ run_scan() {
   printf '%s\n' "$(mapture_success "wrote $(mapture_muted "$output")")"
 }
 
-run_graph() {
+run_export_json_graph() {
   local fixture="$1"
-  if run_across_examples_if_needed graph "$fixture"; then
+  if run_across_examples_if_needed export-json-graph "$fixture"; then
     return
   fi
-  build_binary "$BIN"
+  ensure_testing_binary export-json-graph
   local target output
   target="$(fixture_path "$fixture")"
-  output="$(fixture_output "$fixture" "mmd")"
-  "$BIN" graph "$target" -o "$output"
+  output="$(fixture_output "$fixture" "graph.json")"
+  "$BIN" export-json-graph "$target" -o "$output"
+  printf '%s\n' "$(mapture_success "wrote $(mapture_muted "$output")")"
+}
+
+run_export_json_visualisation() {
+  local fixture="$1"
+  if run_across_examples_if_needed export-json-visualisation "$fixture"; then
+    return
+  fi
+  ensure_testing_binary export-json-visualisation
+  local target output
+  target="$(fixture_path "$fixture")"
+  output="$(fixture_output "$fixture" "visualisation.json")"
+  "$BIN" export-json-visualisation "$target" -o "$output"
   printf '%s\n' "$(mapture_success "wrote $(mapture_muted "$output")")"
 }
 
@@ -212,10 +250,13 @@ run_serve() {
     printf '%s\n' "$(mapture_error 'serve does not support fixture "all"; choose one fixture')" >&2
     exit 1
   fi
-  build_binary "$BIN"
+  ensure_testing_binary serve
   local target addr
   target="$(fixture_path "$fixture")"
   addr="$(serve_port "$fixture")"
+  print_binary_summary "local testing binary" "$BIN"
+  printf '  %s %s\n' "$(mapture_accent "fixture")" "$(mapture_muted "$target")"
+  printf '  %s %s\n' "$(mapture_accent "serve")" "$(mapture_muted "http://$addr")"
   exec "$BIN" serve "$target" --addr "$addr" --open
 }
 
@@ -236,11 +277,14 @@ case "$1" in
     fixture_path "${1:-demo}"
     ;;
   build)
-    build_binary "$BIN"
-    printf '%s\n' "$(mapture_success "built $(mapture_muted "$BIN")")"
+    mapture_print_section "Testing Build"
+    ensure_testing_binary serve
+    print_binary_summary "testing build" "$BIN"
+    printf '%s\n' "$(mapture_success "build complete")"
     ;;
   init)
     shift
+    ensure_testing_binary init
     exec "$BIN" init "${1:-$PLAYGROUND_DIR}"
     ;;
   validate)
@@ -251,9 +295,13 @@ case "$1" in
     shift
     run_scan "${1:-demo}"
     ;;
-  graph)
+  export-json-graph)
     shift
-    run_graph "${1:-demo}"
+    run_export_json_graph "${1:-demo}"
+    ;;
+  export-json-visualisation)
+    shift
+    run_export_json_visualisation "${1:-demo}"
     ;;
   serve)
     shift
@@ -269,10 +317,12 @@ case "$1" in
     fi
     shift
     shift || true
+    ensure_testing_binary "$command"
     exec "$BIN" "$command" "$(fixture_path "$fixture")" "$@"
     ;;
   run)
     shift
+    ensure_testing_binary "${1:-}"
     exec "$BIN" "$@"
     ;;
   demo|ecommerce|migration|playground)
@@ -281,6 +331,7 @@ case "$1" in
     if [[ $# -eq 0 ]]; then
       set -- validate
     fi
+    ensure_testing_binary "${1:-validate}"
     exec "$BIN" "$1" "$(fixture_path "$fixture")" "${@:2}"
     ;;
   *)

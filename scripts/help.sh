@@ -14,8 +14,8 @@ print_help() {
   mapture_print_kv "install-dev-tools" "Install local Go dev tools into testing/tools/bin"
   mapture_print_kv "install-git-hooks" "Configure git to use the repo-managed hooks"
   mapture_print_kv "init-hooks" "Configure git to use the repo-managed hooks"
-  mapture_print_kv "build" "Build the local mapture binary into build/"
-  mapture_print_kv "web" "Rebuild the frontend bundle under src/internal/webui/dist/"
+  mapture_print_kv "build" "Build the latest local mapture binary into build/"
+  mapture_print_kv "web" "Rebuild only the frontend bundle under src/internal/webui/dist/"
 
   mapture_print_section "Repo Verification Commands"
   mapture_print_kv "test-go" "Run Go tests through gotestsum"
@@ -32,10 +32,11 @@ print_help() {
   mapture_print_kv "testing-build" "Build the current source into testing/bin/mapture"
   mapture_print_kv "testing-init" "Run init against testing/playground"
   mapture_print_kv "playground-init" "Run init against the gitignored testing playground"
-  mapture_print_kv "validate" "Validate a fixture: make validate FIXTURE=<fixture|all>"
+  mapture_print_kv "validate" "Validate a fixture: make validate ecommerce or FIXTURE=ecommerce"
   mapture_print_kv "scan" "Scan a fixture: make scan FIXTURE=<fixture|all>"
-  mapture_print_kv "graph" "Export Mermaid for a fixture: make graph FIXTURE=<fixture|all>"
-  mapture_print_kv "serve" "Run the local server against a fixture: make serve FIXTURE=<fixture>"
+  mapture_print_kv "export-json-graph" "Export JGF for a fixture: make export-json-graph FIXTURE=<fixture|all>"
+  mapture_print_kv "export-json-visualisation" "Export explorer JSON: make export-json-visualisation FIXTURE=<fixture|all>"
+  mapture_print_kv "serve" "Always rebuild UI+binary, then run: make serve ecommerce or FIXTURE=ecommerce"
   mapture_print_kv "run" "Run any CLI command for a fixture: make run FIXTURE=<fixture> CMD=<cli-command>"
 
   mapture_print_section "Fixtures"
@@ -46,9 +47,9 @@ print_help() {
 
   mapture_print_section "Fixture Aliases"
   while IFS= read -r fixture; do
-    printf '  validate.%s  scan.%s  graph.%s  serve.%s\n' "$fixture" "$fixture" "$fixture" "$fixture"
+    printf '  validate.%s  scan.%s  export-json-graph.%s  export-json-visualisation.%s  serve.%s\n' "$fixture" "$fixture" "$fixture" "$fixture" "$fixture"
   done < <(discover_example_fixtures)
-  printf '  validate.playground  scan.playground  graph.playground  serve.playground\n'
+  printf '  validate.playground  scan.playground  export-json-graph.playground  export-json-visualisation.playground  serve.playground\n'
 }
 
 print_help

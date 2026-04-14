@@ -3,7 +3,7 @@ FIXTURES := $(EXAMPLE_FIXTURES) playground
 FIXTURE ?= demo
 PRIMARY_GOAL := $(firstword $(MAKECMDGOALS))
 SECOND_GOAL := $(word 2,$(MAKECMDGOALS))
-POSITIONAL_FIXTURE_COMMANDS := validate scan graph serve
+POSITIONAL_FIXTURE_COMMANDS := validate scan export-json-graph export-json-visualisation serve
 
 ifneq ($(filter $(PRIMARY_GOAL),$(POSITIONAL_FIXTURE_COMMANDS)),)
 ifneq ($(filter $(SECOND_GOAL),$(FIXTURES)),)
@@ -17,7 +17,7 @@ endif
 .PHONY: help fixtures build web install-dev-tools install-git-hooks init-hooks \
 	test-go test lint vet fmt cli-help \
 	testing-help testing-build testing-init playground-init audit-public \
-	validate scan graph serve run
+	validate scan export-json-graph export-json-visualisation serve run
 
 help: ## Show grouped development, verification, and fixture commands
 	@./scripts/help.sh
@@ -25,10 +25,10 @@ help: ## Show grouped development, verification, and fixture commands
 fixtures: ## List discovered fixtures
 	@for fixture in $(FIXTURES); do echo "$$fixture"; done
 
-build: ## Build the local mapture binary into build/
+build: ## Build the latest local binary into build/, refreshing embedded web if stale
 	@./scripts/build.sh
 
-web: ## Rebuild the frontend bundle under src/internal/webui/dist/
+web: ## Rebuild only the frontend bundle under src/internal/webui/dist/
 	@go run ./scripts/build-web
 
 install-dev-tools: ## Install local Go dev tools into testing/tools/bin
@@ -73,16 +73,19 @@ testing-init: ## Run init against testing/playground
 playground-init: ## Run init against the gitignored testing playground
 	@$(MAKE) --no-print-directory testing-init
 
-validate: ## Validate a fixture through testing/: make validate FIXTURE=<fixture|all>
+validate: ## Validate a fixture through testing/: make validate ecommerce or FIXTURE=ecommerce
 	@./scripts/go.sh validate "$(FIXTURE)"
 
 scan: ## Scan a fixture and write testing/outputs/<fixture>.scan.json; FIXTURE=all scans all examples
 	@./scripts/go.sh scan "$(FIXTURE)"
 
-graph: ## Export Mermaid for a fixture into testing/outputs/<fixture>.mmd; FIXTURE=all graphs all examples
-	@./scripts/go.sh graph "$(FIXTURE)"
+export-json-graph: ## Export JGF for a fixture into testing/outputs/<fixture>.graph.json; FIXTURE=all exports all examples
+	@./scripts/go.sh export-json-graph "$(FIXTURE)"
 
-serve: ## Rebuild testing/bin/mapture and run the local server against a fixture
+export-json-visualisation: ## Export explorer JSON into testing/outputs/<fixture>.visualisation.json; FIXTURE=all exports all examples
+	@./scripts/go.sh export-json-visualisation "$(FIXTURE)"
+
+serve: ## Always rebuild the embedded UI and binary, then run the local server against a fixture
 	@./scripts/go.sh serve "$(FIXTURE)"
 
 run: ## Run any CLI command for a fixture: make run FIXTURE=<fixture> CMD=<cli-command>
@@ -90,7 +93,7 @@ run: ## Run any CLI command for a fixture: make run FIXTURE=<fixture> CMD=<cli-c
 	@./scripts/go.sh fixture "$(FIXTURE)" $(CMD)
 
 define MAKE_FIXTURE_TARGETS
-.PHONY: validate.$(1) scan.$(1) graph.$(1) serve.$(1)
+.PHONY: validate.$(1) scan.$(1) export-json-graph.$(1) export-json-visualisation.$(1) serve.$(1)
 
 validate.$(1):
 	@$(MAKE) --no-print-directory validate FIXTURE=$(1)
@@ -98,8 +101,11 @@ validate.$(1):
 scan.$(1):
 	@$(MAKE) --no-print-directory scan FIXTURE=$(1)
 
-graph.$(1):
-	@$(MAKE) --no-print-directory graph FIXTURE=$(1)
+export-json-graph.$(1):
+	@$(MAKE) --no-print-directory export-json-graph FIXTURE=$(1)
+
+export-json-visualisation.$(1):
+	@$(MAKE) --no-print-directory export-json-visualisation FIXTURE=$(1)
 
 serve.$(1):
 	@$(MAKE) --no-print-directory serve FIXTURE=$(1)

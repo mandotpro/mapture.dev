@@ -22,6 +22,7 @@ go run src/main.go scan examples/ecommerce >/dev/null
 go run src/main.go export-json-graph examples/demo >/dev/null
 
 graph_output="$(mktemp)"
+visualisation_output="$(mktemp)"
 release_output_dir="$(mktemp -d)"
 formula_output="$(mktemp)"
 tap_output_dir="$(mktemp -d)"
@@ -29,14 +30,35 @@ install_output_dir="$(mktemp -d)"
 help_plain_output="$(mktemp)"
 help_color_output="$(mktemp)"
 go_help_color_output="$(mktemp)"
-trap 'rm -f "$graph_output" "$formula_output" "$help_plain_output" "$help_color_output" "$go_help_color_output"; rm -rf "$release_output_dir" "$tap_output_dir" "$install_output_dir"' EXIT
+build_output="$(mktemp)"
+testing_build_output="$(mktemp)"
+stale_build_output="$(mktemp)"
+fresh_build_output="$(mktemp)"
+web_probe="$ROOT_DIR/src/internal/webui/frontend/src/.mapture-web-stale-probe"
+trap 'rm -f "$graph_output" "$visualisation_output" "$formula_output" "$help_plain_output" "$help_color_output" "$go_help_color_output" "$build_output" "$testing_build_output" "$stale_build_output" "$fresh_build_output" "$web_probe"; rm -rf "$release_output_dir" "$tap_output_dir" "$install_output_dir"' EXIT
 go run src/main.go export-json-graph examples/ecommerce -o "$graph_output"
 test -s "$graph_output"
+go run src/main.go export-json-visualisation examples/ecommerce -o "$visualisation_output"
+test -s "$visualisation_output"
 
 mapture_print_section "Release helper checks"
-./scripts/build.sh >/dev/null
+./scripts/build.sh >"$build_output"
+grep -q 'embedded web bundle' "$build_output"
+grep -q 'build/mapture' "$build_output"
+grep -q 'mapture.dev - 0.0.0-dev' "$build_output"
 build_version="$(./build/mapture --version)"
 [[ "$build_version" == *"0.0.0-dev"* ]]
+./scripts/go.sh build >"$testing_build_output"
+grep -q 'embedded web bundle' "$testing_build_output"
+grep -q 'testing/bin/mapture' "$testing_build_output"
+grep -q 'mapture.dev - 0.0.0-dev' "$testing_build_output"
+
+touch "$web_probe"
+./scripts/build.sh >"$stale_build_output"
+grep -q 'embedded web bundle is stale; rebuilding' "$stale_build_output"
+rm -f "$web_probe"
+./scripts/build.sh >"$fresh_build_output"
+grep -q 'embedded web bundle is current' "$fresh_build_output"
 GOBIN="$install_output_dir" go install ./cmd/mapture
 test -x "$install_output_dir/mapture"
 
@@ -80,6 +102,8 @@ MAPTURE_COLOR=always make help >"$help_color_output"
 grep -q $'\033' "$help_color_output"
 MAPTURE_COLOR=always ./scripts/go.sh help >"$go_help_color_output"
 grep -q $'\033' "$go_help_color_output"
+! grep -q 'make graph' "$help_plain_output"
+! grep -q './scripts/go.sh graph' "$go_help_color_output"
 
 expect_failure() {
   local path="$1"
