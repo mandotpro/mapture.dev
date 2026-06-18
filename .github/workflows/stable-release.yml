@@ -48,7 +48,7 @@ jobs:
       release_branch: ${{ steps.meta.outputs.release_branch }}
       release_version: ${{ steps.meta.outputs.release_version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_branch || github.event.pull_request.merge_commit_sha || github.event.pull_request.base.ref }}
           fetch-depth: 0
