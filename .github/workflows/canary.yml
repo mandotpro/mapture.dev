@@ -27,7 +27,7 @@ jobs:
       sha: ${{ steps.meta.outputs.sha }}
       built_at: ${{ steps.meta.outputs.built_at }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 0
@@ -74,7 +74,7 @@ jobs:
           - goos: windows
             goarch: amd64
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
       - uses: actions/setup-go@v6
@@ -148,7 +148,7 @@ jobs:
     if: ${{ needs.prepare.outputs.should_publish == 'true' && vars.HOMEBREW_TAP_REPO != '' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
       - name: Sync canary formula to Homebrew tap
